@@ -20,7 +20,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Direct project references as requested -->
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.Blazor\CheapHelpers.Blazor.csproj" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.EF\CheapHelpers.EF.csproj" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.Models\CheapHelpers.Models.csproj" />
