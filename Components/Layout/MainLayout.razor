@@ -1,0 +1,209 @@
+@using MudBlazor
+
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+
+
+<MudThemeProvider Theme="@_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <!-- App Bar -->
+    <MudAppBar Elevation="1" Fixed="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" 
+                       Color="Color.Inherit" 
+                       Edge="Edge.Start" 
+                       OnClick="@ToggleDrawer" />
+        
+        <MudImage Src="images/logo.png" 
+                 Alt="Cheap Furniture Planner" 
+                 Height="32" 
+                 Class="mr-3"
+                 Style="cursor: pointer;"
+                 @onclick="@(() => Navigation.NavigateTo("/"))" />
+        
+        <MudText Typo="Typo.h6">Cheap Furniture Planner</MudText>
+        
+        <MudSpacer />
+        
+        <!-- Theme Toggle -->
+        <MudTooltip Text="Toggle Dark/Light Mode">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                          Color="Color.Inherit"
+                          OnClick="@ToggleDarkMode" />
+        </MudTooltip>
+        
+        <!-- Settings -->
+        <MudTooltip Text="Settings">
+            <MudIconButton Icon="@Icons.Material.Filled.Settings"
+                          Color="Color.Inherit"
+                          OnClick="@OpenSettings" />
+        </MudTooltip>
+    </MudAppBar>
+
+    <!-- Navigation Drawer -->
+    <MudDrawer @bind-Open="@_drawerOpen" 
+               ClipMode="DrawerClipMode.Always" 
+               Elevation="2"
+               Variant="@DrawerVariant.Mini">
+        <NavMenu />
+    </MudDrawer>
+
+    <!-- Main Content -->
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+<!-- Settings Dialog -->
+<MudDialog @bind-IsVisible="_settingsOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small })">
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-4">Settings</MudText>
+        
+        <MudStack Spacing="3">
+            <MudSwitch T="bool" @bind-Checked="_isDarkMode" 
+                      Label="Dark Mode" 
+                      Color="Color.Primary" />
+            
+            <MudDivider />
+            
+            <MudText Typo="Typo.subtitle2">Default Room Settings</MudText>
+            
+            <MudNumericField @bind-Value="_defaultRoomWidth"
+                           Label="Default Room Width (cm)"
+                           Min="100"
+                           Max="2000"
+                           Step="10" />
+            
+            <MudNumericField @bind-Value="_defaultRoomHeight"
+                           Label="Default Room Height (cm)"
+                           Min="100"
+                           Max="2000"
+                           Step="10" />
+            
+            <MudNumericField @bind-Value="_defaultGridSize"
+                           Label="Default Grid Size (cm)"
+                           Min="5"
+                           Max="50"
+                           Step="5" />
+            
+            <MudDivider />
+            
+            <MudText Typo="Typo.subtitle2">Planner Behavior</MudText>
+            
+            <MudSwitch T="bool" @bind-Checked="_defaultShowGrid" 
+                      Label="Show Grid by Default" 
+                      Color="Color.Primary" />
+            
+            <MudSwitch T="bool" @bind-Checked="_defaultPreventOverlap"
+                       Label="Prevent Overlap by Default" 
+                      Color="Color.Primary" />
+            
+            <MudSwitch T="bool" @bind-Checked="_defaultEnableSnapping"
+                       Label="Enable Snapping by Default" 
+                      Color="Color.Primary" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@CloseSettings">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" 
+                  Color="Color.Primary" 
+                  OnClick="@SaveSettings">
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode = false;
+    private bool _settingsOpen = false;
+
+    // Default settings
+    private double _defaultRoomWidth = 500;
+    private double _defaultRoomHeight = 400;
+    private int _defaultGridSize = 10;
+    private bool _defaultShowGrid = true;
+    private bool _defaultPreventOverlap = true;
+    private bool _defaultEnableSnapping = true;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = "#1976d2",
+            Secondary = "#424242",
+            AppbarBackground = "#1976d2",
+            Background = "#f5f5f5",
+            DrawerBackground = "#ffffff",
+            Surface = "#ffffff"
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = "#90caf9",
+            Secondary = "#f48fb1",
+            AppbarBackground = "#1565c0",
+            Background = "#121212",
+            DrawerBackground = "#1e1e1e",
+            Surface = "#1e1e1e"
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load user preferences from local storage or user settings
+        LoadUserPreferences();
+    }
+
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    private void ToggleDarkMode()
+    {
+        _isDarkMode = !_isDarkMode;
+        SaveUserPreferences();
+    }
+
+    private void OpenSettings()
+    {
+        _settingsOpen = true;
+    }
+
+    private void CloseSettings()
+    {
+        _settingsOpen = false;
+        LoadUserPreferences(); // Revert any unsaved changes
+    }
+
+    private void SaveSettings()
+    {
+        SaveUserPreferences();
+        _settingsOpen = false;
+    }
+
+    private void LoadUserPreferences()
+    {
+        // In a real application, load from user settings service or local storage
+        // For now, using default values
+    }
+
+    private void SaveUserPreferences()
+    {
+        // In a real application, save to user settings service or local storage
+        // This would persist user preferences across sessions
+    }
+
+    // Public properties for other components to access default settings
+    public double DefaultRoomWidth => _defaultRoomWidth;
+    public double DefaultRoomHeight => _defaultRoomHeight;
+    public int DefaultGridSize => _defaultGridSize;
+    public bool DefaultShowGrid => _defaultShowGrid;
+    public bool DefaultPreventOverlap => _defaultPreventOverlap;
+    public bool DefaultEnableSnapping => _defaultEnableSnapping;
+}

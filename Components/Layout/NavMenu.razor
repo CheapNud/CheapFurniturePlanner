@@ -1,0 +1,121 @@
+@using Microsoft.AspNetCore.Components.Routing
+@using MudBlazor
+@inject NavigationManager Navigation
+
+<MudNavMenu>
+    <!-- Home -->
+    <MudNavLink Href="/"
+                Match="NavLinkMatch.All"
+                Icon="@Icons.Material.Filled.Home">
+        Home
+    </MudNavLink>
+
+    <MudDivider Class="my-2" />
+
+    <!-- Room Plans -->
+    <MudNavGroup Text="Room Plans"
+                 Icon="@Icons.Material.Filled.MeetingRoom"
+                 Expanded="true">
+        <MudNavLink Href="/room-plans"
+                    Icon="@Icons.Material.Filled.List">
+            All Plans
+        </MudNavLink>
+        <MudNavLink Href="/room-plans/new"
+                    Icon="@Icons.Material.Filled.Add">
+            New Plan
+        </MudNavLink>
+        <MudNavLink Href="/room-plans/templates"
+                    Icon="@Icons.Material.Filled.ContentCopy">
+            Templates
+        </MudNavLink>
+    </MudNavGroup>
+
+    <!-- Furniture Catalog -->
+    <MudNavGroup Text="Furniture"
+                 Icon="@Icons.Material.Filled.Chair"
+                 Expanded="false">
+        <MudNavLink Href="/furniture/catalog"
+                    Icon="@Icons.Material.Filled.ViewModule">
+            Catalog
+        </MudNavLink>
+        <MudNavLink Href="/furniture/add"
+                    Icon="@Icons.Material.Filled.Add">
+            Add Furniture
+        </MudNavLink>
+        <MudNavLink Href="/furniture/popular"
+                    Icon="@Icons.Material.Filled.TrendingUp">
+            Popular Items
+        </MudNavLink>
+        <MudNavLink Href="/furniture/statistics"
+                    Icon="@Icons.Material.Filled.Analytics">
+            Statistics
+        </MudNavLink>
+    </MudNavGroup>
+
+    <MudDivider Class="my-2" />
+
+    <!-- Tools -->
+    <MudNavGroup Text="Tools"
+                 Icon="@Icons.Material.Filled.Build"
+                 Expanded="false">
+        <MudNavLink Href="/tools/export"
+                    Icon="@Icons.Material.Filled.Download">
+            Export Plans
+        </MudNavLink>
+        <MudNavLink Href="/tools/import"
+                    Icon="@Icons.Material.Filled.Upload">
+            Import Data
+        </MudNavLink>
+        <MudNavLink Href="/tools/backup"
+                    Icon="@Icons.Material.Filled.Backup">
+            Backup
+        </MudNavLink>
+    </MudNavGroup>
+
+    <MudDivider Class="my-2" />
+
+    <!-- Help & About -->
+    <MudNavLink Href="/help"
+                Icon="@Icons.Material.Filled.Help">
+        Help
+    </MudNavLink>
+
+    <MudNavLink Href="/about"
+                Icon="@Icons.Material.Filled.Info">
+        About
+    </MudNavLink>
+</MudNavMenu>
+
+<style>
+    .mud-nav-menu {
+        padding-top: 1rem;
+    }
+
+    .mud-nav-item {
+        border-radius: 0 25px 25px 0;
+        margin-right: 12px;
+        margin-bottom: 2px;
+    }
+
+        .mud-nav-item:hover {
+            background-color: var(--mud-palette-action-hover);
+        }
+
+        .mud-nav-item.mud-nav-item-active {
+            background-color: var(--mud-palette-primary);
+            color: var(--mud-palette-primary-text);
+        }
+
+    .mud-nav-group .mud-nav-group-header {
+        padding-left: 16px;
+        font-weight: 500;
+    }
+
+    .mud-nav-group .mud-nav-item {
+        padding-left: 32px;
+    }
+</style>
+
+@code {
+
+}

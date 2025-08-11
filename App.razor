@@ -1,0 +1,31 @@
+@using CheapFurniturePlanner.Components.Layout
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Web
+@using MudBlazor
+
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+                <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Warning" />
+                    <MudText Typo="Typo.h4">Page Not Found</MudText>
+                    <MudText Typo="Typo.body1" Align="Align.Center">
+                        Sorry, we couldn't find the page you're looking for.
+                    </MudText>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Home"
+                               Href="/">
+                        Go Home
+                    </MudButton>
+                </MudStack>
+            </MudContainer>
+        </LayoutView>
+    </NotFound>
+</Router>

@@ -1,0 +1,570 @@
+﻿@page "/room-plans"
+@page "/room-plans/new"
+@using CheapFurniturePlanner.Services
+@using CheapFurniturePlanner.ViewModels
+@inject RoomPlanService RoomPlanService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Room Plans - Cheap Furniture Planner</PageTitle>
+
+<!-- Header -->
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Room Plans</MudText>
+    <MudButton Variant="Variant.Filled" 
+              Color="Color.Primary" 
+              StartIcon="@Icons.Material.Filled.Add"
+              OnClick="OpenNewRoomPlanDialog">
+        New Room Plan
+    </MudButton>
+</MudStack>
+
+<!-- Search and Filter -->
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudGrid AlignItems="AlignItems.Center">
+        <MudItem xs="12" sm="6" md="4">
+            <MudTextField @bind-Value="_searchTerm"
+                         Label="Search room plans"
+                         Placeholder="Enter name or description..."
+                         Adornment="Adornment.Start"
+                         AdornmentIcon="@Icons.Material.Filled.Search"
+                         Immediate="true"
+                         OnAdornmentClick="SearchRoomPlans"
+                         OnKeyUp="OnSearchKeyUp" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect @bind-Value="_sortBy" T="string" Label="Sort by">
+                <MudSelectItem T="string" Value="@("name")">Name</MudSelectItem>
+                <MudSelectItem T="string" Value="@("created")">Created Date</MudSelectItem>
+                <MudSelectItem T="string" Value="@("updated")">Last Updated</MudSelectItem>
+                <MudSelectItem T="string" Value="@("size")">Room Size</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudSwitch T=bool @bind-Checked="_sortDescending"
+                       Label="Descending" 
+                      Color="Color.Primary" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Outlined" 
+                          StartIcon="@Icons.Material.Filled.Refresh"
+                          OnClick="LoadRoomPlans">
+                    Refresh
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" 
+                          StartIcon="@Icons.Material.Filled.GridView"
+                          OnClick="@(() => _viewMode = !_viewMode)">
+                    @(_viewMode ? "List" : "Grid")
+                </MudButton>
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<!-- Room Plans Display -->
+@if (_loading)
+{
+    <MudContainer Class="pa-8 text-center">
+        <MudStack Spacing="4" AlignItems="AlignItems.Center">
+            <MudProgressCircular Size="Size.Large" Indeterminate="true" />
+            <MudText Typo="Typo.h6">Loading room plans...</MudText>
+        </MudStack>
+    </MudContainer>
+}
+else if (!_filteredRoomPlans.Any())
+{
+    <MudPaper Elevation="1" Class="pa-8 text-center">
+        <MudStack Spacing="4" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.h6">No room plans found</MudText>
+            <MudText Typo="Typo.body1">
+                @if (string.IsNullOrEmpty(_searchTerm))
+                {
+                    <text>You haven't created any room plans yet.</text>
+                }
+                else
+                {
+                    <text>No room plans match your search criteria.</text>
+                }
+            </MudText>
+            <MudButton Variant="Variant.Filled" 
+                      Color="Color.Primary" 
+                      StartIcon="@Icons.Material.Filled.Add"
+                      OnClick="OpenNewRoomPlanDialog">
+                Create Your First Room Plan
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+}
+else
+{
+    @if (_viewMode)
+    {
+        <!-- Grid View -->
+        <MudGrid>
+            @foreach (var roomPlan in _filteredRoomPlans)
+            {
+                <MudItem xs="12" sm="6" md="4" lg="3">
+                    <MudCard Elevation="2" Class="room-plan-card" Style="height: 100%;">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">@roomPlan.Name</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @roomPlan.Width × @roomPlan.Height @roomPlan.Unit
+                                </MudText>
+                            </CardHeaderContent>
+                            <CardHeaderActions>
+                                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                                    <MudMenuItem Icon="@Icons.Material.Filled.Edit" 
+                                                OnClick="@(() => EditRoomPlan(roomPlan))">
+                                        Edit
+                                    </MudMenuItem>
+                                    <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy" 
+                                                OnClick="@(() => DuplicateRoomPlan(roomPlan))">
+                                        Duplicate
+                                    </MudMenuItem>
+                                    <MudDivider />
+                                    <MudMenuItem Icon="@Icons.Material.Filled.Delete" 
+                                                OnClick="@(() => DeleteRoomPlan(roomPlan))"
+                                                Style="color: var(--mud-palette-error);">
+                                        Delete
+                                    </MudMenuItem>
+                                </MudMenu>
+                            </CardHeaderActions>
+                        </MudCardHeader>
+                        
+                        <MudCardContent>
+                            <MudStack Spacing="2">
+                                @if (!string.IsNullOrEmpty(roomPlan.Description))
+                                {
+                                    <MudText Typo="Typo.body2">@roomPlan.Description</MudText>
+                                }
+                                
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.FireExtinguisher" Size="Size.Small" /> @* a .Furniture icons was used but that doesnt exist, either create our own or use somethign else *@
+                                    <MudText Typo="Typo.caption">
+                                        @roomPlan.FurnitureItems.Count items
+                                    </MudText>
+                                </MudStack>
+                                
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Created: @roomPlan.CreatedAt.ToString("MMM dd, yyyy")
+                                </MudText>
+                                
+                                @if (roomPlan.UpdatedAt.HasValue)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        Updated: @roomPlan.UpdatedAt.Value.ToString("MMM dd, yyyy")
+                                    </MudText>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                        
+                        <MudCardActions>
+                            <MudButton Variant="Variant.Text" 
+                                      Color="Color.Primary"
+                                      StartIcon="@Icons.Material.Filled.Launch"
+                                      OnClick="@(() => OpenRoomPlan(roomPlan.Id))">
+                                Open Planner
+                            </MudButton>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else
+    {
+        <!-- Table View -->
+        <MudTable Items="@_filteredRoomPlans" 
+                  Hover="true" 
+                  Striped="true" 
+                  Dense="true"
+                  Elevation="2">
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<RoomPlanViewModel, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+                <MudTh>Description</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<RoomPlanViewModel, object>(x => x.Width)">Dimensions</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<RoomPlanViewModel, object>(x => x.FurnitureItems.Count)">Items</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<RoomPlanViewModel, object>(x => x.CreatedAt)">Created</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<RoomPlanViewModel, object>(x => x.UpdatedAt ?? x.CreatedAt)">Updated</MudTableSortLabel></MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.subtitle2">@context.Name</MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Description">
+                    <MudText Typo="Typo.body2">
+                        @(string.IsNullOrEmpty(context.Description) ? "-" : 
+                          context.Description.Length > 50 ? context.Description.Substring(0, 50) + "..." : context.Description)
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Dimensions">
+                    <MudText Typo="Typo.body2">@context.Width × @context.Height @context.Unit</MudText>
+                </MudTd>
+                <MudTd DataLabel="Items">
+            <MudChip T=bool Size="Size.Small" Color="Color.Primary">@context.FurnitureItems.Count</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Created">
+                    <MudText Typo="Typo.body2">@context.CreatedAt.ToString("MMM dd, yyyy")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Updated">
+                    <MudText Typo="Typo.body2">
+                        @((context.UpdatedAt ?? context.CreatedAt).ToString("MMM dd, yyyy"))
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudStack Row="true" Spacing="1">
+                        <MudIconButton Icon="@Icons.Material.Filled.Launch" 
+                                      Size="Size.Small" 
+                                      Color="Color.Primary"
+                                      OnClick="@(() => OpenRoomPlan(context.Id))"
+                                      Title="Open Planner" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                      Size="Size.Small" 
+                                      Color="Color.Secondary"
+                                      OnClick="@(() => EditRoomPlan(context))"
+                                      Title="Edit" />
+                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" 
+                                      Size="Size.Small" 
+                                      Color="Color.Info"
+                                      OnClick="@(() => DuplicateRoomPlan(context))"
+                                      Title="Duplicate" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                      Size="Size.Small" 
+                                      Color="Color.Error"
+                                      OnClick="@(() => DeleteRoomPlan(context))"
+                                      Title="Delete" />
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
+
+<!-- New/Edit Room Plan Dialog -->
+<MudDialog @bind-IsVisible="_roomPlanDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium })">
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-4">
+            @(_editingRoomPlan.Id == 0 ? "Create New Room Plan" : "Edit Room Plan")
+        </MudText>
+        
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_editingRoomPlan.Name"
+                         Label="Room Name"
+                         Required="true"
+                         Immediate="true"
+                         HelperText="Give your room plan a descriptive name" />
+            
+            <MudTextField @bind-Value="_editingRoomPlan.Description"
+                         Label="Description"
+                         Lines="3"
+                         Immediate="true"
+                         HelperText="Optional description of the room or its purpose" />
+            
+            <MudGrid>
+                <MudItem xs="6">
+                    <MudNumericField @bind-Value="_editingRoomPlan.Width"
+                                   Label="Width"
+                                   Suffix="@_editingRoomPlan.Unit"
+                                   Min="100"
+                                   Max="2000"
+                                   Step="10"
+                                   Required="true" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField @bind-Value="_editingRoomPlan.Height"
+                                   Label="Height"
+                                   Suffix="@_editingRoomPlan.Unit"
+                                   Min="100"
+                                   Max="2000"
+                                   Step="10"
+                                   Required="true" />
+                </MudItem>
+            </MudGrid>
+            
+            <MudSelect @bind-Value="_editingRoomPlan.Unit" T="string" Label="Unit">
+                <MudSelectItem T="string" Value="@("cm")">Centimeters (cm)</MudSelectItem>
+                <MudSelectItem T="string" Value="@("mm")">Millimeters (mm)</MudSelectItem>
+                <MudSelectItem T="string" Value="@("in")">Inches (in)</MudSelectItem>
+                <MudSelectItem T="string" Value="@("ft")">Feet (ft)</MudSelectItem>
+            </MudSelect>
+            
+            <MudNumericField @bind-Value="_editingRoomPlan.GridSize"
+                           Label="Grid Size"
+                           Suffix="@_editingRoomPlan.Unit"
+                           Min="5"
+                           Max="50"
+                           Step="5"
+                           HelperText="Size of the grid for snapping furniture" />
+            
+            <MudDivider />
+            
+            <MudText Typo="Typo.subtitle2">Default Settings</MudText>
+            
+            <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.ShowGrid"
+                       Label="Show Grid by Default" 
+                      Color="Color.Primary" />
+            
+            <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.PreventOverlap"
+                       Label="Prevent Furniture Overlap" 
+                      Color="Color.Primary" />
+            
+            <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.EnableSnapping"
+                       Label="Enable Grid Snapping" 
+                      Color="Color.Primary" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CancelRoomPlanDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" 
+                  Color="Color.Primary" 
+                  OnClick="SaveRoomPlan"
+                  Disabled="@string.IsNullOrWhiteSpace(_editingRoomPlan.Name)">
+            @(_editingRoomPlan.Id == 0 ? "Create" : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .room-plan-card {
+        transition: all 0.2s ease-in-out;
+        cursor: pointer;
+    }
+
+    .room-plan-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+</style>
+
+@code {
+    private List<RoomPlanViewModel> _roomPlans = new();
+    private List<RoomPlanViewModel> _filteredRoomPlans = new();
+    private bool _loading = true;
+    private bool _viewMode = true; // true for grid, false for table
+    
+    // Search and filtering
+    private string _searchTerm = string.Empty;
+    private string _sortBy = "updated";
+    private bool _sortDescending = true;
+    
+    // Dialog state
+    private bool _roomPlanDialogOpen = false;
+    private RoomPlanViewModel _editingRoomPlan = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoomPlans();
+        
+        // Check if we should open the new room plan dialog
+        if (Navigation.Uri.EndsWith("/new"))
+        {
+            OpenNewRoomPlanDialog();
+        }
+    }
+
+    private async Task LoadRoomPlans()
+    {
+        _loading = true;
+        
+        try
+        {
+            _roomPlans = await RoomPlanService.GetAllRoomPlansAsync();
+            ApplyFiltersAndSorting();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading room plans: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyFiltersAndSorting()
+    {
+        var filtered = _roomPlans.AsEnumerable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            filtered = filtered.Where(rp => 
+                rp.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                (rp.Description?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) == true));
+        }
+
+        // Apply sorting
+        filtered = _sortBy switch
+        {
+            "name" => _sortDescending 
+                ? filtered.OrderByDescending(rp => rp.Name)
+                : filtered.OrderBy(rp => rp.Name),
+            "created" => _sortDescending 
+                ? filtered.OrderByDescending(rp => rp.CreatedAt)
+                : filtered.OrderBy(rp => rp.CreatedAt),
+            "updated" => _sortDescending 
+                ? filtered.OrderByDescending(rp => rp.UpdatedAt ?? rp.CreatedAt)
+                : filtered.OrderBy(rp => rp.UpdatedAt ?? rp.CreatedAt),
+            "size" => _sortDescending 
+                ? filtered.OrderByDescending(rp => rp.Width * rp.Height)
+                : filtered.OrderBy(rp => rp.Width * rp.Height),
+            _ => filtered.OrderByDescending(rp => rp.UpdatedAt ?? rp.CreatedAt)
+        };
+
+        _filteredRoomPlans = filtered.ToList();
+        StateHasChanged();
+    }
+
+    private void SearchRoomPlans()
+    {
+        ApplyFiltersAndSorting();
+    }
+
+    private void OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            SearchRoomPlans();
+        }
+    }
+
+    private void OpenNewRoomPlanDialog()
+    {
+        _editingRoomPlan = new RoomPlanViewModel
+        {
+            Name = string.Empty,
+            Description = string.Empty,
+            Width = 500,
+            Height = 400,
+            Unit = "cm",
+            GridSize = 10,
+            ShowGrid = true,
+            PreventOverlap = true,
+            EnableSnapping = true
+        };
+        _roomPlanDialogOpen = true;
+    }
+
+    private void EditRoomPlan(RoomPlanViewModel roomPlan)
+    {
+        _editingRoomPlan = new RoomPlanViewModel
+        {
+            Id = roomPlan.Id,
+            Name = roomPlan.Name,
+            Description = roomPlan.Description,
+            Width = roomPlan.Width,
+            Height = roomPlan.Height,
+            Unit = roomPlan.Unit,
+            GridSize = roomPlan.GridSize,
+            ShowGrid = roomPlan.ShowGrid,
+            PreventOverlap = roomPlan.PreventOverlap,
+            EnableSnapping = roomPlan.EnableSnapping
+        };
+        _roomPlanDialogOpen = true;
+    }
+
+    private void CancelRoomPlanDialog()
+    {
+        _roomPlanDialogOpen = false;
+        _editingRoomPlan = new();
+        
+        // Navigate away from /new if that's where we are
+        if (Navigation.Uri.EndsWith("/new"))
+        {
+            Navigation.NavigateTo("/room-plans", replace: true);
+        }
+    }
+
+    private async Task SaveRoomPlan()
+    {
+        try
+        {
+            RoomPlanViewModel savedPlan;
+            
+            if (_editingRoomPlan.Id == 0)
+            {
+                // Create new
+                savedPlan = await RoomPlanService.CreateRoomPlanAsync(_editingRoomPlan);
+                Snackbar.Add($"Room plan '{savedPlan.Name}' created successfully", Severity.Success);
+            }
+            else
+            {
+                // Update existing
+                savedPlan = await RoomPlanService.UpdateRoomPlanAsync(_editingRoomPlan);
+                Snackbar.Add($"Room plan '{savedPlan.Name}' updated successfully", Severity.Success);
+            }
+
+            _roomPlanDialogOpen = false;
+            await LoadRoomPlans();
+            
+            // Navigate to the planner if this was a new room plan
+            if (_editingRoomPlan.Id == 0)
+            {
+                Navigation.NavigateTo($"/planner/{savedPlan.Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving room plan: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void OpenRoomPlan(int roomPlanId)
+    {
+        Navigation.NavigateTo($"/planner/{roomPlanId}");
+    }
+
+    private async Task DuplicateRoomPlan(RoomPlanViewModel roomPlan)
+    {
+        try
+        {
+            var duplicatedPlan = new RoomPlanViewModel
+            {
+                Name = $"{roomPlan.Name} (Copy)",
+                Description = roomPlan.Description,
+                Width = roomPlan.Width,
+                Height = roomPlan.Height,
+                Unit = roomPlan.Unit,
+                GridSize = roomPlan.GridSize,
+                ShowGrid = roomPlan.ShowGrid,
+                PreventOverlap = roomPlan.PreventOverlap,
+                EnableSnapping = roomPlan.EnableSnapping
+            };
+
+            var newPlan = await RoomPlanService.CreateRoomPlanAsync(duplicatedPlan);
+            Snackbar.Add($"Room plan duplicated successfully", Severity.Success);
+            await LoadRoomPlans();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error duplicating room plan: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteRoomPlan(RoomPlanViewModel roomPlan)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", 
+            $"Are you sure you want to delete '{roomPlan.Name}'? This action cannot be undone.");
+        
+        if (confirmed)
+        {
+            try
+            {
+                await RoomPlanService.DeleteRoomPlanAsync(roomPlan.Id);
+                Snackbar.Add($"Room plan '{roomPlan.Name}' deleted successfully", Severity.Success);
+                await LoadRoomPlans();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting room plan: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

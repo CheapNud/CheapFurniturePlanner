@@ -1,0 +1,405 @@
+@page "/Home"
+@using CheapFurniturePlanner.Services
+@using CheapFurniturePlanner.ViewModels
+@inject RoomPlanService RoomPlanService
+@inject FurnitureCatalogService FurnitureCatalogService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Home - Cheap Furniture Planner</PageTitle>
+
+<!-- Hero Section -->
+<MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
+    <MudPaper Elevation="0" Class="pa-8 text-center" Style="background: linear-gradient(135deg, #1976d2 0%, #42a5f5 100%); color: white;">
+        <MudStack Spacing="4" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.FireExtinguisher" Size="Size.Large" />
+            <MudText Typo="Typo.h3" Class="font-weight-bold">
+                Cheap Furniture Planner
+            </MudText>
+            <MudText Typo="Typo.h6" Class="font-weight-light">
+                Design your perfect room layout with ease
+            </MudText>
+            <MudButton Variant="Variant.Filled" 
+                      Color="Color.Secondary" 
+                      Size="Size.Large"
+                      StartIcon="@Icons.Material.Filled.Add"
+                      OnClick="@CreateNewRoomPlan"
+                      Class="mt-4">
+                Create New Room Plan
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+<!-- Quick Stats -->
+<MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2" Class="pa-4 text-center">
+                <MudStack Spacing="2" AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@Icons.Material.Filled.MeetingRoom" 
+                            Color="Color.Primary" 
+                            Size="Size.Large" />
+                    <MudText Typo="Typo.h4" Color="Color.Primary">
+                        @_totalRoomPlans
+                    </MudText>
+                    <MudText Typo="Typo.subtitle1">Room Plans</MudText>
+                </MudStack>
+            </MudCard>
+        </MudItem>
+        
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2" Class="pa-4 text-center">
+                <MudStack Spacing="2" AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@Icons.Material.Filled.Chair" 
+                            Color="Color.Secondary" 
+                            Size="Size.Large" />
+                    <MudText Typo="Typo.h4" Color="Color.Secondary">
+                        @_totalFurniture
+                    </MudText>
+                    <MudText Typo="Typo.subtitle1">Furniture Items</MudText>
+                </MudStack>
+            </MudCard>
+        </MudItem>
+        
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2" Class="pa-4 text-center">
+                <MudStack Spacing="2" AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@Icons.Material.Filled.TrendingUp" 
+                            Color="Color.Success" 
+                            Size="Size.Large" />
+                    <MudText Typo="Typo.h4" Color="Color.Success">
+                        @_mostUsedType
+                    </MudText>
+                    <MudText Typo="Typo.subtitle1">Most Used</MudText>
+                </MudStack>
+            </MudCard>
+        </MudItem>
+        
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Elevation="2" Class="pa-4 text-center">
+                <MudStack Spacing="2" AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" 
+                            Color="Color.Info" 
+                            Size="Size.Large" />
+                    <MudText Typo="Typo.h4" Color="Color.Info">
+                        @_recentPlansCount
+                    </MudText>
+                    <MudText Typo="Typo.subtitle1">Recent Plans</MudText>
+                </MudStack>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+<!-- Recent Room Plans -->
+<MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
+    <MudPaper Elevation="2" Class="pa-6">
+        <MudStack Spacing="4">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h5">Recent Room Plans</MudText>
+                <MudButton Variant="Variant.Text" 
+                          Color="Color.Primary"
+                          EndIcon="@Icons.Material.Filled.ArrowForward"
+                          OnClick="@(() => Navigation.NavigateTo("/room-plans"))">
+                    View All
+                </MudButton>
+            </MudStack>
+            
+            @if (_recentRoomPlans?.Any() == true)
+            {
+                <MudGrid>
+                    @foreach (var roomPlan in _recentRoomPlans.Take(6))
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCard Elevation="1" Class="cursor-pointer room-plan-card"
+                                    @onclick="@(() => OpenRoomPlan(roomPlan.Id))">
+                                <MudCardContent>
+                                    <MudStack Spacing="2">
+                                        <MudText Typo="Typo.h6">@roomPlan.Name</MudText>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                            @roomPlan.Description
+                                        </MudText>
+                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                            <MudIcon Icon="@Icons.Material.Filled.AspectRatio" Size="Size.Small" />
+                                            <MudText Typo="Typo.caption">
+                                                @roomPlan.Width � @roomPlan.Height @roomPlan.Unit
+                                            </MudText>
+                                        </MudStack>
+                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                            <MudIcon Icon="@Icons.Material.Filled.FireExtinguisher" Size="Size.Small" />
+                                            <MudText Typo="Typo.caption">
+                                                @roomPlan.FurnitureItems.Count furniture items
+                                            </MudText>
+                                        </MudStack>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            Last updated: @(roomPlan.UpdatedAt?.ToString("MMM dd, yyyy") ?? roomPlan.CreatedAt.ToString("MMM dd, yyyy"))
+                                        </MudText>
+                                    </MudStack>
+                                </MudCardContent>
+                                <MudCardActions>
+                                    <MudButton StartIcon="@Icons.Material.Filled.Edit" 
+                                              Size="Size.Small"
+                                              Color="Color.Primary">
+                                        Edit
+                                    </MudButton>
+                                    <MudSpacer />
+                                    <div @onclick:stopPropagation="true">
+                                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" 
+                                                      Size="Size.Small"
+                                                      OnClick="@(() => DuplicateRoomPlan(roomPlan.Id))"
+                                                      Title="Duplicate" />
+                                    </div>
+                                </MudCardActions>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Class="my-4">
+                    <AlertContent>
+                        <MudText>No room plans yet. Create your first room plan to get started!</MudText>
+                    </AlertContent>
+                </MudAlert>
+            }
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+<!-- Popular Furniture -->
+<MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
+    <MudPaper Elevation="2" Class="pa-6">
+        <MudStack Spacing="4">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h5">Popular Furniture</MudText>
+                <MudButton Variant="Variant.Text" 
+                          Color="Color.Primary"
+                          EndIcon="@Icons.Material.Filled.ArrowForward"
+                          OnClick="@(() => Navigation.NavigateTo("/furniture/catalog"))">
+                    View Catalog
+                </MudButton>
+            </MudStack>
+            
+            @if (_popularFurniture?.Any() == true)
+            {
+                <MudGrid>
+                    @foreach (var (furniture, usageCount) in _popularFurniture.Take(4))
+                    {
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudCard Elevation="1" Class="furniture-item-card">
+                                <MudCardMedia Image="@(furniture.ImageUrl ?? "/images/furniture-placeholder.png")" 
+                                             Height="150" />
+                                <MudCardContent>
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.subtitle1">@furniture.Name</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @furniture.Code
+                                        </MudText>
+                                        <MudText Typo="Typo.body2">
+                                            @furniture.Width � @furniture.Length cm
+                                        </MudText>
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                            @if (furniture.Price.HasValue)
+                                            {
+                                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">
+                                                    @furniture.Price.Value.ToString("C")
+                                                </MudText>
+                                            }
+                                            <MudChip T=bool Size="Size.Small" Color="Color.Success">
+                                                Used @usageCount times
+                                            </MudChip>
+                                        </MudStack>
+                                    </MudStack>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Class="my-4">
+                    <AlertContent>
+                        <MudText>No furniture usage data available yet.</MudText>
+                    </AlertContent>
+                </MudAlert>
+            }
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+<!-- Quick Actions -->
+<MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
+    <MudPaper Elevation="2" Class="pa-6">
+        <MudStack Spacing="4">
+            <MudText Typo="Typo.h5">Quick Actions</MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudButton Variant="Variant.Outlined" 
+                              Color="Color.Primary" 
+                              FullWidth="true"
+                              StartIcon="@Icons.Material.Filled.Add"
+                              OnClick="@CreateNewRoomPlan"
+                              Size="Size.Large"
+                              Class="pa-4">
+                        <MudStack Spacing="1" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.subtitle1">New Room Plan</MudText>
+                            <MudText Typo="Typo.caption">Start planning a new room</MudText>
+                        </MudStack>
+                    </MudButton>
+                </MudItem>
+                
+                <MudItem xs="12" sm="6" md="3">
+                    <MudButton Variant="Variant.Outlined" 
+                              Color="Color.Secondary" 
+                              FullWidth="true"
+                              StartIcon="@Icons.Material.Filled.Upload"
+                              OnClick="@(() => Navigation.NavigateTo("/tools/import"))"
+                              Size="Size.Large"
+                              Class="pa-4">
+                        <MudStack Spacing="1" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.subtitle1">Import Data</MudText>
+                            <MudText Typo="Typo.caption">Load existing plans</MudText>
+                        </MudStack>
+                    </MudButton>
+                </MudItem>
+                
+                <MudItem xs="12" sm="6" md="3">
+                    <MudButton Variant="Variant.Outlined" 
+                              Color="Color.Tertiary" 
+                              FullWidth="true"
+                              StartIcon="@Icons.Material.Filled.ViewModule"
+                              OnClick="@(() => Navigation.NavigateTo("/furniture/catalog"))"
+                              Size="Size.Large"
+                              Class="pa-4">
+                        <MudStack Spacing="1" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.subtitle1">Browse Catalog</MudText>
+                            <MudText Typo="Typo.caption">Explore furniture options</MudText>
+                        </MudStack>
+                    </MudButton>
+                </MudItem>
+                
+                <MudItem xs="12" sm="6" md="3">
+                    <MudButton Variant="Variant.Outlined" 
+                              Color="Color.Success" 
+                              FullWidth="true"
+                              StartIcon="@Icons.Material.Filled.Help"
+                              OnClick="@(() => Navigation.NavigateTo("/help"))"
+                              Size="Size.Large"
+                              Class="pa-4">
+                        <MudStack Spacing="1" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.subtitle1">Get Help</MudText>
+                            <MudText Typo="Typo.caption">Learn how to use the planner</MudText>
+                        </MudStack>
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+<style>
+    .room-plan-card:hover {
+        transform: translateY(-2px);
+        transition: transform 0.2s ease-in-out;
+    }
+
+    .furniture-item-card:hover {
+        transform: translateY(-2px);
+        transition: transform 0.2s ease-in-out;
+    }
+
+    .cursor-pointer {
+        cursor: pointer;
+    }
+</style>
+
+@code {
+    private int _totalRoomPlans = 0;
+    private int _totalFurniture = 0;
+    private string _mostUsedType = "Loading...";
+    private int _recentPlansCount = 0;
+    
+    private List<RoomPlanViewModel>? _recentRoomPlans;
+    private List<(FurnitureCatalogViewModel Furniture, int UsageCount)>? _popularFurniture;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        try
+        {
+            // Load recent room plans
+            _recentRoomPlans = await RoomPlanService.GetAllRoomPlansAsync();
+            _totalRoomPlans = _recentRoomPlans.Count;
+            _recentPlansCount = _recentRoomPlans.Count(r => r.CreatedAt >= DateTime.UtcNow.AddDays(-30));
+
+            // Load furniture statistics
+            var allFurniture = await FurnitureCatalogService.GetActiveFurnitureAsync();
+            _totalFurniture = allFurniture.Count;
+
+            var usageStats = await FurnitureCatalogService.GetUsageStatisticsAsync();
+            _mostUsedType = usageStats.Any() 
+                ? usageStats.OrderByDescending(kvp => kvp.Value).First().Key.ToString()
+                : "None";
+
+            // Load popular furniture
+            _popularFurniture = await FurnitureCatalogService.GetPopularFurnitureAsync(4);
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading dashboard data: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void CreateNewRoomPlan()
+    {
+        Navigation.NavigateTo("/room-plans/new");
+    }
+
+    private void OpenRoomPlan(int roomPlanId)
+    {
+        Navigation.NavigateTo($"/planner/{roomPlanId}");
+    }
+
+    private async Task DuplicateRoomPlan(int roomPlanId)
+    {
+        // Event propagation is prevented by @onclick:stopPropagation="true" in the markup
+        
+        try
+        {
+            var originalPlan = await RoomPlanService.GetRoomPlanWithFurnitureAsync(roomPlanId);
+            if (originalPlan != null)
+            {
+                var duplicatedPlan = new RoomPlanViewModel
+                {
+                    Name = $"{originalPlan.Name} (Copy)",
+                    Description = originalPlan.Description,
+                    Width = originalPlan.Width,
+                    Height = originalPlan.Height,
+                    Unit = originalPlan.Unit,
+                    GridSize = originalPlan.GridSize,
+                    ShowGrid = originalPlan.ShowGrid,
+                    PreventOverlap = originalPlan.PreventOverlap,
+                    EnableSnapping = originalPlan.EnableSnapping
+                };
+
+                var newPlan = await RoomPlanService.CreateRoomPlanAsync(duplicatedPlan);
+                
+                Snackbar.Add($"Room plan duplicated successfully!", Severity.Success);
+                await LoadDashboardData(); // Refresh data
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error duplicating room plan: {ex.Message}", Severity.Error);
+        }
+    }
+}

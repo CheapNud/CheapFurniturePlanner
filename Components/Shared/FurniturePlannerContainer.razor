@@ -1,0 +1,578 @@
+﻿@using CheapFurniturePlanner.ViewModels
+@using CheapFurniturePlanner.Models
+@using Microsoft.AspNetCore.Components.Web
+@using System.Globalization
+@using System.Text
+@using System.Diagnostics
+@using Microsoft.JSInterop
+@using MudBlazor
+
+@inject IJSRuntime JS
+@inject ISnackbar ToastService
+
+<div class="furniture-planner-container">
+    <!-- Toolbar -->
+    <MudStack Row="true" Spacing="2" Class="toolbar mb-3" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h6">@RoomPlan.Name</MudText>
+
+        <MudSpacer />
+
+        <MudToggleIconButton @bind-Toggled="ShowGrid"
+                             Icon="@Icons.Material.Filled.GridOn"
+                             ToggledIcon="@Icons.Material.Filled.GridOff"
+                             Title="Toggle Grid" />
+
+        <MudToggleIconButton @bind-Toggled="PreventOverlap"
+                             Icon="@Icons.Material.Filled.Block"
+                             ToggledIcon="@Icons.Material.Filled.CheckBoxOutlineBlank"
+                             Title="Toggle Overlap Prevention" />
+
+        <MudToggleIconButton @bind-Toggled="EnableSnapping"
+                             Icon="@Icons.Material.Filled.CenterFocusStrong"
+                             ToggledIcon="@Icons.Material.Filled.CenterFocusWeak"
+                             Title="Toggle Snapping" />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenFurnitureDialog">
+            Add Furniture
+        </MudButton>
+
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Secondary"
+                   StartIcon="@Icons.Material.Filled.Clear"
+                   OnClick="ClearAll"
+                   Disabled="@(!SelectedFurniture.Any())">
+            Clear All
+        </MudButton>
+    </MudStack>
+
+    <!-- Room Plan Canvas -->
+    <div id="furniture-planner"
+         class="room-plan"
+         style="width:@(FloorPlanWidth)px;height:@(FloorPlanHeight)px;"
+         @ref="_floorPlanElement"
+         @onmousemove="OnMouseMove"
+         @onmouseup="OnMouseUp"
+         @ontouchmove="OnTouchMove"
+         @ontouchend="OnTouchEnd"
+         @onkeydown="HandleKeyDown"
+         tabindex="0">
+
+        <!-- Grid Overlay -->
+        @if (ShowGrid)
+        {
+            <div class="grid-overlay" style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 1;">
+                @for (int i = 0; i <= FloorPlanWidth; i += GridSize)
+                {
+                    <div class="grid-line vertical" style="position: absolute; left: @(i)px; top: 0; width: 1px; height: 100%; background-color: rgba(200,200,200,0.5);">
+                        <div style="position: absolute; left: 2px; top: 0; font-size: 8px; color: #999;">@i</div>
+                    </div>
+                }
+                @for (int i = 0; i <= FloorPlanHeight; i += GridSize)
+                {
+                    <div class="grid-line horizontal" style="position: absolute; left: 0; top: @(i)px; width: 100%; height: 1px; background-color: rgba(200,200,200,0.5);">
+                        <div style="position: absolute; left: 0; top: 2px; font-size: 8px; color: #999;">@i</div>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- Furniture Items -->
+        @foreach (var item in SelectedFurniture)
+        {
+            // Calculate dimensions based on rotation
+            bool isRotated = ((int)Math.Round(item.Rotation / 90) % 2) == 1; // 90° or 270°
+            double displayWidth = isRotated ? item.FurnitureLength.GetValueOrDefault() : item.FurnitureWidth.GetValueOrDefault();
+            double displayHeight = isRotated ? item.FurnitureWidth.GetValueOrDefault() : item.FurnitureLength.GetValueOrDefault();
+
+            // Position and size the container
+            StringBuilder styling = new StringBuilder($"position: absolute; left:{item.X}px; top:{item.Y}px; width:{displayWidth}px; height:{displayHeight}px; background-color: #ffffff; z-index: 3;");
+
+            StringBuilder classstring = new StringBuilder("furniture-item");
+            if (item == SelectedItem)
+            {
+                classstring.Append(" selected");
+            }
+            if (item.GroupID != null)
+            {
+                classstring.Append(" grouped");
+            }
+            classstring.Append($" rotation-{item.Rotation}");
+
+            <MudPaper @key="item.UIId"
+                      Class="@classstring.ToString()"
+                      Elevation="@(item.GroupID != null ? 3 : 1)"
+                      style="@styling.ToString()"
+                      @onmousedown="@(() => StartDragging(item))"
+                      @ontouchstart="@(() => StartDragging(item))"
+                      @onclick="@(() => SelectItem(item))">
+
+                <!-- Furniture Content -->
+                <div class="furniture-content" style="width: 100%; height: 100%; position: relative;">
+
+                    <!-- Image if available -->
+                    @if (!string.IsNullOrEmpty(item.ImageUrl))
+                    {
+                        <div class="image-rotator" style="transform: rotate(@(item.Rotation)deg);">
+                            <img src="@item.ImageUrl"
+                                 alt="@item.Name"
+                                 style="width: @(displayWidth)px; height: @(displayHeight)px;" />
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Default furniture representation -->
+                        <div class="furniture-placeholder"
+                             style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background-color: #f5f5f5; border: 2px dashed #ccc;">
+                            <MudText Typo="Typo.caption" Align="Align.Center">
+                                @item.Name<br />
+                                @item.Code
+                            </MudText>
+                        </div>
+                    }
+
+                    <!-- Dimension indicators -->
+                    @if (item == SelectedItem || item.IsSelected)
+                    {
+                        <!-- Width line -->
+                        <div class="width-line" style="position: absolute; bottom: -15px; left: 0; width: 100%; height: 1px; background-color: #1976d2; pointer-events: none;">
+                            <div class="width-text" style="position: absolute; left: 50%; transform: translateX(-50%); top: 2px;">
+                                @displayWidth cm
+                            </div>
+                        </div>
+
+                        <!-- Height line -->
+                        <div class="height-line" style="position: absolute; right: -15px; top: 0; width: 1px; height: 100%; background-color: #1976d2; pointer-events: none;">
+                            <div class="height-text" style="position: absolute; top: 50%; transform: translateY(-50%) rotate(-90deg); left: 2px; transform-origin: left center;">
+                                @displayHeight cm
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Action buttons for selected item -->
+                    @if (item == SelectedItem)
+                    {
+                        <div class="action-buttons" style="position: absolute; top: -35px; right: 0; display: flex; gap: 4px;">
+                            <MudIconButton Icon="@Icons.Material.Filled.RotateRight"
+                                           Size="Size.Small"
+                                           Color="Color.Primary"
+                                           OnClick="@(() => RotateItem(item, 90))"
+                                           Title="Rotate 90°" />
+
+                            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy"
+                                           Size="Size.Small"
+                                           Color="Color.Secondary"
+                                           OnClick="@(() => DuplicateItem(item))"
+                                           Title="Duplicate" />
+
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           OnClick="@(() => DeleteFurniture(item.UIId))"
+                                           Title="Delete" />
+                        </div>
+                    }
+                </div>
+            </MudPaper>
+        }
+    </div>
+
+    <!-- Information Panel -->
+    @if (SelectedItem != null)
+    {
+        <MudCard Class="mt-3">
+            <MudCardContent>
+                <MudText Typo="Typo.h6">@SelectedItem.Name</MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">@SelectedItem.Code</MudText>
+
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.caption">Position</MudText>
+                        <MudText>X: @SelectedItem.X.ToString("F0") cm, Y: @SelectedItem.Y.ToString("F0") cm</MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.caption">Dimensions</MudText>
+                        <MudText>@SelectedItem.FurnitureWidth × @SelectedItem.FurnitureLength × @SelectedItem.FurnitureHeight cm</MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudText Typo="Typo.caption">Rotation</MudText>
+                        <MudText>@SelectedItem.Rotation°</MudText>
+                    </MudItem>
+                    @if (SelectedItem.Price.HasValue)
+                    {
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudText Typo="Typo.caption">Price</MudText>
+                            <MudText>@SelectedItem.Price.Value.ToString("C")</MudText>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    }
+</div>
+
+<!-- Furniture Selection Dialog -->
+<MudDialog @bind-IsVisible="_furnitureDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Large })">
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Select Furniture</MudText>
+
+        <!-- Furniture Type Filter -->
+        <MudSelect T="FurnitureType?"
+                   @bind-Value="_selectedType"
+                   Label="Filter by Type"
+                   Clearable="true"
+                   Class="mb-3">
+            @foreach (FurnitureType type in Enum.GetValues<FurnitureType>())
+            {
+                <MudSelectItem T="FurnitureType?" Value="type">@type</MudSelectItem>
+            }
+        </MudSelect>
+
+        <!-- Furniture Grid -->
+        <div style="max-height: 400px; overflow-y: auto;">
+            <MudGrid>
+                @foreach (var furniture in FilteredFurniture)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCard Class="furniture-card" Style="cursor: pointer;" @onclick="@(() => AddFurnitureAndCloseDialog(furniture))">
+                            <MudCardContent>
+                                @if (!string.IsNullOrEmpty(furniture.ImageUrl))
+                                {
+                                    <MudImage Src="@furniture.ImageUrl" Alt="@furniture.Name" Height="100" ObjectFit="ObjectFit.Cover" Class="mb-2" />
+                                }
+                                else
+                                {
+                                    <div style="height: 100px; background-color: #f5f5f5; display: flex; align-items: center; justify-content: center; margin-bottom: 8px;">
+                                        <MudIcon Icon="@GetFurnitureIcon(furniture.Type)" Size="Size.Large" />
+                                    </div>
+                                }
+
+                                <MudText Typo="Typo.subtitle2">@furniture.Name</MudText>
+                                <MudText Typo="Typo.caption">@furniture.Code</MudText>
+                                <MudText Typo="Typo.body2" Class="mt-1">
+                                    @furniture.Width × @furniture.Length cm
+                                </MudText>
+                                @if (furniture.Price.HasValue)
+                                {
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Primary">
+                                        @furniture.Price.Value.ToString("C")
+                                    </MudText>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _furnitureDialogOpen = false)">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public RoomPlanViewModel RoomPlan { get; set; } = new();
+    [Parameter] public List<FurniturePlannerViewModel> SelectedFurniture { get; set; } = new();
+    [Parameter] public List<FurnitureCatalogViewModel> AvailableFurniture { get; set; } = new();
+    [Parameter] public EventCallback<List<FurniturePlannerViewModel>> SelectedFurnitureChanged { get; set; }
+    [Parameter] public EventCallback<FurniturePlannerViewModel> OnFurnitureAdded { get; set; }
+    [Parameter] public EventCallback<FurniturePlannerViewModel> OnFurnitureRemoved { get; set; }
+    [Parameter] public EventCallback<FurniturePlannerViewModel> OnFurnitureModified { get; set; }
+
+    // Planner settings
+    public int FloorPlanWidth => (int)RoomPlan.Width;
+    public int FloorPlanHeight => (int)RoomPlan.Height;
+    public int GridSize => RoomPlan.GridSize;
+    public bool ShowGrid { get; set; } = true;
+    public bool PreventOverlap { get; set; } = true;
+    public bool EnableSnapping { get; set; } = true;
+
+    // State management
+    private FurniturePlannerViewModel? SelectedItem { get; set; }
+    private bool _isDragging = false;
+    private double _dragStartX = 0;
+    private double _dragStartY = 0;
+    private double _mouseStartX = 0;
+    private double _mouseStartY = 0;
+    private ElementReference _floorPlanElement;
+
+    // Dialog state
+    private bool _furnitureDialogOpen = false;
+    private FurnitureType? _selectedType = null;
+
+    private IEnumerable<FurnitureCatalogViewModel> FilteredFurniture =>
+        _selectedType.HasValue
+            ? AvailableFurniture.Where(f => f.Type == _selectedType.Value && f.IsActive)
+            : AvailableFurniture.Where(f => f.IsActive);
+
+    protected override void OnParametersSet()
+    {
+        ShowGrid = RoomPlan.ShowGrid;
+        PreventOverlap = RoomPlan.PreventOverlap;
+        EnableSnapping = RoomPlan.EnableSnapping;
+    }
+
+    private string GetFurnitureIcon(FurnitureType type) => type switch
+    {
+        FurnitureType.Sofa => Icons.Material.Filled.Chair,
+        FurnitureType.Chair => Icons.Material.Filled.Chair,
+        FurnitureType.Table => Icons.Material.Filled.TableRestaurant,
+        FurnitureType.Bed => Icons.Material.Filled.Bed,
+        FurnitureType.Wardrobe => Icons.Material.Filled.Checkroom,
+        FurnitureType.Desk => Icons.Material.Filled.Desk,
+        FurnitureType.DiningTable => Icons.Material.Filled.TableRestaurant,
+        FurnitureType.CoffeeTable => Icons.Material.Filled.TableBar,
+        _ => Icons.Material.Filled.FireExtinguisher
+    };
+
+    private void OpenFurnitureDialog()
+    {
+        _furnitureDialogOpen = true;
+        _selectedType = null;
+    }
+
+    private async Task AddFurniture(FurnitureCatalogViewModel furniture)
+    {
+        try
+        {
+            int newId = SelectedFurniture.Any() ? SelectedFurniture.Max(f => f.UIId) + 1 : 1;
+            var plannerItem = furniture.ToPlannerViewModel();
+            plannerItem.UIId = newId;
+
+            // Position the new item at the top right corner with margin
+            double width = plannerItem.FurnitureWidth.GetValueOrDefault();
+            double height = plannerItem.FurnitureLength.GetValueOrDefault();
+
+            // Make sure the item fits within the floor plan
+            width = Math.Min(width, FloorPlanWidth - 40);
+            height = Math.Min(height, FloorPlanHeight - 40);
+
+            // Position at top-right with margin
+            plannerItem.X = FloorPlanWidth - width - 20;
+            plannerItem.Y = 20;
+
+            SelectedFurniture.Add(plannerItem);
+            SelectedItem = plannerItem;
+
+            await OnFurnitureAdded.InvokeAsync(plannerItem);
+            await SelectedFurnitureChanged.InvokeAsync(SelectedFurniture);
+
+            ToastService.Add($"Added {plannerItem.Name} to room plan", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error in AddFurniture: {ex.Message}");
+            ToastService.Add("Error adding furniture", Severity.Error);
+        }
+    }
+
+    private async Task AddFurnitureAndCloseDialog(FurnitureCatalogViewModel furniture)
+    {
+        await AddFurniture(furniture);
+        _furnitureDialogOpen = false;
+    }
+
+    private void SelectItem(FurniturePlannerViewModel item)
+    {
+        SelectedItem = item;
+
+        // Clear selection state from all items
+        foreach (var f in SelectedFurniture)
+        {
+            f.IsSelected = false;
+        }
+
+        item.IsSelected = true;
+    }
+
+    private void StartDragging(FurniturePlannerViewModel item)
+    {
+        if (!_isDragging)
+        {
+            SelectItem(item);
+            _isDragging = true;
+            item.IsDragging = true;
+            _dragStartX = item.X;
+            _dragStartY = item.Y;
+        }
+    }
+
+    private void EndDragging()
+    {
+        if (_isDragging && SelectedItem != null)
+        {
+            _isDragging = false;
+            SelectedItem.IsDragging = false;
+
+            // Snap to grid if enabled
+            if (EnableSnapping)
+            {
+                SelectedItem.X = Math.Round(SelectedItem.X / GridSize) * GridSize;
+                SelectedItem.Y = Math.Round(SelectedItem.Y / GridSize) * GridSize;
+            }
+
+            // Check boundaries
+            EnsureWithinBounds(SelectedItem);
+
+            // Check for overlaps
+            if (PreventOverlap && HasOverlap(SelectedItem))
+            {
+                // Revert to original position
+                SelectedItem.X = _dragStartX;
+                SelectedItem.Y = _dragStartY;
+                ToastService.Add("Cannot place furniture here - it overlaps with another item", Severity.Warning);
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnMouseMove(MouseEventArgs e)
+    {
+        if (_isDragging && SelectedItem != null)
+        {
+            var bounds = await JS.InvokeAsync<dynamic>("getBoundingClientRect", _floorPlanElement);
+
+            SelectedItem.X = e.ClientX - bounds.left;
+            SelectedItem.Y = e.ClientY - bounds.top;
+
+            StateHasChanged();
+        }
+    }
+
+    private void OnMouseUp()
+    {
+        EndDragging();
+    }
+
+    private Task OnTouchMove(TouchEventArgs e)
+    {
+        // Handle touch events for mobile
+        return Task.CompletedTask;
+    }
+
+    private void OnTouchEnd()
+    {
+        EndDragging();
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (SelectedItem == null) return;
+
+        switch (e.Code)
+        {
+            case "KeyR":
+                RotateItem(SelectedItem, 90);
+                break;
+            case "Delete":
+                DeleteFurniture(SelectedItem.UIId);
+                break;
+        }
+    }
+
+    private async Task RotateItem(FurniturePlannerViewModel item, double degrees)
+    {
+        item.Rotation = (item.Rotation + degrees) % 360;
+        if (item.Rotation < 0) item.Rotation += 360;
+
+        EnsureWithinBounds(item);
+
+        await OnFurnitureModified.InvokeAsync(item);
+        StateHasChanged();
+    }
+
+    private async Task DuplicateItem(FurniturePlannerViewModel item)
+    {
+        try
+        {
+            int newId = SelectedFurniture.Max(f => f.UIId) + 1;
+            var duplicate = item.PlannerClone();
+            duplicate.UIId = newId;
+            duplicate.X = item.X + 30; // Offset the duplicate
+            duplicate.Y = item.Y + 30;
+
+            SelectedFurniture.Add(duplicate);
+            SelectedItem = duplicate;
+
+            await OnFurnitureAdded.InvokeAsync(duplicate);
+            await SelectedFurnitureChanged.InvokeAsync(SelectedFurniture);
+
+            ToastService.Add($"Duplicated {item.Name}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error duplicating furniture: {ex.Message}");
+            ToastService.Add("Error duplicating furniture", Severity.Error);
+        }
+    }
+
+    private async Task DeleteFurniture(int uiId)
+    {
+        var item = SelectedFurniture.FirstOrDefault(f => f.UIId == uiId);
+        if (item != null)
+        {
+            SelectedFurniture.Remove(item);
+            if (SelectedItem == item)
+            {
+                SelectedItem = null;
+            }
+
+            await OnFurnitureRemoved.InvokeAsync(item);
+            await SelectedFurnitureChanged.InvokeAsync(SelectedFurniture);
+
+            ToastService.Add($"Removed {item.Name}", Severity.Info);
+        }
+    }
+
+    private async Task ClearAll()
+    {
+        if (SelectedFurniture.Any())
+        {
+            SelectedFurniture.Clear();
+            SelectedItem = null;
+
+            await SelectedFurnitureChanged.InvokeAsync(SelectedFurniture);
+            ToastService.Add("Cleared all furniture", Severity.Info);
+        }
+    }
+
+    private void EnsureWithinBounds(FurniturePlannerViewModel item)
+    {
+        bool isRotated = ((int)Math.Round(item.Rotation / 90) % 2) == 1;
+        double width = isRotated ? item.FurnitureLength.GetValueOrDefault() : item.FurnitureWidth.GetValueOrDefault();
+        double height = isRotated ? item.FurnitureWidth.GetValueOrDefault() : item.FurnitureLength.GetValueOrDefault();
+
+        item.X = Math.Max(0, Math.Min(item.X, FloorPlanWidth - width));
+        item.Y = Math.Max(0, Math.Min(item.Y, FloorPlanHeight - height));
+    }
+
+    private bool HasOverlap(FurniturePlannerViewModel item)
+    {
+        if (!PreventOverlap) return false;
+
+        return SelectedFurniture.Any(other =>
+            other.UIId != item.UIId && ItemsOverlap(item, other));
+    }
+
+    private bool ItemsOverlap(FurniturePlannerViewModel item1, FurniturePlannerViewModel item2)
+    {
+        // Calculate actual dimensions based on rotation
+        bool isRotated1 = ((int)Math.Round(item1.Rotation / 90) % 2) == 1;
+        bool isRotated2 = ((int)Math.Round(item2.Rotation / 90) % 2) == 1;
+
+        double width1 = isRotated1 ? item1.FurnitureLength.GetValueOrDefault() : item1.FurnitureWidth.GetValueOrDefault();
+        double height1 = isRotated1 ? item1.FurnitureWidth.GetValueOrDefault() : item1.FurnitureLength.GetValueOrDefault();
+
+        double width2 = isRotated2 ? item2.FurnitureLength.GetValueOrDefault() : item2.FurnitureWidth.GetValueOrDefault();
+        double height2 = isRotated2 ? item2.FurnitureWidth.GetValueOrDefault() : item2.FurnitureLength.GetValueOrDefault();
+
+        // Check for rectangle overlap
+        return !(item1.X + width1 <= item2.X ||
+                 item2.X + width2 <= item1.X ||
+                 item1.Y + height1 <= item2.Y ||
+                 item2.Y + height2 <= item1.Y);
+    }
+}

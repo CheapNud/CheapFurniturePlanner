@@ -1,0 +1,533 @@
+@page "/planner/{RoomPlanId:int}"
+@using CheapFurniturePlanner.Services
+@using CheapFurniturePlanner.ViewModels
+
+@inject RoomPlanService RoomPlanService
+@inject FurnitureCatalogService FurnitureCatalogService
+@inject PlannerService PlannerService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>@(_roomPlan?.Name ?? "Room Planner") - Cheap Furniture Planner</PageTitle>
+
+@if (_roomPlan != null)
+{
+    <!-- Header with room plan info and actions -->
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                               Color="Color.Primary"
+                               OnClick="@(() => Navigation.NavigateTo("/room-plans"))"
+                               Title="Back to Room Plans" />
+
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h5">@_roomPlan.Name</MudText>
+                    @if (!string.IsNullOrEmpty(_roomPlan.Description))
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            @_roomPlan.Description
+                        </MudText>
+                    }
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @_roomPlan.Width � @_roomPlan.Height @_roomPlan.Unit
+                        � @_selectedFurniture.Count furniture items
+                        @if (_lastSaved.HasValue)
+                        {
+                            <span> � Last saved: @_lastSaved.Value.ToString("HH:mm:ss")</span>
+                        }
+                    </MudText>
+                </MudStack>
+            </MudStack>
+
+            <MudStack Row="true" Spacing="2">
+                <!-- Auto-save indicator -->
+                @if (_hasUnsavedChanges)
+                {
+                    <MudChip T=bool Icon="@Icons.Material.Filled.Schedule"
+                             Color="Color.Warning"
+                             Size="Size.Small">
+                        Unsaved Changes
+                    </MudChip>
+                }
+                else if (_lastSaved.HasValue)
+                {
+                    <MudChip T=bool Icon="@Icons.Material.Filled.Check"
+                             Color="Color.Success"
+                             Size="Size.Small">
+                        Saved
+                    </MudChip>
+                }
+
+                <!-- Actions -->
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveRoomPlan"
+                           Disabled="@(!_hasUnsavedChanges)">
+                    Save
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Info"
+                           StartIcon="@Icons.Material.Filled.GetApp"
+                           OnClick="ExportRoomPlan">
+                    Export
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.Settings"
+                           OnClick="OpenRoomSettings">
+                    Settings
+                </MudButton>
+
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Primary">
+                    <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy"
+                                 OnClick="DuplicateRoomPlan">
+                        Duplicate Plan
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Print"
+                                 OnClick="PrintRoomPlan">
+                        Print
+                    </MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem Icon="@Icons.Material.Filled.Delete"
+                                 OnClick="DeleteRoomPlan"
+                                 Style="color: var(--mud-palette-error);">
+                        Delete Plan
+                    </MudMenuItem>
+                </MudMenu>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Main Planner Component -->
+    <FurniturePlannerContainer RoomPlan="@_roomPlan"
+                      SelectedFurniture="@_selectedFurniture"
+                      AvailableFurniture="@_availableFurniture"
+                      SelectedFurnitureChanged="OnSelectedFurnitureChanged"
+                      OnFurnitureAdded="OnFurnitureAdded"
+                      OnFurnitureRemoved="OnFurnitureRemoved"
+                      OnFurnitureModified="OnFurnitureModified" />
+
+    <!-- Room Settings Dialog -->
+    <MudDialog @bind-IsVisible="_roomSettingsOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium })">
+        <DialogContent>
+            <MudText Typo="Typo.h6" Class="mb-4">Room Plan Settings</MudText>
+
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_editingRoomPlan.Name"
+                              Label="Room Name"
+                              Required="true"
+                              Immediate="true" />
+
+                <MudTextField @bind-Value="_editingRoomPlan.Description"
+                              Label="Description"
+                              Lines="3"
+                              Immediate="true" />
+
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudNumericField @bind-Value="_editingRoomPlan.Width"
+                                         Label="Width"
+                                         Suffix="@_editingRoomPlan.Unit"
+                                         Min="100"
+                                         Max="2000"
+                                         Step="10" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudNumericField @bind-Value="_editingRoomPlan.Height"
+                                         Label="Height"
+                                         Suffix="@_editingRoomPlan.Unit"
+                                         Min="100"
+                                         Max="2000"
+                                         Step="10" />
+                    </MudItem>
+                </MudGrid>
+
+                <MudSelect @bind-Value="_editingRoomPlan.Unit" T="string" Label="Unit">
+                    <MudSelectItem T="string" Value="@("cm")">Centimeters (cm)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("mm")">Millimeters (mm)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("in")">Inches (in)</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("ft")">Feet (ft)</MudSelectItem>
+                </MudSelect>
+
+                <MudNumericField @bind-Value="_editingRoomPlan.GridSize"
+                                 Label="Grid Size"
+                                 Suffix="@_editingRoomPlan.Unit"
+                                 Min="5"
+                                 Max="50"
+                                 Step="5" />
+
+                <MudDivider />
+
+                <MudText Typo="Typo.subtitle2">Default Behavior</MudText>
+
+                <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.ShowGrid"
+                           Label="Show Grid"
+                           Color="Color.Primary" />
+
+                <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.PreventOverlap"
+                           Label="Prevent Furniture Overlap"
+                           Color="Color.Primary" />
+
+                <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.EnableSnapping"
+                           Label="Enable Grid Snapping"
+                           Color="Color.Primary" />
+            </MudStack>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="CancelRoomSettings">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="SaveRoomSettings">
+                Save Settings
+            </MudButton>
+        </DialogActions>
+    </MudDialog>
+}
+else if (_loading)
+{
+    <!-- Loading State -->
+    <MudContainer MaxWidth="MaxWidth.Medium" Class="pa-8 text-center">
+        <MudStack Spacing="4" AlignItems="AlignItems.Center">
+            <MudProgressCircular Size="Size.Large" Indeterminate="true" />
+            <MudText Typo="Typo.h6">Loading room plan...</MudText>
+        </MudStack>
+    </MudContainer>
+}
+else
+{
+    <!-- Error State -->
+    <MudContainer MaxWidth="MaxWidth.Medium" Class="pa-8 text-center">
+        <MudStack Spacing="4" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Large" Color="Color.Error" />
+            <MudText Typo="Typo.h5">Room Plan Not Found</MudText>
+            <MudText Typo="Typo.body1">
+                The room plan you're looking for doesn't exist or has been deleted.
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => Navigation.NavigateTo("/room-plans"))">
+                Back to Room Plans
+            </MudButton>
+        </MudStack>
+    </MudContainer>
+}
+
+@code {
+    [Parameter] public int RoomPlanId { get; set; }
+
+    private RoomPlanViewModel? _roomPlan;
+    private RoomPlanViewModel _editingRoomPlan = new();
+    private List<FurniturePlannerViewModel> _selectedFurniture = new();
+    private List<FurnitureCatalogViewModel> _availableFurniture = new();
+
+    private bool _loading = true;
+    private bool _hasUnsavedChanges = false;
+    private DateTime? _lastSaved;
+    private bool _roomSettingsOpen = false;
+
+    // Auto-save timer
+    private Timer? _autoSaveTimer;
+    private readonly object _autoSaveLock = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoomPlan();
+        await LoadFurnitureCatalog();
+
+        // Setup auto-save timer (save every 30 seconds if there are changes)
+        _autoSaveTimer = new Timer(AutoSave, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_roomPlan?.Id != RoomPlanId)
+        {
+            await LoadRoomPlan();
+        }
+    }
+
+    public void Dispose()
+    {
+        _autoSaveTimer?.Dispose();
+    }
+
+    private async Task LoadRoomPlan()
+    {
+        _loading = true;
+
+        try
+        {
+            _roomPlan = await RoomPlanService.GetRoomPlanWithFurnitureAsync(RoomPlanId);
+
+            if (_roomPlan != null)
+            {
+                _selectedFurniture = _roomPlan.FurnitureItems.ToList();
+                _editingRoomPlan = new RoomPlanViewModel
+                {
+                    Id = _roomPlan.Id,
+                    Name = _roomPlan.Name,
+                    Description = _roomPlan.Description,
+                    Width = _roomPlan.Width,
+                    Height = _roomPlan.Height,
+                    Unit = _roomPlan.Unit,
+                    GridSize = _roomPlan.GridSize,
+                    ShowGrid = _roomPlan.ShowGrid,
+                    PreventOverlap = _roomPlan.PreventOverlap,
+                    EnableSnapping = _roomPlan.EnableSnapping
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading room plan: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadFurnitureCatalog()
+    {
+        try
+        {
+            _availableFurniture = await FurnitureCatalogService.GetActiveFurnitureAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading furniture catalog: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnSelectedFurnitureChanged(List<FurniturePlannerViewModel> furniture)
+    {
+        _selectedFurniture = furniture;
+        _hasUnsavedChanges = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnFurnitureAdded(FurniturePlannerViewModel furniture)
+    {
+        try
+        {
+            await PlannerService.AddFurnitureToRoomAsync(RoomPlanId, furniture);
+            _hasUnsavedChanges = true;
+            Snackbar.Add($"Added {furniture.Name} to room plan", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error adding furniture: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnFurnitureRemoved(FurniturePlannerViewModel furniture)
+    {
+        try
+        {
+            await PlannerService.RemoveFurnitureFromRoomAsync(RoomPlanId, furniture.UIId);
+            _hasUnsavedChanges = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error removing furniture: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnFurnitureModified(FurniturePlannerViewModel furniture)
+    {
+        try
+        {
+            await PlannerService.UpdateFurniturePositionAsync(RoomPlanId, furniture);
+            _hasUnsavedChanges = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating furniture: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SaveRoomPlan()
+    {
+        if (!_hasUnsavedChanges || _roomPlan == null) return;
+
+        try
+        {
+            await PlannerService.SaveRoomPlanStateAsync(RoomPlanId, _selectedFurniture);
+            _hasUnsavedChanges = false;
+            _lastSaved = DateTime.Now;
+            Snackbar.Add("Room plan saved successfully", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving room plan: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async void AutoSave(object? state)
+    {
+        if (_hasUnsavedChanges && _roomPlan != null)
+        {
+            lock (_autoSaveLock)
+            {
+                if (!_hasUnsavedChanges) return; // Double-check after acquiring lock
+            }
+
+            try
+            {
+                await PlannerService.SaveRoomPlanStateAsync(RoomPlanId, _selectedFurniture);
+
+                await InvokeAsync(() =>
+                {
+                    _hasUnsavedChanges = false;
+                    _lastSaved = DateTime.Now;
+                    StateHasChanged();
+                });
+            }
+            catch (Exception ex)
+            {
+                await InvokeAsync(() =>
+                {
+                    Snackbar.Add($"Auto-save failed: {ex.Message}", Severity.Warning);
+                });
+            }
+        }
+    }
+
+    private void OpenRoomSettings()
+    {
+        _roomSettingsOpen = true;
+    }
+
+    private void CancelRoomSettings()
+    {
+        _roomSettingsOpen = false;
+        // Reset editing room plan to original values
+        if (_roomPlan != null)
+        {
+            _editingRoomPlan = new RoomPlanViewModel
+            {
+                Id = _roomPlan.Id,
+                Name = _roomPlan.Name,
+                Description = _roomPlan.Description,
+                Width = _roomPlan.Width,
+                Height = _roomPlan.Height,
+                Unit = _roomPlan.Unit,
+                GridSize = _roomPlan.GridSize,
+                ShowGrid = _roomPlan.ShowGrid,
+                PreventOverlap = _roomPlan.PreventOverlap,
+                EnableSnapping = _roomPlan.EnableSnapping
+            };
+        }
+    }
+
+    private async Task SaveRoomSettings()
+    {
+        try
+        {
+            var updatedPlan = await RoomPlanService.UpdateRoomPlanAsync(_editingRoomPlan);
+            _roomPlan = updatedPlan;
+            _roomPlan.FurnitureItems = _selectedFurniture; // Preserve furniture items
+            _roomSettingsOpen = false;
+            Snackbar.Add("Room settings updated successfully", Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating room settings: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ExportRoomPlan()
+    {
+        try
+        {
+            // Export as JSON for now - could be extended to support other formats
+            var exportData = new
+            {
+                RoomPlan = _roomPlan,
+                Furniture = _selectedFurniture,
+                ExportedAt = DateTime.UtcNow
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(exportData, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+
+            var fileName = $"{_roomPlan!.Name.Replace(" ", "_")}_plan.json";
+            await JS.InvokeVoidAsync("downloadFile", fileName, "application/json", json);
+
+            Snackbar.Add("Room plan exported successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error exporting room plan: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DuplicateRoomPlan()
+    {
+        try
+        {
+            var duplicatedPlan = new RoomPlanViewModel
+            {
+                Name = $"{_roomPlan!.Name} (Copy)",
+                Description = _roomPlan.Description,
+                Width = _roomPlan.Width,
+                Height = _roomPlan.Height,
+                Unit = _roomPlan.Unit,
+                GridSize = _roomPlan.GridSize,
+                ShowGrid = _roomPlan.ShowGrid,
+                PreventOverlap = _roomPlan.PreventOverlap,
+                EnableSnapping = _roomPlan.EnableSnapping
+            };
+
+            var newPlan = await RoomPlanService.CreateRoomPlanAsync(duplicatedPlan);
+            Snackbar.Add("Room plan duplicated successfully", Severity.Success);
+            Navigation.NavigateTo($"/planner/{newPlan.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error duplicating room plan: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task PrintRoomPlan()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("window.print");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error printing room plan: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteRoomPlan()
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm",
+            $"Are you sure you want to delete '{_roomPlan!.Name}'? This action cannot be undone.");
+
+        if (confirmed)
+        {
+            try
+            {
+                await RoomPlanService.DeleteRoomPlanAsync(RoomPlanId);
+                Snackbar.Add("Room plan deleted successfully", Severity.Success);
+                Navigation.NavigateTo("/room-plans");
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting room plan: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

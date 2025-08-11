@@ -1,0 +1,678 @@
+@page "/furniture/catalog"
+@page "/furniture/add"
+@using CheapFurniturePlanner.Services
+@using CheapFurniturePlanner.ViewModels
+@using CheapFurniturePlanner.Models
+@inject FurnitureCatalogService FurnitureCatalogService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>Furniture Catalog - Cheap Furniture Planner</PageTitle>
+
+<!-- Header -->
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h4">Furniture Catalog</MudText>
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenAddFurnitureDialog">
+        Add Furniture
+    </MudButton>
+</MudStack>
+
+<!-- Search and Filter -->
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudGrid AlignItems="AlignItems.Center">
+        <MudItem xs="12" sm="6" md="4">
+            <MudTextField @bind-Value="_searchTerm"
+                          Label="Search furniture"
+                          Placeholder="Enter name, code, or description..."
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          OnAdornmentClick="SearchFurniture"
+                          OnKeyUp="OnSearchKeyUp" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect @bind-Value="_selectedType" T="FurnitureType?"
+                       Label="Filter by Type"
+                       Clearable="true"
+                       OnClearButtonClick="@(() => { _selectedType = null; ApplyFilters(); })">
+                @foreach (FurnitureType type in Enum.GetValues<FurnitureType>())
+                {
+                    <MudSelectItem T="FurnitureType?" Value="type">@type</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="2">
+            <MudSelect @bind-Value="_sortBy" T="string" Label="Sort by">
+                <MudSelectItem T="string" Value="@("name")">Name</MudSelectItem>
+                <MudSelectItem T="string" Value="@("code")">Code</MudSelectItem>
+                <MudSelectItem T="string" Value="@("type")">Type</MudSelectItem>
+                <MudSelectItem T="string" Value="@("price")">Price</MudSelectItem>
+                <MudSelectItem T="string" Value="@("created")">Created Date</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudStack Row="true" Spacing="2">
+                <MudSwitch T="bool" @bind-Checked="_sortDescending"
+                           Label="Descending"
+                           Color="Color.Primary" />
+                <MudButton T="bool" Variant="Variant.Outlined"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadFurniture">
+                    Refresh
+                </MudButton>
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<!-- Statistics Cards -->
+<MudGrid Class="mb-4">
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard Elevation="1" Class="pa-4 text-center">
+            <MudStack Spacing="2" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Inventory" Color="Color.Primary" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Color="Color.Primary">@_furnitureItems.Count</MudText>
+                <MudText Typo="Typo.subtitle2">Total Items</MudText>
+            </MudStack>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard Elevation="1" Class="pa-4 text-center">
+            <MudStack Spacing="2" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Category" Color="Color.Secondary" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Color="Color.Secondary">@_typeCount</MudText>
+                <MudText Typo="Typo.subtitle2">Types Available</MudText>
+            </MudStack>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard Elevation="1" Class="pa-4 text-center">
+            <MudStack Spacing="2" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Color="Color.Success" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Color="Color.Success">@_averagePrice.ToString("C0")</MudText>
+                <MudText Typo="Typo.subtitle2">Average Price</MudText>
+            </MudStack>
+        </MudCard>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudCard Elevation="1" Class="pa-4 text-center">
+            <MudStack Spacing="2" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Info" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Color="Color.Info">@_mostPopularType</MudText>
+                <MudText Typo="Typo.subtitle2">Most Popular</MudText>
+            </MudStack>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+<!-- Furniture Grid -->
+@if (_loading)
+{
+    <MudContainer Class="pa-8 text-center">
+        <MudStack Spacing="4" AlignItems="AlignItems.Center">
+            <MudProgressCircular Size="Size.Large" Indeterminate="true" />
+            <MudText Typo="Typo.h6">Loading furniture catalog...</MudText>
+        </MudStack>
+    </MudContainer>
+}
+else if (!_filteredFurniture.Any())
+{
+    <MudPaper Elevation="1" Class="pa-8 text-center">
+        <MudStack Spacing="4" AlignItems="AlignItems.Center">
+            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.h6">No furniture found</MudText>
+            <MudText Typo="Typo.body1">
+                @if (string.IsNullOrEmpty(_searchTerm) && !_selectedType.HasValue)
+                {
+                    <text>Your furniture catalog is empty.</text>
+                }
+                else
+                {
+                    <text>No furniture matches your search criteria.</text>
+                }
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenAddFurnitureDialog">
+                Add Your First Furniture Item
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+}
+else
+{
+    <MudGrid>
+        @foreach (var furniture in _filteredFurniture)
+        {
+            <MudItem xs="12" sm="6" md="4" lg="3">
+                <MudCard Elevation="2" Class="furniture-card" Style="height: 100%;">
+                    @if (!string.IsNullOrEmpty(furniture.ImageUrl))
+                    {
+                        <MudCardMedia Image="@furniture.ImageUrl" Height="200" />
+                    }
+                    else
+                    {
+                        <div class="furniture-placeholder" style="height: 200px; background-color: #f5f5f5; display: flex; align-items: center; justify-content: center;">
+                            <MudIcon Icon="@GetFurnitureIcon(furniture.Type)" Size="Size.Large" Color="Color.Secondary" />
+                        </div>
+                    }
+
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">@furniture.Name</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@furniture.Code</MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                                <MudMenuItem Icon="@Icons.Material.Filled.Edit"
+                                             OnClick="@(() => EditFurniture(furniture))">
+                                    Edit
+                                </MudMenuItem>
+                                <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy"
+                                             OnClick="@(() => DuplicateFurniture(furniture))">
+                                    Duplicate
+                                </MudMenuItem>
+                                <MudDivider />
+                                <MudMenuItem Icon="@Icons.Material.Filled.Delete"
+                                             OnClick="@(() => DeleteFurniture(furniture))"
+                                             Style="color: var(--mud-palette-error);">
+                                    Delete
+                                </MudMenuItem>
+                            </MudMenu>
+                        </CardHeaderActions>
+                    </MudCardHeader>
+
+                    <MudCardContent>
+                        <MudStack Spacing="2">
+                            <MudChip T="bool" Size="Size.Small" Color="Color.Primary">@furniture.Type</MudChip>
+
+                            @if (!string.IsNullOrEmpty(furniture.Description))
+                            {
+                                <MudText Typo="Typo.body2">
+                                    @(furniture.Description.Length > 100 ?
+                                                            furniture.Description.Substring(0, 100) + "..." :
+                                                            furniture.Description)
+                    </MudText>
+                                        }
+
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @furniture.Width � @furniture.Length � @furniture.Height cm
+                                </MudText>
+                                @if (furniture.Weight.HasValue)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @furniture.Weight.Value kg
+                                    </MudText>
+                                }
+                            </MudStack>
+
+                            @if (!string.IsNullOrEmpty(furniture.Material) || !string.IsNullOrEmpty(furniture.Color))
+                            {
+                                <MudStack Row="true" Spacing="1">
+                                    @if (!string.IsNullOrEmpty(furniture.Material))
+                                    {
+                                        <MudChip T="bool" Size="Size.Small" Variant="Variant.Outlined">@furniture.Material</MudChip>
+                                    }
+                                    @if (!string.IsNullOrEmpty(furniture.Color))
+                                    {
+                                        <MudChip T="bool" Size="Size.Small" Variant="Variant.Outlined">@furniture.Color</MudChip>
+                                    }
+                                </MudStack>
+                            }
+
+                            @if (furniture.Price.HasValue)
+                            {
+                                <MudText Typo="Typo.h6" Color="Color.Primary">
+                                    @furniture.Price.Value.ToString("C")
+                                </MudText>
+                            }
+                        </MudStack>
+                    </MudCardContent>
+
+                    <MudCardActions>
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Launch"
+                                   OnClick="@(() => ViewFurnitureDetails(furniture))">
+                            View Details
+                        </MudButton>
+                        <MudSpacer />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Color="Color.Secondary"
+                                       OnClick="@(() => EditFurniture(furniture))" />
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+<!-- Add/Edit Furniture Dialog -->
+<MudDialog @bind-IsVisible="_furnitureDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Large })">
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-4">
+            @(_editingFurniture.Id == 0 ? "Add New Furniture" : "Edit Furniture")
+        </MudText>
+
+        <MudGrid>
+            <!-- Basic Information -->
+            <MudItem xs="12" md="6">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.subtitle2">Basic Information</MudText>
+
+                    <MudTextField @bind-Value="_editingFurniture.Code"
+                                  Label="Furniture Code"
+                                  Required="true"
+                                  Immediate="true"
+                                  HelperText="Unique identifier for this furniture item" />
+
+                    <MudTextField @bind-Value="_editingFurniture.Name"
+                                  Label="Name"
+                                  Required="true"
+                                  Immediate="true" />
+
+                    <MudTextField @bind-Value="_editingFurniture.Description"
+                                  Label="Description"
+                                  Lines="3"
+                                  Immediate="true" />
+
+                    <MudSelect @bind-Value="_editingFurniture.Type" T="FurnitureType" Label="Furniture Type" Required="true">
+                        @foreach (FurnitureType type in Enum.GetValues<FurnitureType>())
+                        {
+                            <MudSelectItem T="FurnitureType" Value="type">@type</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudStack>
+            </MudItem>
+
+            <!-- Dimensions -->
+            <MudItem xs="12" md="6">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.subtitle2">Dimensions & Properties</MudText>
+
+                    <MudGrid>
+                        <MudItem xs="4">
+                            <MudNumericField @bind-Value="_editingFurniture.Width"
+                                             Label="Width"
+                                             Suffix="cm"
+                                             Min="1"
+                                             Max="1000"
+                                             Required="true" />
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudNumericField @bind-Value="_editingFurniture.Length"
+                                             Label="Length"
+                                             Suffix="cm"
+                                             Min="1"
+                                             Max="1000"
+                                             Required="true" />
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudNumericField @bind-Value="_editingFurniture.Height"
+                                             Label="Height"
+                                             Suffix="cm"
+                                             Min="1"
+                                             Max="300"
+                                             Required="true" />
+                        </MudItem>
+                    </MudGrid>
+
+                    <MudNumericField T="double?" @bind-Value="_editingFurniture.Weight"
+                                     Label="Weight"
+                                     Suffix="kg"
+                                     Min="0.1"
+                                     Max="500"
+                                     Step="@(0.1)" />
+
+                    <MudTextField @bind-Value="_editingFurniture.Color"
+                                  Label="Color" />
+
+                    <MudTextField @bind-Value="_editingFurniture.Material"
+                                  Label="Material" />
+                </MudStack>
+            </MudItem>
+
+            <!-- Additional Details -->
+            <MudItem xs="12" md="6">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.subtitle2">Additional Details</MudText>
+
+                    <MudTextField @bind-Value="_editingFurniture.Brand"
+                                  Label="Brand" />
+
+                    <MudTextField @bind-Value="_editingFurniture.Model"
+                                  Label="Model" />
+
+                    <MudNumericField @bind-Value="_editingFurniture.Price"
+                                     Label="Price"
+                                     Format="C"
+                                     Min="0"
+                                     Max="999999.99m"
+                                     Step="0.01m" />
+
+                    <MudTextField @bind-Value="_editingFurniture.ImageUrl"
+                                  Label="Image URL"
+                                  HelperText="URL to an image of this furniture item" />
+
+                    <MudSwitch T="bool" @bind-Checked="_editingFurniture.IsActive"
+                               Label="Active in Catalog"
+                               Color="Color.Primary" />
+                </MudStack>
+            </MudItem>
+
+            <!-- Image Preview -->
+            <MudItem xs="12" md="6">
+                @if (!string.IsNullOrEmpty(_editingFurniture.ImageUrl))
+                {
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.subtitle2">Image Preview</MudText>
+                        <MudImage Src="@_editingFurniture.ImageUrl"
+                                  Alt="Furniture Preview"
+                                  Height="200"
+                                  ObjectFit="ObjectFit.Cover"
+                                  Class="rounded" />
+                    </MudStack>
+                }
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CancelFurnitureDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="SaveFurniture"
+                   Disabled="@(string.IsNullOrWhiteSpace(_editingFurniture.Code) || string.IsNullOrWhiteSpace(_editingFurniture.Name))">
+            @(_editingFurniture.Id == 0 ? "Add" : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .furniture-card {
+        transition: all 0.2s ease-in-out;
+        cursor: pointer;
+    }
+
+        .furniture-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+    .furniture-placeholder {
+        background: linear-gradient(45deg, #f5f5f5 25%, transparent 25%, transparent 75%, #f5f5f5 75%, #f5f5f5), linear-gradient(45deg, #f5f5f5 25%, transparent 25%, transparent 75%, #f5f5f5 75%, #f5f5f5);
+        background-size: 20px 20px;
+        background-position: 0 0, 10px 10px;
+    }
+</style>
+
+@code {
+    private List<FurnitureCatalogViewModel> _furnitureItems = new();
+    private List<FurnitureCatalogViewModel> _filteredFurniture = new();
+    private bool _loading = true;
+
+    // Search and filtering
+    private string _searchTerm = string.Empty;
+    private FurnitureType? _selectedType = null;
+    private string _sortBy = "name";
+    private bool _sortDescending = false;
+
+    // Statistics
+    private int _typeCount = 0;
+    private decimal _averagePrice = 0;
+    private string _mostPopularType = "N/A";
+
+    // Dialog state
+    private bool _furnitureDialogOpen = false;
+    private FurnitureCatalogViewModel _editingFurniture = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFurniture();
+
+        // Check if we should open the add furniture dialog
+        if (Navigation.Uri.EndsWith("/add"))
+        {
+            OpenAddFurnitureDialog();
+        }
+    }
+
+    private async Task LoadFurniture()
+    {
+        _loading = true;
+
+        try
+        {
+            _furnitureItems = await FurnitureCatalogService.GetActiveFurnitureAsync();
+            CalculateStatistics();
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading furniture catalog: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void CalculateStatistics()
+    {
+        _typeCount = _furnitureItems.Select(f => f.Type).Distinct().Count();
+        _averagePrice = _furnitureItems.Where(f => f.Price.HasValue).Average(f => f.Price) ?? 0;
+
+        var typeGroups = _furnitureItems.GroupBy(f => f.Type).OrderByDescending(g => g.Count());
+        _mostPopularType = typeGroups.Any() ? typeGroups.First().Key.ToString() : "N/A";
+    }
+
+    private void ApplyFilters()
+    {
+        var filtered = _furnitureItems.AsEnumerable();
+
+        // Apply search filter
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            filtered = filtered.Where(f =>
+                f.Name.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                f.Code.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                (f.Description?.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) == true));
+        }
+
+        // Apply type filter
+        if (_selectedType.HasValue)
+        {
+            filtered = filtered.Where(f => f.Type == _selectedType.Value);
+        }
+
+        // Apply sorting
+        filtered = _sortBy switch
+        {
+            "name" => _sortDescending
+                ? filtered.OrderByDescending(f => f.Name)
+                : filtered.OrderBy(f => f.Name),
+            "code" => _sortDescending
+                ? filtered.OrderByDescending(f => f.Code)
+                : filtered.OrderBy(f => f.Code),
+            "type" => _sortDescending
+                ? filtered.OrderByDescending(f => f.Type)
+                : filtered.OrderBy(f => f.Type),
+            "price" => _sortDescending
+                ? filtered.OrderByDescending(f => f.Price ?? 0)
+                : filtered.OrderBy(f => f.Price ?? 0),
+            "created" => _sortDescending
+                ? filtered.OrderByDescending(f => f.CreatedAt)
+                : filtered.OrderBy(f => f.CreatedAt),
+            _ => filtered.OrderBy(f => f.Name)
+        };
+
+        _filteredFurniture = filtered.ToList();
+        StateHasChanged();
+    }
+
+    private void SearchFurniture()
+    {
+        ApplyFilters();
+    }
+
+    private void OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            SearchFurniture();
+        }
+    }
+
+    private string GetFurnitureIcon(FurnitureType type) => type switch
+    {
+        FurnitureType.Sofa => Icons.Material.Filled.Chair,
+        FurnitureType.Chair => Icons.Material.Filled.Chair,
+        FurnitureType.Table => Icons.Material.Filled.TableRestaurant,
+        FurnitureType.Bed => Icons.Material.Filled.Bed,
+        FurnitureType.Wardrobe => Icons.Material.Filled.Checkroom,
+        FurnitureType.Desk => Icons.Material.Filled.Desk,
+        FurnitureType.DiningTable => Icons.Material.Filled.TableRestaurant,
+        FurnitureType.CoffeeTable => Icons.Material.Filled.TableBar,
+        _ => Icons.Material.Filled.FireExtinguisher
+    };
+
+    private void OpenAddFurnitureDialog()
+    {
+        _editingFurniture = new FurnitureCatalogViewModel
+        {
+            IsActive = true,
+            Type = FurnitureType.Other
+        };
+        _furnitureDialogOpen = true;
+    }
+
+    private void EditFurniture(FurnitureCatalogViewModel furniture)
+    {
+        _editingFurniture = new FurnitureCatalogViewModel
+        {
+            Id = furniture.Id,
+            Code = furniture.Code,
+            Name = furniture.Name,
+            Description = furniture.Description,
+            Type = furniture.Type,
+            Width = furniture.Width,
+            Length = furniture.Length,
+            Height = furniture.Height,
+            Weight = furniture.Weight,
+            Color = furniture.Color,
+            Material = furniture.Material,
+            ImageUrl = furniture.ImageUrl,
+            Price = furniture.Price,
+            Brand = furniture.Brand,
+            Model = furniture.Model,
+            IsActive = furniture.IsActive
+        };
+        _furnitureDialogOpen = true;
+    }
+
+    private void CancelFurnitureDialog()
+    {
+        _furnitureDialogOpen = false;
+        _editingFurniture = new();
+
+        // Navigate away from /add if that's where we are
+        if (Navigation.Uri.EndsWith("/add"))
+        {
+            Navigation.NavigateTo("/furniture/catalog", replace: true);
+        }
+    }
+
+    private async Task SaveFurniture()
+    {
+        try
+        {
+            if (_editingFurniture.Id == 0)
+            {
+                // Add new
+                var addedFurniture = await FurnitureCatalogService.AddFurnitureItemAsync(_editingFurniture);
+                Snackbar.Add($"Furniture '{addedFurniture.Name}' added successfully", Severity.Success);
+            }
+            else
+            {
+                // Update existing
+                var updatedFurniture = await FurnitureCatalogService.UpdateFurnitureItemAsync(_editingFurniture);
+                Snackbar.Add($"Furniture '{updatedFurniture.Name}' updated successfully", Severity.Success);
+            }
+
+            _furnitureDialogOpen = false;
+            await LoadFurniture();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving furniture: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void ViewFurnitureDetails(FurnitureCatalogViewModel furniture)
+    {
+        // Navigate to a detailed view or open a details dialog
+        // For now, just edit the furniture
+        EditFurniture(furniture);
+    }
+
+    private async Task DuplicateFurniture(FurnitureCatalogViewModel furniture)
+    {
+        try
+        {
+            var duplicated = new FurnitureCatalogViewModel
+            {
+                Code = $"{furniture.Code}_COPY",
+                Name = $"{furniture.Name} (Copy)",
+                Description = furniture.Description,
+                Type = furniture.Type,
+                Width = furniture.Width,
+                Length = furniture.Length,
+                Height = furniture.Height,
+                Weight = furniture.Weight,
+                Color = furniture.Color,
+                Material = furniture.Material,
+                ImageUrl = furniture.ImageUrl,
+                Price = furniture.Price,
+                Brand = furniture.Brand,
+                Model = furniture.Model,
+                IsActive = furniture.IsActive
+            };
+
+            await FurnitureCatalogService.AddFurnitureItemAsync(duplicated);
+            Snackbar.Add($"Furniture duplicated successfully", Severity.Success);
+            await LoadFurniture();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error duplicating furniture: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteFurniture(FurnitureCatalogViewModel furniture)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm",
+            $"Are you sure you want to delete '{furniture.Name}'? This action cannot be undone.");
+
+        if (confirmed)
+        {
+            try
+            {
+                // Mark as inactive instead of deleting to preserve data integrity
+                furniture.IsActive = false;
+                await FurnitureCatalogService.UpdateFurnitureItemAsync(furniture);
+                Snackbar.Add($"Furniture '{furniture.Name}' removed from catalog", Severity.Success);
+                await LoadFurniture();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error removing furniture: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

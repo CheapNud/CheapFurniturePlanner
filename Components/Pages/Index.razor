@@ -1,0 +1,47 @@
+@page "/"
+@using CheapAvaloniaBlazor.Services
+@inject IDesktopInteropService Desktop
+
+<PageTitle>Home</PageTitle>
+
+<MudCard>
+    <MudCardContent>
+        <MudText Typo="Typo.h4" GutterBottom="true">Welcome to Your Desktop App! 🎉</MudText>
+        <MudText Class="mb-4">
+            This is a native desktop application built with Blazor and running with full file system access.
+        </MudText>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" @onclick="OpenFileDialog">
+            Open File Dialog
+        </MudButton>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Secondary" @onclick="ShowNotification" Class="ml-2">
+            Show Notification
+        </MudButton>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private async Task OpenFileDialog()
+    {
+        var file = await Desktop.OpenFileDialogAsync(new()
+        {
+            Title = "Select a file",
+            Filters = new()
+            {
+                new() { Name = "Text Files", Extensions = new[] { "*.txt", "*.md" } },
+                new() { Name = "All Files", Extensions = new[] { "*.*" } }
+            }
+        });
+
+        if (file != null)
+        {
+            await Desktop.ShowNotificationAsync("File Selected", $"You selected: {Path.GetFileName(file)}");
+        }
+    }
+
+    private async Task ShowNotification()
+    {
+        await Desktop.ShowNotificationAsync("Hello Desktop!", "This is a native desktop notification! 🚀");
+    }
+}

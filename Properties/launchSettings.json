@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "CheapFurniturePlanner": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:64377;http://localhost:64378"
+    }
+  }
+}

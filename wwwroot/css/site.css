@@ -1,0 +1,480 @@
+/* Cheap Furniture Planner - Main Site Styles */
+
+/* Global Styles */
+html, body {
+    font-family: 'Roboto', sans-serif;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+/* Blazor loading styles */
+#blazor-error-ui {
+    background: lightyellow;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.5rem;
+    }
+
+/* Loading spinner for better UX */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.9);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid #1976d2;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Utility classes */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.cursor-grab {
+    cursor: grab;
+}
+
+.cursor-grabbing {
+    cursor: grabbing;
+}
+
+.no-select {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+.pointer-events-none {
+    pointer-events: none;
+}
+
+.pointer-events-all {
+    pointer-events: all;
+}
+
+/* Layout helpers */
+.full-height {
+    height: 100vh;
+}
+
+.min-height-screen {
+    min-height: 100vh;
+}
+
+.center-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Text utilities */
+.text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.text-break {
+    word-wrap: break-word;
+    word-break: break-word;
+}
+
+/* Spacing utilities */
+.mt-auto {
+    margin-top: auto;
+}
+
+.mb-auto {
+    margin-bottom: auto;
+}
+
+.ml-auto {
+    margin-left: auto;
+}
+
+.mr-auto {
+    margin-right: auto;
+}
+
+/* Focus styles for accessibility */
+.focus-outline:focus {
+    outline: 2px solid #1976d2;
+    outline-offset: 2px;
+}
+
+button:focus,
+input:focus,
+select:focus,
+textarea:focus {
+    outline: 2px solid #1976d2;
+    outline-offset: 2px;
+}
+
+/* Custom scrollbar for WebKit browsers */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
+
+/* Print styles */
+@media print {
+    /* Hide navigation and non-essential elements when printing */
+    .mud-appbar,
+    .mud-drawer,
+    .mud-fab,
+    .no-print {
+        display: none !important;
+    }
+
+    .mud-main-content {
+        margin-left: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Optimize room plan printing */
+    .room-plan {
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    /* Hide interactive elements */
+    .action-buttons,
+    .toolbar {
+        display: none !important;
+    }
+
+    /* Ensure good contrast for printed furniture items */
+    .furniture-item {
+        border: 2px solid #000 !important;
+        background-color: #fff !important;
+    }
+
+    /* Make text more readable */
+    body {
+        font-size: 12pt;
+        line-height: 1.4;
+        color: #000;
+        background: #fff;
+    }
+}
+
+/* Animation classes */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideInUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideInDown {
+    from {
+        transform: translateY(-30px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.animate-slide-up {
+    animation: slideInUp 0.3s ease-out;
+}
+
+.animate-slide-down {
+    animation: slideInDown 0.3s ease-out;
+}
+
+/* Card hover effects */
+.card-hover {
+    transition: all 0.2s ease-in-out;
+}
+
+    .card-hover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+/* Error and success states */
+.error-border {
+    border: 2px solid #f44336 !important;
+}
+
+.success-border {
+    border: 2px solid #4caf50 !important;
+}
+
+.warning-border {
+    border: 2px solid #ff9800 !important;
+}
+
+/* Responsive image handling */
+.responsive-image {
+    max-width: 100%;
+    height: auto;
+    object-fit: cover;
+}
+
+/* Loading placeholder */
+.loading-placeholder {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Custom MudBlazor overrides */
+.mud-input-control-input-container {
+    border-radius: 8px;
+}
+
+.mud-button {
+    border-radius: 8px;
+}
+
+.mud-card {
+    border-radius: 12px;
+}
+
+.mud-dialog {
+    border-radius: 16px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .furniture-item {
+        border-width: 3px !important;
+    }
+
+        .furniture-item.selected {
+            border-width: 4px !important;
+        }
+
+    .width-text,
+    .height-text {
+        background-color: #000 !important;
+        color: #fff !important;
+        border: 2px solid #fff !important;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .furniture-item {
+        transition: none !important;
+    }
+
+    .card-hover:hover {
+        transform: none !important;
+    }
+}
+
+/* Dark mode custom properties */
+[data-theme="dark"] {
+    --surface-color: #1e1e1e;
+    --on-surface-color: #ffffff;
+    --primary-color: #90caf9;
+    --secondary-color: #f48fb1;
+}
+
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+    /* Larger touch targets on mobile */
+    .mud-icon-button {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* Better spacing on mobile */
+    .furniture-planner-container {
+        padding: 8px;
+    }
+
+    /* Stack toolbar items on mobile */
+    .toolbar {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    /* Smaller furniture dimension text on mobile */
+    .width-text,
+    .height-text {
+        font-size: 8px;
+        padding: 1px 2px;
+    }
+
+    /* Position action buttons better on mobile */
+    .action-buttons {
+        top: -35px;
+        right: -5px;
+    }
+
+    /* Improve dialog responsiveness */
+    .mud-dialog {
+        margin: 16px;
+        max-height: calc(100vh - 32px);
+    }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+    .mud-container {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    /* Stack grid items on very small screens */
+    .room-plan {
+        min-width: 300px;
+        overflow-x: auto;
+    }
+}
+
+/* High DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    /* Crisp lines for furniture items on high DPI displays */
+    .furniture-item {
+        border-width: 0.5px;
+    }
+
+    .grid-line {
+        width: 0.5px;
+        height: 0.5px;
+    }
+}
+
+/* Focus management for keyboard navigation */
+.furniture-item:focus-visible {
+    outline: 3px solid #1976d2;
+    outline-offset: 2px;
+    z-index: 999;
+}
+
+/* Improve text readability */
+.mud-typography {
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar for the planner area */
+.room-plan {
+    scrollbar-width: thin;
+    scrollbar-color: #c1c1c1 #f1f1f1;
+}
+
+/* Ensure good color contrast in all themes */
+.contrast-text {
+    color: contrast(var(--mud-palette-surface));
+}
+
+/* Performance optimization classes */
+.will-change-transform {
+    will-change: transform;
+}
+
+.gpu-accelerated {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* Hide elements visually but keep them accessible to screen readers */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

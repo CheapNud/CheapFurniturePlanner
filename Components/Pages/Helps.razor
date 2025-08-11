@@ -1,0 +1,467 @@
+@page "/help"
+@page "/about"
+
+<PageTitle>Help & About - Cheap Furniture Planner</PageTitle>
+
+<!-- Header -->
+<MudContainer MaxWidth="MaxWidth.Large">
+    <MudText Typo="Typo.h3" Class="mb-6 text-center">
+        Help & Documentation
+    </MudText>
+    
+    <!-- Quick Start Guide -->
+    <MudPaper Elevation="2" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h4" Class="mb-4">
+            <MudIcon Icon="@Icons.Material.Filled.RocketLaunch" Class="mr-2" />
+            Quick Start Guide
+        </MudText>
+        
+        <MudTimeline TimelinePosition="TimelinePosition.Start">
+            <MudTimelineItem Color="Color.Primary" Size="Size.Large">
+                <ItemContent>
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.h6">1. Create a Room Plan</MudText>
+                        <MudText Typo="Typo.body1">
+                            Start by creating a new room plan from the "Room Plans" section. 
+                            Define your room dimensions, unit of measurement, and default settings.
+                        </MudText>
+                        <MudButton Variant="Variant.Outlined" 
+                                  Color="Color.Primary" 
+                                  Size="Size.Small"
+                                  StartIcon="@Icons.Material.Filled.Add"
+                                  Href="/room-plans/new">
+                            Create Room Plan
+                        </MudButton>
+                    </MudStack>
+                </ItemContent>
+            </MudTimelineItem>
+            
+            <MudTimelineItem Color="Color.Secondary" Size="Size.Large">
+                <ItemContent>
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.h6">2. Add Furniture</MudText>
+                        <MudText Typo="Typo.body1">
+                            Browse the furniture catalog and add items to your room plan. 
+                            You can drag and drop furniture items to position them precisely.
+                        </MudText>
+                        <MudButton Variant="Variant.Outlined" 
+                                  Color="Color.Secondary" 
+                                  Size="Size.Small"
+                                  StartIcon="@Icons.Material.Filled.Chair"
+                                  Href="/furniture/catalog">
+                            Browse Catalog
+                        </MudButton>
+                    </MudStack>
+                </ItemContent>
+            </MudTimelineItem>
+            
+            <MudTimelineItem Color="Color.Tertiary" Size="Size.Large">
+                <ItemContent>
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.h6">3. Arrange & Design</MudText>
+                        <MudText Typo="Typo.body1">
+                            Use the planner tools to rotate, group, and arrange furniture. 
+                            Enable grid snapping and overlap prevention for precise layouts.
+                        </MudText>
+                    </MudStack>
+                </ItemContent>
+            </MudTimelineItem>
+            
+            <MudTimelineItem Color="Color.Success" Size="Size.Large">
+                <ItemContent>
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.h6">4. Save & Export</MudText>
+                        <MudText Typo="Typo.body1">
+                            Your work is automatically saved. You can also export your room plans 
+                            for sharing or printing.
+                        </MudText>
+                    </MudStack>
+                </ItemContent>
+            </MudTimelineItem>
+        </MudTimeline>
+    </MudPaper>
+    
+    <!-- Features Overview -->
+    <MudPaper Elevation="2" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h4" Class="mb-4">
+            <MudIcon Icon="@Icons.Material.Filled.Star" Class="mr-2" />
+            Key Features
+        </MudText>
+        
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="1" Class="pa-4 h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="3">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.GridOn" Color="Color.Primary" Size="Size.Large" />
+                                <MudText Typo="Typo.h6">Precision Planning</MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.body2">
+                                Grid-based layout system with customizable grid sizes, snapping, 
+                                and precise measurements for accurate room planning.
+                            </MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="1" Class="pa-4 h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="3">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.TouchApp" Color="Color.Secondary" Size="Size.Large" />
+                                <MudText Typo="Typo.h6">Intuitive Interface</MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.body2">
+                                Drag-and-drop furniture placement, rotation controls, and 
+                                real-time visual feedback for easy room design.
+                            </MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="1" Class="pa-4 h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="3">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Inventory" Color="Color.Tertiary" Size="Size.Large" />
+                                <MudText Typo="Typo.h6">Furniture Catalog</MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.body2">
+                                Comprehensive furniture database with dimensions, materials, 
+                                colors, and pricing information.
+                            </MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="1" Class="pa-4 h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="3">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.SaveAlt" Color="Color.Success" Size="Size.Large" />
+                                <MudText Typo="Typo.h6">Export & Share</MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.body2">
+                                Export room plans as images or data files, print layouts, 
+                                and share designs with others.
+                            </MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+    
+    <!-- Keyboard Shortcuts -->
+    <MudPaper Elevation="2" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h4" Class="mb-4">
+            <MudIcon Icon="@Icons.Material.Filled.Keyboard" Class="mr-2" />
+            Keyboard Shortcuts
+        </MudText>
+        
+        <MudSimpleTable Elevation="0" Dense="true">
+            <thead>
+                <tr>
+                    <th>Shortcut</th>
+                    <th>Action</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><MudChip T="bool" Size="Size.Small">R</MudChip></td>
+                    <td>Rotate Furniture</td>
+                    <td>Rotate the selected furniture item by 90 degrees</td>
+                </tr>
+                <tr>
+                    <td><MudChip T="bool" Size="Size.Small">Delete</MudChip></td>
+                    <td>Delete Furniture</td>
+                    <td>Remove the selected furniture item from the room plan</td>
+                </tr>
+                <tr>
+                    <td><MudChip T="bool" Size="Size.Small">Ctrl + S</MudChip></td>
+                    <td>Save Room Plan</td>
+                    <td>Save the current state of your room plan</td>
+                </tr>
+                <tr>
+                    <td><MudChip T="bool" Size="Size.Small">G</MudChip></td>
+                    <td>Group/Ungroup</td>
+                    <td>Group or ungroup selected furniture items</td>
+                </tr>
+            </tbody>
+        </MudSimpleTable>
+    </MudPaper>
+    
+    <!-- FAQ Section -->
+    <MudPaper Elevation="2" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h4" Class="mb-4">
+            <MudIcon Icon="@Icons.Material.Filled.Help" Class="mr-2" />
+            Frequently Asked Questions
+        </MudText>
+        
+        <MudExpansionPanels>
+            <MudExpansionPanel Text="How do I add custom furniture to the catalog?">
+                <TitleContent>
+                    <div style="display: flex; align-items: center;">
+                        <MudIcon Icon="@Icons.Material.Filled.QuestionAnswer" class="mr-3"></MudIcon>
+                        <div>How do I add custom furniture to the catalog?</div>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    <MudText>
+                        Navigate to the "Furniture Catalog" section and click "Add Furniture". 
+                        Fill in the furniture details including dimensions, type, material, and other properties. 
+                        You can also add an image URL to visualize the furniture in your room plans.
+                    </MudText>
+                </ChildContent>
+            </MudExpansionPanel>
+            
+            <MudExpansionPanel Text="Can I change room dimensions after creating a plan?">
+                <TitleContent>
+                    <div style="display: flex; align-items: center;">
+                        <MudIcon Icon="@Icons.Material.Filled.QuestionAnswer" class="mr-3"></MudIcon>
+                        <div>Can I change room dimensions after creating a plan?</div>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    <MudText>
+                        Yes! While in the planner, click the "Settings" button to modify room dimensions, 
+                        grid size, and other room properties. Note that changing dimensions may affect 
+                        the positioning of existing furniture items.
+                    </MudText>
+                </ChildContent>
+            </MudExpansionPanel>
+            
+            <MudExpansionPanel Text="How does the grid snapping feature work?">
+                <TitleContent>
+                    <div style="display: flex; align-items: center;">
+                        <MudIcon Icon="@Icons.Material.Filled.QuestionAnswer" class="mr-3"></MudIcon>
+                        <div>How does the grid snapping feature work?</div>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    <MudText>
+                        Grid snapping automatically aligns furniture to the nearest grid intersection when you 
+                        move items. This helps create neat, organized layouts. You can toggle this feature 
+                        on/off using the grid snap button in the toolbar or in the room settings.
+                    </MudText>
+                </ChildContent>
+            </MudExpansionPanel>
+            
+            <MudExpansionPanel Text="What file formats can I export room plans to?">
+                <TitleContent>
+                    <div style="display: flex; align-items: center;">
+                        <MudIcon Icon="@Icons.Material.Filled.QuestionAnswer" class="mr-3"></MudIcon>
+                        <div>What file formats can I export room plans to?</div>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    <MudText>
+                        Currently, you can export room plans as JSON data files which contain all the 
+                        room and furniture information. Image export (PNG/JPG) functionality is planned 
+                        for future updates. You can also use your browser's print function to create PDF layouts.
+                    </MudText>
+                </ChildContent>
+            </MudExpansionPanel>
+            
+            <MudExpansionPanel Text="Is my data saved automatically?">
+                <TitleContent>
+                    <div style="display: flex; align-items: center;">
+                        <MudIcon Icon="@Icons.Material.Filled.QuestionAnswer" class="mr-3"></MudIcon>
+                        <div>Is my data saved automatically?</div>
+                    </div>
+                </TitleContent>
+                <ChildContent>
+                    <MudText>
+                        Yes! The application automatically saves your changes every 30 seconds when you're 
+                        working in the planner. You'll see a save indicator showing the last saved time. 
+                        You can also manually save using Ctrl+S or the Save button.
+                    </MudText>
+                </ChildContent>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+    </MudPaper>
+    
+    <!-- Tips & Tricks -->
+    <MudPaper Elevation="2" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h4" Class="mb-4">
+            <MudIcon Icon="@Icons.Material.Filled.Lightbulb" Class="mr-2" />
+            Tips & Tricks
+        </MudText>
+        
+        <MudList T=string>
+            <MudListItem Icon="@Icons.Material.Filled.TipsAndUpdates">
+                <MudText><strong>Use the grid:</strong> Enable grid display and snapping for more precise furniture placement and alignment.</MudText>
+            </MudListItem>
+            <MudListItem Icon="@Icons.Material.Filled.TipsAndUpdates">
+                <MudText><strong>Group related items:</strong> Group furniture pieces that belong together (like dining table and chairs) for easier manipulation.</MudText>
+            </MudListItem>
+            <MudListItem Icon="@Icons.Material.Filled.TipsAndUpdates">
+                <MudText><strong>Start with large items:</strong> Place large furniture pieces first, then add smaller decorative items around them.</MudText>
+            </MudListItem>
+            <MudListItem Icon="@Icons.Material.Filled.TipsAndUpdates">
+                <MudText><strong>Consider traffic flow:</strong> Leave adequate space between furniture for comfortable movement through the room.</MudText>
+            </MudListItem>
+            <MudListItem Icon="@Icons.Material.Filled.TipsAndUpdates">
+                <MudText><strong>Use overlap prevention:</strong> Enable overlap prevention to avoid furniture placement conflicts.</MudText>
+            </MudListItem>
+            <MudListItem Icon="@Icons.Material.Filled.TipsAndUpdates">
+                <MudText><strong>Duplicate plans:</strong> Create variations of your room design by duplicating existing plans.</MudText>
+            </MudListItem>
+        </MudList>
+    </MudPaper>
+    
+    <!-- About Section -->
+    <MudPaper Elevation="2" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h4" Class="mb-4">
+            <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-2" />
+            About Cheap Furniture Planner
+        </MudText>
+        
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.body1">
+                        Cheap Furniture Planner is a free, open-source room planning application built with 
+                        modern web technologies. It's designed to help you visualize and plan your room 
+                        layouts with ease and precision.
+                    </MudText>
+                    
+                    <MudText Typo="Typo.h6">Built With:</MudText>
+                    <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                        <MudChip T=bool Color="Color.Primary">Blazor Server</MudChip>
+                        <MudChip T=bool Color="Color.Secondary">ASP.NET Core</MudChip>
+                        <MudChip T=bool Color="Color.Tertiary">MudBlazor</MudChip>
+                        <MudChip T=bool Color="Color.Success">SQLite</MudChip>
+                        <MudChip T=bool Color="Color.Info">Entity Framework</MudChip>
+                        <MudChip T=bool Color="Color.Warning">Avalonia</MudChip>
+                    </MudStack>
+                    
+                    <MudText Typo="Typo.h6">Features:</MudText>
+                    <MudList T=string Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Cross-platform desktop application
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Drag-and-drop furniture planning
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Comprehensive furniture catalog
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Export and sharing capabilities
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Responsive design for all devices
+                        </MudListItem>
+                    </MudList>
+                </MudStack>
+            </MudItem>
+            
+            <MudItem xs="12" md="4">
+                <MudCard Elevation="1" Class="pa-4">
+                    <MudCardContent>
+                        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Large" Color="Color.Primary" />
+                            <MudText Typo="Typo.h6" Align="Align.Center">Open Source</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">
+                                This application is open source and available for contributions.
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined" 
+                                      Color="Color.Primary"
+                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                      Href="https://github.com/cheapnudes/CheapFurniturePlanner"
+                                      Target="_blank">
+                                View on GitHub
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+    
+    <!-- Contact & Support -->
+    <MudPaper Elevation="2" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h4" Class="mb-4">
+            <MudIcon Icon="@Icons.Material.Filled.Support" Class="mr-2" />
+            Support & Contact
+        </MudText>
+        
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="1" Class="pa-4 text-center h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.BugReport" Size="Size.Large" Color="Color.Error" />
+                            <MudText Typo="Typo.h6">Report a Bug</MudText>
+                            <MudText Typo="Typo.body2">
+                                Found an issue? Let us know!
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined" 
+                                      Color="Color.Error"
+                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                      Href="https://github.com/cheapnudes/CheapFurniturePlanner/issues"
+                                      Target="_blank">
+                                Report Issue
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="1" Class="pa-4 text-center h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Large" Color="Color.Info" />
+                            <MudText Typo="Typo.h6">Feature Request</MudText>
+                            <MudText Typo="Typo.body2">
+                                Have an idea for improvement?
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined" 
+                                      Color="Color.Info"
+                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                      Href="https://github.com/cheapnudes/CheapFurniturePlanner/discussions"
+                                      Target="_blank">
+                                Suggest Feature
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="1" Class="pa-4 text-center h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Favorite" Size="Size.Large" Color="Color.Success" />
+                            <MudText Typo="Typo.h6">Contribute</MudText>
+                            <MudText Typo="Typo.body2">
+                                Help improve the application!
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined" 
+                                      Color="Color.Success"
+                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                      Href="https://github.com/cheapnudes/CheapFurniturePlanner"
+                                      Target="_blank">
+                                Contribute
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    
+}
