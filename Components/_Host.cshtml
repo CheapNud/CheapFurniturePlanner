@@ -56,5 +56,17 @@
             }
         });
     </script>
+    <script>
+        // Fallback loading if the main script fails
+        if (typeof window.cheapBlazor === 'undefined') {
+            console.warn('cheapBlazor bridge not loaded from _content path, trying direct path...');
+            const script = document.createElement('script');
+            script.src = '/cheap-blazor-interop.js';
+            script.onerror = function() {
+                console.error('Failed to load cheapBlazor bridge from both paths');
+            };
+            document.head.appendChild(script);
+        }
+    </script>
 </body>
 </html>

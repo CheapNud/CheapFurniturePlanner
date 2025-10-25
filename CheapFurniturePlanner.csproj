@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>Exe</OutputType>
@@ -25,31 +25,22 @@
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.Models\CheapHelpers.Models.csproj" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.Services\CheapHelpers.Services.csproj" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers\CheapHelpers.csproj" />
-    <PackageReference Include="CheapAvaloniaBlazor" Version="1.0.82" />
+    <PackageReference Include="CheapAvaloniaBlazor" Version="1.0.89" />
 
 
     <!-- Entity Framework for SQLite -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.8" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.8">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.10">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
 
     <!-- MudBlazor for UI components -->
-    <PackageReference Include="MudBlazor" Version="8.11.0" />
+    <PackageReference Include="MudBlazor" Version="8.13.0" />
 
     <!-- Mapster for object mapping -->
     <PackageReference Include="Mapster" Version="7.4.0" />
     <PackageReference Include="Mapster.DependencyInjection" Version="1.0.1" />
-
-    <!-- Localization support -->
-    <PackageReference Include="Microsoft.Extensions.Localization" Version="9.0.8" />
-
-    <!-- File system access -->
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Physical" Version="9.0.8" />
-
-    <!-- JSON serialization -->
-    <PackageReference Include="System.Text.Json" Version="9.0.8" />
   </ItemGroup>
 
   <ItemGroup>
@@ -58,6 +49,10 @@
 
     <!-- Static web assets -->
     <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Remove="C:\Users\Brech\.nuget\packages\cheapavaloniablazor\1.0.85\contentFiles\any\any\Resources\wwwroot\cheap-blazor-interop.js" />
   </ItemGroup>
 
   <ItemGroup>
