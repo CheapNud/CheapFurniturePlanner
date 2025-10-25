@@ -315,3 +315,4 @@ MigrationBackup/
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
 /CheapFurniturePlanner.csproj
+/.claude/settings.local.json
