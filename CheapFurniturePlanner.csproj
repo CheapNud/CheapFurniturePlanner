@@ -20,12 +20,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CheapAvaloniaBlazor" Version="1.0.92" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.Blazor\CheapHelpers.Blazor.csproj" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.EF\CheapHelpers.EF.csproj" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.Models\CheapHelpers.Models.csproj" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.Services\CheapHelpers.Services.csproj" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers\CheapHelpers.csproj" />
-    <PackageReference Include="CheapAvaloniaBlazor" Version="1.0.89" />
 
 
     <!-- Entity Framework for SQLite -->
@@ -49,10 +49,6 @@
 
     <!-- Static web assets -->
     <AvaloniaResource Include="Assets\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Remove="C:\Users\Brech\.nuget\packages\cheapavaloniablazor\1.0.85\contentFiles\any\any\Resources\wwwroot\cheap-blazor-interop.js" />
   </ItemGroup>
 
   <ItemGroup>
