@@ -316,3 +316,7 @@ MigrationBackup/
 .ionide/
 /CheapFurniturePlanner.csproj
 /.claude/settings.local.json
+
+.claude/
+CLAUDE.md
+/wwwroot/cheap-blazor-interop.js
