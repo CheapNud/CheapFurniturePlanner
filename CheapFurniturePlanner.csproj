@@ -20,7 +20,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CheapAvaloniaBlazor" Version="1.0.92" />
+    <PackageReference Include="CheapAvaloniaBlazor" Version="1.1.0" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.Blazor\CheapHelpers.Blazor.csproj" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.EF\CheapHelpers.EF.csproj" />
     <ProjectReference Include="..\CheapHelpers\CheapHelpers.Models\CheapHelpers.Models.csproj" />
