@@ -1,19 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36221.1
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.11123.170 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheapFurniturePlanner", "CheapFurniturePlanner.csproj", "{C865BB4A-A1D5-40FF-8F32-2F024BEEDADC}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheapHelpers", "..\CheapHelpers\CheapHelpers\CheapHelpers.csproj", "{F20C0276-9CFA-8539-6947-0576BD428572}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheapHelpers.EF", "..\CheapHelpers\CheapHelpers.EF\CheapHelpers.EF.csproj", "{C96E4003-D9B2-E437-8B02-555F2972DACE}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheapHelpers.Blazor", "..\CheapHelpers\CheapHelpers.Blazor\CheapHelpers.Blazor.csproj", "{ACA66B2D-D8D8-3E4C-2880-4558D936F49D}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheapHelpers.Models", "..\CheapHelpers\CheapHelpers.Models\CheapHelpers.Models.csproj", "{9F247499-EE3D-E618-D416-36A93732E9B8}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheapHelpers.Services", "..\CheapHelpers\CheapHelpers.Services\CheapHelpers.Services.csproj", "{AC41BBF2-5A71-A2AD-D6B1-E4ACC4E290F0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -25,26 +15,6 @@ Global
 		{C865BB4A-A1D5-40FF-8F32-2F024BEEDADC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C865BB4A-A1D5-40FF-8F32-2F024BEEDADC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C865BB4A-A1D5-40FF-8F32-2F024BEEDADC}.Release|Any CPU.Build.0 = Release|Any CPU
-		{F20C0276-9CFA-8539-6947-0576BD428572}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{F20C0276-9CFA-8539-6947-0576BD428572}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{F20C0276-9CFA-8539-6947-0576BD428572}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{F20C0276-9CFA-8539-6947-0576BD428572}.Release|Any CPU.Build.0 = Release|Any CPU
-		{C96E4003-D9B2-E437-8B02-555F2972DACE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C96E4003-D9B2-E437-8B02-555F2972DACE}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C96E4003-D9B2-E437-8B02-555F2972DACE}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C96E4003-D9B2-E437-8B02-555F2972DACE}.Release|Any CPU.Build.0 = Release|Any CPU
-		{ACA66B2D-D8D8-3E4C-2880-4558D936F49D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{ACA66B2D-D8D8-3E4C-2880-4558D936F49D}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{ACA66B2D-D8D8-3E4C-2880-4558D936F49D}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{ACA66B2D-D8D8-3E4C-2880-4558D936F49D}.Release|Any CPU.Build.0 = Release|Any CPU
-		{9F247499-EE3D-E618-D416-36A93732E9B8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{9F247499-EE3D-E618-D416-36A93732E9B8}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{9F247499-EE3D-E618-D416-36A93732E9B8}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{9F247499-EE3D-E618-D416-36A93732E9B8}.Release|Any CPU.Build.0 = Release|Any CPU
-		{AC41BBF2-5A71-A2AD-D6B1-E4ACC4E290F0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{AC41BBF2-5A71-A2AD-D6B1-E4ACC4E290F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{AC41BBF2-5A71-A2AD-D6B1-E4ACC4E290F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{AC41BBF2-5A71-A2AD-D6B1-E4ACC4E290F0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

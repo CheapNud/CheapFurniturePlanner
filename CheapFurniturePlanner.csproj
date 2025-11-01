@@ -21,11 +21,11 @@
 
   <ItemGroup>
     <PackageReference Include="CheapAvaloniaBlazor" Version="1.1.0" />
-    <ProjectReference Include="..\CheapHelpers\CheapHelpers.Blazor\CheapHelpers.Blazor.csproj" />
-    <ProjectReference Include="..\CheapHelpers\CheapHelpers.EF\CheapHelpers.EF.csproj" />
-    <ProjectReference Include="..\CheapHelpers\CheapHelpers.Models\CheapHelpers.Models.csproj" />
-    <ProjectReference Include="..\CheapHelpers\CheapHelpers.Services\CheapHelpers.Services.csproj" />
-    <ProjectReference Include="..\CheapHelpers\CheapHelpers\CheapHelpers.csproj" />
+    <PackageReference Include="CheapHelpers" Version="1.0.0" />
+    <PackageReference Include="CheapHelpers.Blazor" Version="1.0.0" />
+    <PackageReference Include="CheapHelpers.EF" Version="1.0.0" />
+    <PackageReference Include="CheapHelpers.Models" Version="1.0.0" />
+    <PackageReference Include="CheapHelpers.Services" Version="1.0.0" />
 
 
     <!-- Entity Framework for SQLite -->
