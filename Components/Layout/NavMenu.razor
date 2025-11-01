@@ -24,10 +24,10 @@
                     Icon="@Icons.Material.Filled.Add">
             New Plan
         </MudNavLink>
-        <MudNavLink Href="/room-plans/templates"
+        @* <MudNavLink Href="/room-plans/templates"
                     Icon="@Icons.Material.Filled.ContentCopy">
             Templates
-        </MudNavLink>
+        </MudNavLink> *@
     </MudNavGroup>
 
     <!-- Furniture Catalog -->
@@ -42,17 +42,17 @@
                     Icon="@Icons.Material.Filled.Add">
             Add Furniture
         </MudNavLink>
-        <MudNavLink Href="/furniture/popular"
+        @* <MudNavLink Href="/furniture/popular"
                     Icon="@Icons.Material.Filled.TrendingUp">
             Popular Items
         </MudNavLink>
         <MudNavLink Href="/furniture/statistics"
                     Icon="@Icons.Material.Filled.Analytics">
             Statistics
-        </MudNavLink>
+        </MudNavLink> *@
     </MudNavGroup>
 
-    <MudDivider Class="my-2" />
+    @* <MudDivider Class="my-2" />
 
     <!-- Tools -->
     <MudNavGroup Text="Tools"
@@ -72,7 +72,7 @@
         </MudNavLink>
     </MudNavGroup>
 
-    <MudDivider Class="my-2" />
+    <MudDivider Class="my-2" /> *@
 
     <!-- Help & About -->
     <MudNavLink Href="/help"
@@ -85,36 +85,6 @@
         About
     </MudNavLink>
 </MudNavMenu>
-
-<style>
-    .mud-nav-menu {
-        padding-top: 1rem;
-    }
-
-    .mud-nav-item {
-        border-radius: 0 25px 25px 0;
-        margin-right: 12px;
-        margin-bottom: 2px;
-    }
-
-        .mud-nav-item:hover {
-            background-color: var(--mud-palette-action-hover);
-        }
-
-        .mud-nav-item.mud-nav-item-active {
-            background-color: var(--mud-palette-primary);
-            color: var(--mud-palette-primary-text);
-        }
-
-    .mud-nav-group .mud-nav-group-header {
-        padding-left: 16px;
-        font-weight: 500;
-    }
-
-    .mud-nav-group .mud-nav-item {
-        padding-left: 32px;
-    }
-</style>
 
 @code {
 

@@ -3,12 +3,13 @@
 @using Microsoft.AspNetCore.Components.Web
 @using MudBlazor
 
-<Router AppAssembly="@typeof(App).Assembly">
-    <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
-        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
-    </Found>
-    <NotFound>
+<CascadingValue Value="@this">
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="routeData">
+            <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
         <PageTitle>Not found</PageTitle>
         <LayoutView Layout="@typeof(MainLayout)">
             <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
@@ -28,4 +29,5 @@
             </MudContainer>
         </LayoutView>
     </NotFound>
-</Router>
+    </Router>
+</CascadingValue>

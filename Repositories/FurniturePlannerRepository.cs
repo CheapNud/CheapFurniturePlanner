@@ -1,6 +1,8 @@
 ﻿using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Models;
 using CheapHelpers.EF;
+using CheapHelpers.EF.Extensions;
+using CheapHelpers.EF.Infrastructure;
 using CheapHelpers.EF.Repositories;
 using CheapHelpers.Models.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -125,7 +127,7 @@ public class FurniturePlannerRepository
     #region Room Plan Management
 
     /// <summary>
-    /// Gets all room plans
+    /// Gets all room plans with furniture items included
     /// </summary>
     public async Task<List<RoomPlan>> GetRoomPlansAsync(CancellationToken cancellationToken = default)
     {
@@ -133,12 +135,37 @@ public class FurniturePlannerRepository
         {
             using var context = _contextFactory.CreateDbContext();
             return await context.RoomPlans
+                .Include(r => r.FurnitureItems)
                 .OrderByDescending(r => r.UpdatedAt ?? r.CreatedAt)
                 .ToListAsync(cancellationToken);
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"Error in GetRoomPlansAsync: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Gets paginated room plans
+    /// </summary>
+    public async Task<PaginatedList<RoomPlan>> GetRoomPlansPaginatedAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var query = context.RoomPlans
+                .Include(r => r.FurnitureItems)
+                .OrderByDescending(r => r.UpdatedAt ?? r.CreatedAt);
+
+            return await query.ToPaginatedListAsync(pageIndex, pageSize, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error in GetRoomPlansPaginatedAsync: {ex.Message}");
             throw;
         }
     }

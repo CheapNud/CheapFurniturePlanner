@@ -1,7 +1,10 @@
+@page "/"
 @page "/Home"
 @using CheapFurniturePlanner.Services
 @using CheapFurniturePlanner.ViewModels
+@using CheapHelpers.EF.Infrastructure
 @inject RoomPlanService RoomPlanService
+@inject PlannerService PlannerService
 @inject FurnitureCatalogService FurnitureCatalogService
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
@@ -10,17 +13,17 @@
 
 <!-- Hero Section -->
 <MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
-    <MudPaper Elevation="0" Class="pa-8 text-center" Style="background: linear-gradient(135deg, #1976d2 0%, #42a5f5 100%); color: white;">
+    <MudPaper Elevation="0" Class="pa-8 text-center mud-theme-primary">
         <MudStack Spacing="4" AlignItems="AlignItems.Center">
-            <MudIcon Icon="@Icons.Material.Filled.FireExtinguisher" Size="Size.Large" />
-            <MudText Typo="Typo.h3" Class="font-weight-bold">
+            <MudIcon Icon="@Icons.Material.Filled.Chair" Size="Size.Large" Color="Color.Surface" />
+            <MudText Typo="Typo.h3" Class="font-weight-bold" Color="Color.Surface">
                 Cheap Furniture Planner
             </MudText>
-            <MudText Typo="Typo.h6" Class="font-weight-light">
+            <MudText Typo="Typo.h6" Class="font-weight-light" Color="Color.Surface">
                 Design your perfect room layout with ease
             </MudText>
-            <MudButton Variant="Variant.Filled" 
-                      Color="Color.Secondary" 
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Secondary"
                       Size="Size.Large"
                       StartIcon="@Icons.Material.Filled.Add"
                       OnClick="@CreateNewRoomPlan"
@@ -112,7 +115,7 @@
                     @foreach (var roomPlan in _recentRoomPlans.Take(6))
                     {
                         <MudItem xs="12" sm="6" md="4">
-                            <MudCard Elevation="1" Class="cursor-pointer room-plan-card"
+                            <MudCard Elevation="1"
                                     @onclick="@(() => OpenRoomPlan(roomPlan.Id))">
                                 <MudCardContent>
                                     <MudStack Spacing="2">
@@ -127,7 +130,7 @@
                                             </MudText>
                                         </MudStack>
                                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                            <MudIcon Icon="@Icons.Material.Filled.FireExtinguisher" Size="Size.Small" />
+                                            <MudIcon Icon="@Icons.Material.Filled.Chair" Size="Size.Small" />
                                             <MudText Typo="Typo.caption">
                                                 @roomPlan.FurnitureItems.Count furniture items
                                             </MudText>
@@ -159,9 +162,7 @@
             else
             {
                 <MudAlert Severity="Severity.Info" Class="my-4">
-                    <AlertContent>
-                        <MudText>No room plans yet. Create your first room plan to get started!</MudText>
-                    </AlertContent>
+                    <MudText>No room plans yet. Create your first room plan to get started!</MudText>
                 </MudAlert>
             }
         </MudStack>
@@ -188,7 +189,7 @@
                     @foreach (var (furniture, usageCount) in _popularFurniture.Take(4))
                     {
                         <MudItem xs="12" sm="6" md="3">
-                            <MudCard Elevation="1" Class="furniture-item-card">
+                            <MudCard Elevation="1">
                                 <MudCardMedia Image="@(furniture.ImageUrl ?? "/images/furniture-placeholder.png")" 
                                              Height="150" />
                                 <MudCardContent>
@@ -221,9 +222,7 @@
             else
             {
                 <MudAlert Severity="Severity.Info" Class="my-4">
-                    <AlertContent>
-                        <MudText>No furniture usage data available yet.</MudText>
-                    </AlertContent>
+                    <MudText>No furniture usage data available yet.</MudText>
                 </MudAlert>
             }
         </MudStack>
@@ -300,29 +299,13 @@
     </MudPaper>
 </MudContainer>
 
-<style>
-    .room-plan-card:hover {
-        transform: translateY(-2px);
-        transition: transform 0.2s ease-in-out;
-    }
-
-    .furniture-item-card:hover {
-        transform: translateY(-2px);
-        transition: transform 0.2s ease-in-out;
-    }
-
-    .cursor-pointer {
-        cursor: pointer;
-    }
-</style>
-
 @code {
-    private int _totalRoomPlans = 0;
+    private int _totalRoomPlans => _recentRoomPlans?.ResultCount ?? 0;
     private int _totalFurniture = 0;
     private string _mostUsedType = "Loading...";
-    private int _recentPlansCount = 0;
-    
-    private List<RoomPlanViewModel>? _recentRoomPlans;
+    private int _recentPlansCount => _recentRoomPlans?.Count(r => r.CreatedAt >= DateTime.UtcNow.AddDays(-30)) ?? 0;
+
+    private PaginatedList<RoomPlanViewModel>? _recentRoomPlans;
     private List<(FurnitureCatalogViewModel Furniture, int UsageCount)>? _popularFurniture;
 
     protected override async Task OnInitializedAsync()
@@ -334,17 +317,15 @@
     {
         try
         {
-            // Load recent room plans
-            _recentRoomPlans = await RoomPlanService.GetAllRoomPlansAsync();
-            _totalRoomPlans = _recentRoomPlans.Count;
-            _recentPlansCount = _recentRoomPlans.Count(r => r.CreatedAt >= DateTime.UtcNow.AddDays(-30));
+            // Load recent room plans (paginated - first 6 only)
+            _recentRoomPlans = await RoomPlanService.GetPaginatedRoomPlansAsync(1, 6);
 
             // Load furniture statistics
             var allFurniture = await FurnitureCatalogService.GetActiveFurnitureAsync();
             _totalFurniture = allFurniture.Count;
 
             var usageStats = await FurnitureCatalogService.GetUsageStatisticsAsync();
-            _mostUsedType = usageStats.Any() 
+            _mostUsedType = usageStats.Any()
                 ? usageStats.OrderByDescending(kvp => kvp.Value).First().Key.ToString()
                 : "None";
 
@@ -372,7 +353,7 @@
     private async Task DuplicateRoomPlan(int roomPlanId)
     {
         // Event propagation is prevented by @onclick:stopPropagation="true" in the markup
-        
+
         try
         {
             var originalPlan = await RoomPlanService.GetRoomPlanWithFurnitureAsync(roomPlanId);
@@ -392,8 +373,30 @@
                 };
 
                 var newPlan = await RoomPlanService.CreateRoomPlanAsync(duplicatedPlan);
-                
-                Snackbar.Add($"Room plan duplicated successfully!", Severity.Success);
+
+                // Copy all furniture items from original plan to new plan
+                foreach (var furniture in originalPlan.FurnitureItems)
+                {
+                    var duplicatedFurniture = new FurniturePlannerViewModel
+                    {
+                        FurnitureItemId = furniture.FurnitureItemId,
+                        Name = furniture.Name,
+                        Code = furniture.Code,
+                        X = furniture.X,
+                        Y = furniture.Y,
+                        Rotation = furniture.Rotation,
+                        GroupID = furniture.GroupID,
+                        FurnitureWidth = furniture.FurnitureWidth,
+                        FurnitureLength = furniture.FurnitureLength,
+                        FurnitureHeight = furniture.FurnitureHeight,
+                        ImageUrl = furniture.ImageUrl,
+                        Price = furniture.Price
+                    };
+
+                    await PlannerService.AddFurnitureToRoomAsync(newPlan.Id, duplicatedFurniture);
+                }
+
+                Snackbar.Add($"Room plan and {originalPlan.FurnitureItems.Count} furniture items duplicated successfully!", Severity.Success);
                 await LoadDashboardData(); // Refresh data
             }
         }

@@ -3,6 +3,7 @@
 @using CheapFurniturePlanner.Services
 @using CheapFurniturePlanner.ViewModels
 @inject RoomPlanService RoomPlanService
+@inject PlannerService PlannerService
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
@@ -143,7 +144,7 @@ else
                                 }
                                 
                                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                    <MudIcon Icon="@Icons.Material.Filled.FireExtinguisher" Size="Size.Small" /> @* a .Furniture icons was used but that doesnt exist, either create our own or use somethign else *@
+                                    <MudIcon Icon="@Icons.Material.Filled.Chair" Size="Size.Small" />
                                     <MudText Typo="Typo.caption">
                                         @roomPlan.FurnitureItems.Count items
                                     </MudText>
@@ -248,7 +249,7 @@ else
 }
 
 <!-- New/Edit Room Plan Dialog -->
-<MudDialog @bind-IsVisible="_roomPlanDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium })">
+<MudDialog @bind-Visible="_roomPlanDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium })">
     <DialogContent>
         <MudText Typo="Typo.h6" Class="mb-4">
             @(_editingRoomPlan.Id == 0 ? "Create New Room Plan" : "Edit Room Plan")
@@ -331,48 +332,39 @@ else
     </DialogActions>
 </MudDialog>
 
-<style>
-    .room-plan-card {
-        transition: all 0.2s ease-in-out;
-        cursor: pointer;
-    }
-
-    .room-plan-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    }
-</style>
-
 @code {
     private List<RoomPlanViewModel> _roomPlans = new();
     private List<RoomPlanViewModel> _filteredRoomPlans = new();
     private bool _loading = true;
     private bool _viewMode = true; // true for grid, false for table
-    
+
     // Search and filtering
     private string _searchTerm = string.Empty;
     private string _sortBy = "updated";
     private bool _sortDescending = true;
-    
+
     // Dialog state
     private bool _roomPlanDialogOpen = false;
     private RoomPlanViewModel _editingRoomPlan = new();
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadRoomPlans();
-        
-        // Check if we should open the new room plan dialog
+        // Check if we should open the new room plan dialog without loading data
         if (Navigation.Uri.EndsWith("/new"))
         {
+            _loading = false;
             OpenNewRoomPlanDialog();
+        }
+        else
+        {
+            await LoadRoomPlans();
         }
     }
 
     private async Task LoadRoomPlans()
     {
         _loading = true;
-        
+
         try
         {
             _roomPlans = await RoomPlanService.GetAllRoomPlansAsync();
@@ -525,6 +517,15 @@ else
     {
         try
         {
+            // Get the full room plan with furniture items
+            var originalPlan = await RoomPlanService.GetRoomPlanWithFurnitureAsync(roomPlan.Id);
+
+            if (originalPlan == null)
+            {
+                Snackbar.Add("Error: Could not load original room plan", Severity.Error);
+                return;
+            }
+
             var duplicatedPlan = new RoomPlanViewModel
             {
                 Name = $"{roomPlan.Name} (Copy)",
@@ -539,7 +540,30 @@ else
             };
 
             var newPlan = await RoomPlanService.CreateRoomPlanAsync(duplicatedPlan);
-            Snackbar.Add($"Room plan duplicated successfully", Severity.Success);
+
+            // Copy all furniture items from original plan to new plan
+            foreach (var furniture in originalPlan.FurnitureItems)
+            {
+                var duplicatedFurniture = new FurniturePlannerViewModel
+                {
+                    FurnitureItemId = furniture.FurnitureItemId,
+                    Name = furniture.Name,
+                    Code = furniture.Code,
+                    X = furniture.X,
+                    Y = furniture.Y,
+                    Rotation = furniture.Rotation,
+                    GroupID = furniture.GroupID,
+                    FurnitureWidth = furniture.FurnitureWidth,
+                    FurnitureLength = furniture.FurnitureLength,
+                    FurnitureHeight = furniture.FurnitureHeight,
+                    ImageUrl = furniture.ImageUrl,
+                    Price = furniture.Price
+                };
+
+                await PlannerService.AddFurnitureToRoomAsync(newPlan.Id, duplicatedFurniture);
+            }
+
+            Snackbar.Add($"Room plan and {originalPlan.FurnitureItems.Count} furniture items duplicated successfully", Severity.Success);
             await LoadRoomPlans();
         }
         catch (Exception ex)

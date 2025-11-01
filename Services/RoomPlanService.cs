@@ -2,6 +2,7 @@
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Repositories;
 using CheapFurniturePlanner.ViewModels;
+using CheapHelpers.EF.Infrastructure;
 using Microsoft.Extensions.Logging;
 
 namespace CheapFurniturePlanner.Services;
@@ -38,6 +39,32 @@ public class RoomPlanService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving room plans");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Gets paginated room plans
+    /// </summary>
+    public async Task<PaginatedList<RoomPlanViewModel>> GetPaginatedRoomPlansAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var paginatedRoomPlans = await _repository.GetRoomPlansPaginatedAsync(pageIndex, pageSize, cancellationToken);
+            var viewModels = _mapper.Map<List<RoomPlanViewModel>>(paginatedRoomPlans);
+
+            return new PaginatedList<RoomPlanViewModel>(
+                viewModels,
+                paginatedRoomPlans.ResultCount,
+                paginatedRoomPlans.PageIndex,
+                pageSize);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving paginated room plans");
             throw;
         }
     }

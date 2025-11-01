@@ -20,8 +20,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CheapAvaloniaBlazor" Version="1.1.0" />
-    <PackageReference Include="CheapHelpers" Version="1.0.0" />
+    <PackageReference Include="CheapAvaloniaBlazor" Version="1.1.1" />
+    <PackageReference Include="CheapHelpers" Version="1.1.2" />
     <PackageReference Include="CheapHelpers.Blazor" Version="1.0.0" />
     <PackageReference Include="CheapHelpers.EF" Version="1.0.0" />
     <PackageReference Include="CheapHelpers.Models" Version="1.0.0" />
