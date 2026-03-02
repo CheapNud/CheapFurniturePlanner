@@ -1,4 +1,4 @@
-﻿@using CheapFurniturePlanner.ViewModels
+@using CheapFurniturePlanner.ViewModels
 @using CheapFurniturePlanner.Models
 @using Microsoft.AspNetCore.Components.Web
 @using System.Globalization
@@ -50,12 +50,15 @@
 
     <!-- Room Plan Canvas -->
     <div id="furniture-planner"
-         class="room-plan"
+         class="room-plan @(_isDragging ? "dragging" : "")"
          style="width:@(FloorPlanWidth)px;height:@(FloorPlanHeight)px;"
          @ref="_floorPlanElement"
          @onmousemove="OnMouseMove"
+         @onmousemove:preventDefault="_isDragging"
          @onmouseup="OnMouseUp"
+         @onmouseleave="OnMouseLeave"
          @ontouchmove="OnTouchMove"
+         @ontouchmove:preventDefault="_isDragging"
          @ontouchend="OnTouchEnd"
          @onkeydown="HandleKeyDown"
          tabindex="0">
@@ -95,9 +98,21 @@
             {
                 classstring.Append(" selected");
             }
+            if (item.IsDragging)
+            {
+                classstring.Append(" dragging");
+            }
             if (item.GroupID != null)
             {
                 classstring.Append(" grouped");
+            }
+            if (item.SnapEdge != null)
+            {
+                classstring.Append(" snapped");
+            }
+            if (_isDragging && SelectedItem != null && SelectedItem.GroupID != null && item.GroupID == SelectedItem.GroupID && item != SelectedItem)
+            {
+                classstring.Append(" group-dragging");
             }
             classstring.Append($" rotation-{item.Rotation}");
 
@@ -105,8 +120,8 @@
                       Class="@classstring.ToString()"
                       Elevation="@(item.GroupID != null ? 3 : 1)"
                       style="@styling.ToString()"
-                      @onmousedown="@(() => StartDragging(item))"
-                      @ontouchstart="@(() => StartDragging(item))"
+                      @onmousedown="@((MouseEventArgs e) => StartDragging(item, e))"
+                      @ontouchstart="@((TouchEventArgs e) => OnTouchStart(item, e))"
                       @onclick="@(() => SelectItem(item))">
 
                 <!-- Furniture Content -->
@@ -207,6 +222,13 @@
                             <MudText>@SelectedItem.Price.Value.ToString("C")</MudText>
                         </MudItem>
                     }
+                    @if (SelectedItem.GroupID.HasValue)
+                    {
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudText Typo="Typo.caption">Group</MudText>
+                            <MudText>Group @SelectedItem.GroupID</MudText>
+                        </MudItem>
+                    }
                 </MudGrid>
             </MudCardContent>
         </MudCard>
@@ -289,18 +311,30 @@
     public bool PreventOverlap { get; set; } = true;
     public bool EnableSnapping { get; set; } = true;
 
+    // Constants
+    private const double SnapDistance = 8.0;
+    private const double CollisionTolerance = 0.1;
+
     // State management
     private FurniturePlannerViewModel? SelectedItem { get; set; }
-    private bool _isDragging = false;
-    private double _dragStartX = 0;
-    private double _dragStartY = 0;
-    private double _mouseStartX = 0;
-    private double _mouseStartY = 0;
+    private bool _isDragging;
+    private double _dragStartX;
+    private double _dragStartY;
     private ElementReference _floorPlanElement;
 
+    // Cached bounds — fetched ONCE at drag start, reused during move (no JS per frame)
+    private DOMRect? _cachedBounds;
+
+    // Group tracking
+    private int _nextGroupId = 1;
+
+    // Touch state
+    private bool _isTouchDragging;
+    private CancellationTokenSource? _touchDelayCts;
+
     // Dialog state
-    private bool _furnitureDialogOpen = false;
-    private FurnitureType? _selectedType = null;
+    private bool _furnitureDialogOpen;
+    private FurnitureType? _selectedType;
 
     private IEnumerable<FurnitureCatalogViewModel> FilteredFurniture =>
         _selectedType.HasValue
@@ -312,8 +346,17 @@
         ShowGrid = RoomPlan.ShowGrid;
         PreventOverlap = RoomPlan.PreventOverlap;
         EnableSnapping = RoomPlan.EnableSnapping;
+
+        // Init _nextGroupId from max existing GroupID
+        int maxGroupId = SelectedFurniture
+            .Where(f => f.GroupID.HasValue)
+            .Select(f => f.GroupID!.Value)
+            .DefaultIfEmpty(0)
+            .Max();
+        _nextGroupId = maxGroupId + 1;
     }
 
+    // ========== Furniture Icon Helper ==========
     private string GetFurnitureIcon(FurnitureType type) => type switch
     {
         FurnitureType.Sofa => Icons.Material.Filled.Chair,
@@ -327,6 +370,7 @@
         _ => Icons.Material.Filled.Chair
     };
 
+    // ========== Dialog & Add ==========
     private void OpenFurnitureDialog()
     {
         _furnitureDialogOpen = true;
@@ -374,6 +418,7 @@
         _furnitureDialogOpen = false;
     }
 
+    // ========== Selection ==========
     private void SelectItem(FurniturePlannerViewModel item)
     {
         SelectedItem = item;
@@ -387,59 +432,62 @@
         item.IsSelected = true;
     }
 
-    private void StartDragging(FurniturePlannerViewModel item)
+    // ========== Offset-Based Dragging ==========
+    private async Task StartDragging(FurniturePlannerViewModel item, MouseEventArgs mouseArgs)
     {
-        if (!_isDragging)
+        if (_isDragging) return;
+
+        SelectItem(item);
+
+        // Cache bounds ONCE at drag start — no JS interop during move
+        _cachedBounds = await JS.InvokeAsync<DOMRect>("getBoundingClientRect", _floorPlanElement);
+
+        // Calculate offset in pure C#: where the mouse grabbed relative to item origin
+        item.OffsetX = (mouseArgs.ClientX - _cachedBounds.Left) - item.X;
+        item.OffsetY = (mouseArgs.ClientY - _cachedBounds.Top) - item.Y;
+
+        _isDragging = true;
+        item.IsDragging = true;
+        _dragStartX = item.X;
+        _dragStartY = item.Y;
+
+        // Store initial positions for all group members (for delta-based group movement)
+        if (item.GroupID.HasValue)
         {
-            SelectItem(item);
-            _isDragging = true;
-            item.IsDragging = true;
-            _dragStartX = item.X;
-            _dragStartY = item.Y;
+            foreach (var groupMember in SelectedFurniture.Where(f => f.GroupID == item.GroupID))
+            {
+                groupMember.InitialGroupX = groupMember.X;
+                groupMember.InitialGroupY = groupMember.Y;
+            }
         }
     }
 
-    private void EndDragging()
+    private void OnMouseMove(MouseEventArgs e)
     {
-        if (_isDragging && SelectedItem != null)
+        // SYNCHRONOUS — no async, no JS interop. Uses cached bounds from drag start.
+        if (!_isDragging || SelectedItem == null || _cachedBounds == null) return;
+
+        double newX = e.ClientX - _cachedBounds.Left - SelectedItem.OffsetX;
+        double newY = e.ClientY - _cachedBounds.Top - SelectedItem.OffsetY;
+
+        if (SelectedItem.GroupID.HasValue)
         {
-            _isDragging = false;
-            SelectedItem.IsDragging = false;
-
-            // Snap to grid if enabled
-            if (EnableSnapping)
-            {
-                SelectedItem.X = Math.Round(SelectedItem.X / GridSize) * GridSize;
-                SelectedItem.Y = Math.Round(SelectedItem.Y / GridSize) * GridSize;
-            }
-
-            // Check boundaries
+            MoveGroupWithCSharp(SelectedItem, newX, newY);
+        }
+        else
+        {
+            SelectedItem.X = newX;
+            SelectedItem.Y = newY;
             EnsureWithinBounds(SelectedItem);
-
-            // Check for overlaps
-            if (PreventOverlap && HasOverlap(SelectedItem))
-            {
-                // Revert to original position
-                SelectedItem.X = _dragStartX;
-                SelectedItem.Y = _dragStartY;
-                ToastService.Add("Cannot place furniture here - it overlaps with another item", Severity.Warning);
-            }
-
-            StateHasChanged();
         }
-    }
 
-    private async Task OnMouseMove(MouseEventArgs e)
-    {
-        if (_isDragging && SelectedItem != null)
+        // Live snap feedback during drag
+        if (EnableSnapping)
         {
-            var bounds = await JS.InvokeAsync<DOMRect>("getBoundingClientRect", _floorPlanElement);
-
-            SelectedItem.X = e.ClientX - bounds.Left;
-            SelectedItem.Y = e.ClientY - bounds.Top;
-
-            StateHasChanged();
+            ApplySnapping(SelectedItem);
         }
+
+        StateHasChanged();
     }
 
     private void OnMouseUp()
@@ -447,43 +495,555 @@
         EndDragging();
     }
 
-    private Task OnTouchMove(TouchEventArgs e)
+    private void OnMouseLeave()
     {
-        // Handle touch events for mobile
-        return Task.CompletedTask;
+        // End drag when cursor leaves the container — prevents "stuck drag"
+        if (_isDragging)
+        {
+            EndDragging();
+        }
+    }
+
+    private void EndDragging()
+    {
+        if (!_isDragging || SelectedItem == null) return;
+
+        _isDragging = false;
+        _isTouchDragging = false;
+        SelectedItem.IsDragging = false;
+
+        // Final snap
+        if (EnableSnapping)
+        {
+            ApplySnapping(SelectedItem);
+        }
+
+        // Check boundaries
+        EnsureWithinBounds(SelectedItem);
+
+        // Check for overlaps
+        if (PreventOverlap && HasOverlap(SelectedItem))
+        {
+            // Revert to original position
+            if (SelectedItem.GroupID.HasValue)
+            {
+                foreach (var groupMember in SelectedFurniture.Where(f => f.GroupID == SelectedItem.GroupID))
+                {
+                    groupMember.X = groupMember.InitialGroupX;
+                    groupMember.Y = groupMember.InitialGroupY;
+                }
+            }
+            else
+            {
+                SelectedItem.X = _dragStartX;
+                SelectedItem.Y = _dragStartY;
+            }
+            ToastService.Add("Cannot place furniture here - it overlaps with another item", Severity.Warning);
+        }
+
+        // Clear snap state
+        foreach (var item in SelectedFurniture)
+        {
+            item.SnapEdge = null;
+            item.SnapTargetUIId = null;
+        }
+
+        _cachedBounds = null;
+        StateHasChanged();
+    }
+
+    // ========== Touch Support ==========
+    private async Task OnTouchStart(FurniturePlannerViewModel item, TouchEventArgs touchArgs)
+    {
+        if (_isDragging || touchArgs.Touches.Length == 0) return;
+
+        var firstTouch = touchArgs.Touches[0];
+
+        SelectItem(item);
+
+        // Cache bounds at touch start
+        _cachedBounds = await JS.InvokeAsync<DOMRect>("getBoundingClientRect", _floorPlanElement);
+
+        // 150ms delay before initiating drag (prevents accidental drags on touch)
+        _touchDelayCts?.Cancel();
+        _touchDelayCts = new CancellationTokenSource();
+        var token = _touchDelayCts.Token;
+
+        try
+        {
+            await Task.Delay(150, token);
+
+            if (token.IsCancellationRequested) return;
+
+            // Calculate offset in pure C#
+            item.OffsetX = (firstTouch.ClientX - _cachedBounds.Left) - item.X;
+            item.OffsetY = (firstTouch.ClientY - _cachedBounds.Top) - item.Y;
+
+            _isDragging = true;
+            _isTouchDragging = true;
+            item.IsDragging = true;
+            _dragStartX = item.X;
+            _dragStartY = item.Y;
+
+            // Store initial positions for group members
+            if (item.GroupID.HasValue)
+            {
+                foreach (var groupMember in SelectedFurniture.Where(f => f.GroupID == item.GroupID))
+                {
+                    groupMember.InitialGroupX = groupMember.X;
+                    groupMember.InitialGroupY = groupMember.Y;
+                }
+            }
+
+            StateHasChanged();
+        }
+        catch (TaskCanceledException)
+        {
+            // Touch ended before delay — not a drag
+        }
+    }
+
+    private void OnTouchMove(TouchEventArgs e)
+    {
+        if (!_isDragging || SelectedItem == null || _cachedBounds == null || e.Touches.Length == 0) return;
+
+        var firstTouch = e.Touches[0];
+        double newX = firstTouch.ClientX - _cachedBounds.Left - SelectedItem.OffsetX;
+        double newY = firstTouch.ClientY - _cachedBounds.Top - SelectedItem.OffsetY;
+
+        if (SelectedItem.GroupID.HasValue)
+        {
+            MoveGroupWithCSharp(SelectedItem, newX, newY);
+        }
+        else
+        {
+            SelectedItem.X = newX;
+            SelectedItem.Y = newY;
+            EnsureWithinBounds(SelectedItem);
+        }
+
+        if (EnableSnapping)
+        {
+            ApplySnapping(SelectedItem);
+        }
+
+        StateHasChanged();
     }
 
     private void OnTouchEnd()
     {
+        _touchDelayCts?.Cancel();
         EndDragging();
     }
 
-    private void HandleKeyDown(KeyboardEventArgs e)
+    // ========== Edge-Based Snapping ==========
+    private void ApplySnapping(FurniturePlannerViewModel item)
+    {
+        // Clear previous snap state
+        item.SnapEdge = null;
+        item.SnapTargetUIId = null;
+
+        double bestScore = double.MaxValue;
+        string? bestEdge = null;
+        int? bestTargetUIId = null;
+        double bestSnapX = item.X;
+        double bestSnapY = item.Y;
+
+        bool isRotatedItem = ((int)Math.Round(item.Rotation / 90) % 2) == 1;
+        double itemWidth = isRotatedItem ? item.FurnitureLength.GetValueOrDefault() : item.FurnitureWidth.GetValueOrDefault();
+        double itemHeight = isRotatedItem ? item.FurnitureWidth.GetValueOrDefault() : item.FurnitureLength.GetValueOrDefault();
+
+        foreach (var other in SelectedFurniture)
+        {
+            if (other.UIId == item.UIId) continue;
+            // Skip same-group items for snapping
+            if (item.GroupID.HasValue && item.GroupID == other.GroupID) continue;
+
+            bool isRotatedOther = ((int)Math.Round(other.Rotation / 90) % 2) == 1;
+            double otherWidth = isRotatedOther ? other.FurnitureLength.GetValueOrDefault() : other.FurnitureWidth.GetValueOrDefault();
+            double otherHeight = isRotatedOther ? other.FurnitureWidth.GetValueOrDefault() : other.FurnitureLength.GetValueOrDefault();
+
+            // Try 4 edge snap positions
+            TryEdgeSnap(item, other, "right", item.X + itemWidth, other.X, itemWidth, itemHeight, otherWidth, otherHeight,
+                ref bestScore, ref bestEdge, ref bestTargetUIId, ref bestSnapX, ref bestSnapY);
+
+            TryEdgeSnap(item, other, "left", item.X, other.X + otherWidth, itemWidth, itemHeight, otherWidth, otherHeight,
+                ref bestScore, ref bestEdge, ref bestTargetUIId, ref bestSnapX, ref bestSnapY);
+
+            TryEdgeSnap(item, other, "bottom", item.Y + itemHeight, other.Y, itemWidth, itemHeight, otherWidth, otherHeight,
+                ref bestScore, ref bestEdge, ref bestTargetUIId, ref bestSnapX, ref bestSnapY);
+
+            TryEdgeSnap(item, other, "top", item.Y, other.Y + otherHeight, itemWidth, itemHeight, otherWidth, otherHeight,
+                ref bestScore, ref bestEdge, ref bestTargetUIId, ref bestSnapX, ref bestSnapY);
+        }
+
+        if (bestEdge != null)
+        {
+            item.X = bestSnapX;
+            item.Y = bestSnapY;
+            item.SnapEdge = bestEdge;
+            item.SnapTargetUIId = bestTargetUIId;
+        }
+    }
+
+    private void TryEdgeSnap(
+        FurniturePlannerViewModel item, FurniturePlannerViewModel other,
+        string edge, double itemEdge, double otherEdge,
+        double itemWidth, double itemHeight, double otherWidth, double otherHeight,
+        ref double bestScore, ref string? bestEdge, ref int? bestTargetUIId,
+        ref double bestSnapX, ref double bestSnapY)
+    {
+        double distance = Math.Abs(itemEdge - otherEdge);
+        if (distance > SnapDistance) return;
+
+        // Calculate adjacency ratio (how much items overlap on the perpendicular axis)
+        double adjacencyRatio;
+        double spanDistance;
+        double candidateX = item.X;
+        double candidateY = item.Y;
+
+        if (edge is "left" or "right")
+        {
+            double overlapStart = Math.Max(item.Y, other.Y);
+            double overlapEnd = Math.Min(item.Y + itemHeight, other.Y + otherHeight);
+            double overlapLength = Math.Max(0, overlapEnd - overlapStart);
+            double minHeight = Math.Min(itemHeight, otherHeight);
+            adjacencyRatio = minHeight > 0 ? overlapLength / minHeight : 0;
+            spanDistance = Math.Abs((item.Y + itemHeight / 2) - (other.Y + otherHeight / 2));
+
+            if (edge == "right")
+                candidateX = other.X - itemWidth;
+            else
+                candidateX = other.X + otherWidth;
+        }
+        else
+        {
+            double overlapStart = Math.Max(item.X, other.X);
+            double overlapEnd = Math.Min(item.X + itemWidth, other.X + otherWidth);
+            double overlapLength = Math.Max(0, overlapEnd - overlapStart);
+            double minWidth = Math.Min(itemWidth, otherWidth);
+            adjacencyRatio = minWidth > 0 ? overlapLength / minWidth : 0;
+            spanDistance = Math.Abs((item.X + itemWidth / 2) - (other.X + otherWidth / 2));
+
+            if (edge == "bottom")
+                candidateY = other.Y - itemHeight;
+            else
+                candidateY = other.Y + otherHeight;
+        }
+
+        // Weighted score: closer distance + more adjacency = better snap
+        double score = distance * 2.0 - adjacencyRatio * 8.0 + spanDistance * 0.5;
+
+        if (score < bestScore)
+        {
+            bestScore = score;
+            bestEdge = edge;
+            bestTargetUIId = other.UIId;
+            bestSnapX = candidateX;
+            bestSnapY = candidateY;
+
+            // Apply alignment after snap
+            ApplyAlignmentAfterSnap(item, other, edge, itemWidth, itemHeight, otherWidth, otherHeight,
+                ref bestSnapX, ref bestSnapY);
+        }
+    }
+
+    private void ApplyAlignmentAfterSnap(
+        FurniturePlannerViewModel item, FurniturePlannerViewModel other,
+        string edge, double itemWidth, double itemHeight, double otherWidth, double otherHeight,
+        ref double snapX, ref double snapY)
+    {
+        // Aligns the perpendicular axis after an edge snap
+        if (edge is "left" or "right")
+        {
+            if (Math.Abs(item.Y - other.Y) < SnapDistance)
+                snapY = other.Y;
+            else if (Math.Abs((item.Y + itemHeight) - (other.Y + otherHeight)) < SnapDistance)
+                snapY = other.Y + otherHeight - itemHeight;
+            else if (Math.Abs((item.Y + itemHeight / 2) - (other.Y + otherHeight / 2)) < SnapDistance)
+                snapY = other.Y + (otherHeight - itemHeight) / 2;
+        }
+        else
+        {
+            if (Math.Abs(item.X - other.X) < SnapDistance)
+                snapX = other.X;
+            else if (Math.Abs((item.X + itemWidth) - (other.X + otherWidth)) < SnapDistance)
+                snapX = other.X + otherWidth - itemWidth;
+            else if (Math.Abs((item.X + itemWidth / 2) - (other.X + otherWidth / 2)) < SnapDistance)
+                snapX = other.X + (otherWidth - itemWidth) / 2;
+        }
+    }
+
+    // ========== Center-Maintaining Rotation ==========
+    private async Task RotateItem(FurniturePlannerViewModel item, double degrees)
+    {
+        bool wasRotated = ((int)Math.Round(item.Rotation / 90) % 2) == 1;
+        double oldWidth = wasRotated ? item.FurnitureLength.GetValueOrDefault() : item.FurnitureWidth.GetValueOrDefault();
+        double oldHeight = wasRotated ? item.FurnitureWidth.GetValueOrDefault() : item.FurnitureLength.GetValueOrDefault();
+
+        // Calculate center before rotation
+        double centerX = item.X + oldWidth / 2;
+        double centerY = item.Y + oldHeight / 2;
+
+        // Apply rotation
+        item.Rotation = (item.Rotation + degrees) % 360;
+        if (item.Rotation < 0) item.Rotation += 360;
+
+        bool isRotated = ((int)Math.Round(item.Rotation / 90) % 2) == 1;
+        double newWidth = isRotated ? item.FurnitureLength.GetValueOrDefault() : item.FurnitureWidth.GetValueOrDefault();
+        double newHeight = isRotated ? item.FurnitureWidth.GetValueOrDefault() : item.FurnitureLength.GetValueOrDefault();
+
+        // Recalculate position from center with new dimensions
+        item.X = centerX - newWidth / 2;
+        item.Y = centerY - newHeight / 2;
+
+        EnsureWithinBounds(item);
+
+        // Collision check after rotation — revert if overlap
+        if (PreventOverlap && HasOverlap(item))
+        {
+            item.Rotation = (item.Rotation - degrees) % 360;
+            if (item.Rotation < 0) item.Rotation += 360;
+            item.X = centerX - oldWidth / 2;
+            item.Y = centerY - oldHeight / 2;
+            ToastService.Add("Cannot rotate - would overlap with another item", Severity.Warning);
+            StateHasChanged();
+            return;
+        }
+
+        await OnFurnitureModified.InvokeAsync(item);
+        StateHasChanged();
+    }
+
+    private void RotateGroupItems(FurniturePlannerViewModel pivot, double degrees)
+    {
+        if (!pivot.GroupID.HasValue) return;
+
+        var groupItems = SelectedFurniture.Where(f => f.GroupID == pivot.GroupID).ToList();
+
+        // Calculate pivot center
+        bool pivotRotated = ((int)Math.Round(pivot.Rotation / 90) % 2) == 1;
+        double pivotWidth = pivotRotated ? pivot.FurnitureLength.GetValueOrDefault() : pivot.FurnitureWidth.GetValueOrDefault();
+        double pivotHeight = pivotRotated ? pivot.FurnitureWidth.GetValueOrDefault() : pivot.FurnitureLength.GetValueOrDefault();
+        double pivotCenterX = pivot.X + pivotWidth / 2;
+        double pivotCenterY = pivot.Y + pivotHeight / 2;
+
+        double radians = degrees * Math.PI / 180.0;
+        double cosA = Math.Cos(radians);
+        double sinA = Math.Sin(radians);
+
+        // Store original positions for rollback
+        var originals = groupItems.Select(f => new { f.UIId, f.X, f.Y, f.Rotation }).ToList();
+
+        foreach (var member in groupItems)
+        {
+            bool memberRotated = ((int)Math.Round(member.Rotation / 90) % 2) == 1;
+            double memberWidth = memberRotated ? member.FurnitureLength.GetValueOrDefault() : member.FurnitureWidth.GetValueOrDefault();
+            double memberHeight = memberRotated ? member.FurnitureWidth.GetValueOrDefault() : member.FurnitureLength.GetValueOrDefault();
+
+            double memberCenterX = member.X + memberWidth / 2;
+            double memberCenterY = member.Y + memberHeight / 2;
+
+            // 2D rotation matrix around pivot center
+            double relX = memberCenterX - pivotCenterX;
+            double relY = memberCenterY - pivotCenterY;
+            double newCenterX = pivotCenterX + (relX * cosA - relY * sinA);
+            double newCenterY = pivotCenterY + (relX * sinA + relY * cosA);
+
+            // Apply individual rotation
+            member.Rotation = (member.Rotation + degrees) % 360;
+            if (member.Rotation < 0) member.Rotation += 360;
+
+            bool newMemberRotated = ((int)Math.Round(member.Rotation / 90) % 2) == 1;
+            double newMemberWidth = newMemberRotated ? member.FurnitureLength.GetValueOrDefault() : member.FurnitureWidth.GetValueOrDefault();
+            double newMemberHeight = newMemberRotated ? member.FurnitureWidth.GetValueOrDefault() : member.FurnitureLength.GetValueOrDefault();
+
+            member.X = newCenterX - newMemberWidth / 2;
+            member.Y = newCenterY - newMemberHeight / 2;
+        }
+
+        // Validate all members are within bounds and no collisions with non-group items
+        bool invalid = groupItems.Any(m =>
+        {
+            EnsureWithinBounds(m);
+            return PreventOverlap && SelectedFurniture.Any(other =>
+                other.UIId != m.UIId &&
+                (!m.GroupID.HasValue || other.GroupID != m.GroupID) &&
+                ItemsOverlap(m, other));
+        });
+
+        if (invalid)
+        {
+            foreach (var orig in originals)
+            {
+                var member = groupItems.First(f => f.UIId == orig.UIId);
+                member.X = orig.X;
+                member.Y = orig.Y;
+                member.Rotation = orig.Rotation;
+            }
+            ToastService.Add("Cannot rotate group - would cause overlap or go out of bounds", Severity.Warning);
+        }
+    }
+
+    // ========== Group System ==========
+    private void CreateOrJoinGroup(FurniturePlannerViewModel item1, FurniturePlannerViewModel item2)
+    {
+        if (item1.GroupID.HasValue && item2.GroupID.HasValue)
+        {
+            int targetGroupId = item1.GroupID.Value;
+            int sourceGroupId = item2.GroupID.Value;
+            foreach (var member in SelectedFurniture.Where(f => f.GroupID == sourceGroupId))
+            {
+                member.GroupID = targetGroupId;
+            }
+        }
+        else if (item1.GroupID.HasValue)
+        {
+            item2.GroupID = item1.GroupID;
+        }
+        else if (item2.GroupID.HasValue)
+        {
+            item1.GroupID = item2.GroupID;
+        }
+        else
+        {
+            int newGroupId = _nextGroupId++;
+            item1.GroupID = newGroupId;
+            item2.GroupID = newGroupId;
+        }
+    }
+
+    private void MoveGroupWithCSharp(FurniturePlannerViewModel primary, double newX, double newY)
+    {
+        if (!primary.GroupID.HasValue)
+        {
+            primary.X = newX;
+            primary.Y = newY;
+            EnsureWithinBounds(primary);
+            return;
+        }
+
+        double deltaX = newX - primary.InitialGroupX;
+        double deltaY = newY - primary.InitialGroupY;
+
+        var groupMembers = SelectedFurniture.Where(f => f.GroupID == primary.GroupID).ToList();
+
+        // Pre-check ALL members for bounds
+        foreach (var member in groupMembers)
+        {
+            double candidateX = member.InitialGroupX + deltaX;
+            double candidateY = member.InitialGroupY + deltaY;
+
+            bool isRotatedMember = ((int)Math.Round(member.Rotation / 90) % 2) == 1;
+            double memberWidth = isRotatedMember ? member.FurnitureLength.GetValueOrDefault() : member.FurnitureWidth.GetValueOrDefault();
+            double memberHeight = isRotatedMember ? member.FurnitureWidth.GetValueOrDefault() : member.FurnitureLength.GetValueOrDefault();
+
+            if (candidateX < 0 || candidateY < 0 ||
+                candidateX + memberWidth > FloorPlanWidth ||
+                candidateY + memberHeight > FloorPlanHeight)
+            {
+                return; // Don't apply ANY movement
+            }
+        }
+
+        // Pre-check collisions with non-group items
+        if (PreventOverlap)
+        {
+            foreach (var member in groupMembers)
+            {
+                double candidateX = member.InitialGroupX + deltaX;
+                double candidateY = member.InitialGroupY + deltaY;
+
+                if (WouldOverlap(member, candidateX, candidateY, groupMembers))
+                {
+                    return;
+                }
+            }
+        }
+
+        // All checks passed — apply ALL positions atomically
+        foreach (var member in groupMembers)
+        {
+            member.X = member.InitialGroupX + deltaX;
+            member.Y = member.InitialGroupY + deltaY;
+        }
+    }
+
+    private bool WouldOverlap(FurniturePlannerViewModel item, double candidateX, double candidateY,
+        List<FurniturePlannerViewModel> excludeGroup)
+    {
+        bool isRotatedItem = ((int)Math.Round(item.Rotation / 90) % 2) == 1;
+        double itemWidth = isRotatedItem ? item.FurnitureLength.GetValueOrDefault() : item.FurnitureWidth.GetValueOrDefault();
+        double itemHeight = isRotatedItem ? item.FurnitureWidth.GetValueOrDefault() : item.FurnitureLength.GetValueOrDefault();
+
+        foreach (var other in SelectedFurniture)
+        {
+            if (other.UIId == item.UIId) continue;
+            if (excludeGroup.Any(g => g.UIId == other.UIId)) continue;
+
+            bool isRotatedOther = ((int)Math.Round(other.Rotation / 90) % 2) == 1;
+            double otherWidth = isRotatedOther ? other.FurnitureLength.GetValueOrDefault() : other.FurnitureWidth.GetValueOrDefault();
+            double otherHeight = isRotatedOther ? other.FurnitureWidth.GetValueOrDefault() : other.FurnitureLength.GetValueOrDefault();
+
+            bool overlaps = !(candidateX + itemWidth <= other.X + CollisionTolerance ||
+                              other.X + otherWidth <= candidateX + CollisionTolerance ||
+                              candidateY + itemHeight <= other.Y + CollisionTolerance ||
+                              other.Y + otherHeight <= candidateY + CollisionTolerance);
+
+            if (overlaps) return true;
+        }
+
+        return false;
+    }
+
+    private void UngroupItem(FurniturePlannerViewModel item)
+    {
+        if (!item.GroupID.HasValue) return;
+
+        int groupId = item.GroupID.Value;
+        item.GroupID = null;
+
+        // Disband if 1 or fewer remaining
+        var remaining = SelectedFurniture.Where(f => f.GroupID == groupId).ToList();
+        if (remaining.Count <= 1)
+        {
+            foreach (var member in remaining)
+            {
+                member.GroupID = null;
+            }
+        }
+
+        ToastService.Add($"Ungrouped {item.Name}", Severity.Info);
+        StateHasChanged();
+    }
+
+    // ========== Keyboard Shortcuts ==========
+    private async Task HandleKeyDown(KeyboardEventArgs e)
     {
         if (SelectedItem == null) return;
 
         switch (e.Code)
         {
             case "KeyR":
-                RotateItem(SelectedItem, 90);
+                if (e.ShiftKey && SelectedItem.GroupID.HasValue)
+                {
+                    RotateGroupItems(SelectedItem, 90);
+                }
+                else
+                {
+                    await RotateItem(SelectedItem, 90);
+                }
                 break;
             case "Delete":
-                DeleteFurniture(SelectedItem.UIId);
+                await DeleteFurniture(SelectedItem.UIId);
+                break;
+            case "KeyG":
+                UngroupItem(SelectedItem);
                 break;
         }
     }
 
-    private async Task RotateItem(FurniturePlannerViewModel item, double degrees)
-    {
-        item.Rotation = (item.Rotation + degrees) % 360;
-        if (item.Rotation < 0) item.Rotation += 360;
-
-        EnsureWithinBounds(item);
-
-        await OnFurnitureModified.InvokeAsync(item);
-        StateHasChanged();
-    }
-
+    // ========== Duplicate / Delete / Clear ==========
     private async Task DuplicateItem(FurniturePlannerViewModel item)
     {
         try
@@ -491,7 +1051,7 @@
             int newId = SelectedFurniture.Max(f => f.UIId) + 1;
             var duplicate = item.PlannerClone();
             duplicate.UIId = newId;
-            duplicate.X = item.X + 30; // Offset the duplicate
+            duplicate.X = item.X + 30;
             duplicate.Y = item.Y + 30;
 
             SelectedFurniture.Add(duplicate);
@@ -539,6 +1099,7 @@
         }
     }
 
+    // ========== Bounds & Collision ==========
     private void EnsureWithinBounds(FurniturePlannerViewModel item)
     {
         bool isRotated = ((int)Math.Round(item.Rotation / 90) % 2) == 1;
@@ -554,12 +1115,13 @@
         if (!PreventOverlap) return false;
 
         return SelectedFurniture.Any(other =>
-            other.UIId != item.UIId && ItemsOverlap(item, other));
+            other.UIId != item.UIId &&
+            !(item.GroupID.HasValue && item.GroupID == other.GroupID) &&
+            ItemsOverlap(item, other));
     }
 
     private bool ItemsOverlap(FurniturePlannerViewModel item1, FurniturePlannerViewModel item2)
     {
-        // Calculate actual dimensions based on rotation
         bool isRotated1 = ((int)Math.Round(item1.Rotation / 90) % 2) == 1;
         bool isRotated2 = ((int)Math.Round(item2.Rotation / 90) % 2) == 1;
 
@@ -569,10 +1131,9 @@
         double width2 = isRotated2 ? item2.FurnitureLength.GetValueOrDefault() : item2.FurnitureWidth.GetValueOrDefault();
         double height2 = isRotated2 ? item2.FurnitureWidth.GetValueOrDefault() : item2.FurnitureLength.GetValueOrDefault();
 
-        // Check for rectangle overlap
-        return !(item1.X + width1 <= item2.X ||
-                 item2.X + width2 <= item1.X ||
-                 item1.Y + height1 <= item2.Y ||
-                 item2.Y + height2 <= item1.Y);
+        return !(item1.X + width1 <= item2.X + CollisionTolerance ||
+                 item2.X + width2 <= item1.X + CollisionTolerance ||
+                 item1.Y + height1 <= item2.Y + CollisionTolerance ||
+                 item2.Y + height2 <= item1.Y + CollisionTolerance);
     }
 }
