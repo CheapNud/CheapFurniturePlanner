@@ -433,10 +433,10 @@
     {
         if (_isDragging && SelectedItem != null)
         {
-            var bounds = await JS.InvokeAsync<dynamic>("getBoundingClientRect", _floorPlanElement);
+            var bounds = await JS.InvokeAsync<DOMRect>("getBoundingClientRect", _floorPlanElement);
 
-            SelectedItem.X = e.ClientX - bounds.left;
-            SelectedItem.Y = e.ClientY - bounds.top;
+            SelectedItem.X = e.ClientX - bounds.Left;
+            SelectedItem.Y = e.ClientY - bounds.Top;
 
             StateHasChanged();
         }
