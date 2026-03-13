@@ -53,13 +53,6 @@
          class="room-plan @(_isDragging ? "dragging" : "")"
          style="width:@(FloorPlanWidth)px;height:@(FloorPlanHeight)px;"
          @ref="_floorPlanElement"
-         @onmousemove="OnMouseMove"
-         @onmousemove:preventDefault="_isDragging"
-         @onmouseup="OnMouseUp"
-         @onmouseleave="OnMouseLeave"
-         @ontouchmove="OnTouchMove"
-         @ontouchmove:preventDefault="_isDragging"
-         @ontouchend="OnTouchEnd"
          @onkeydown="HandleKeyDown"
          tabindex="0">
 
@@ -117,6 +110,7 @@
             classstring.Append($" rotation-{item.Rotation}");
 
             <MudPaper @key="item.UIId"
+                      id="@($"fi-{item.UIId}")"
                       Class="@classstring.ToString()"
                       Elevation="@(item.GroupID != null ? 3 : 1)"
                       style="@styling.ToString()"
@@ -294,6 +288,8 @@
     </DialogActions>
 </MudDialog>
 
+@implements IAsyncDisposable
+
 @code {
     [Parameter] public RoomPlanViewModel RoomPlan { get; set; } = new();
     [Parameter] public List<FurniturePlannerViewModel> SelectedFurniture { get; set; } = new();
@@ -318,18 +314,21 @@
     // State management
     private FurniturePlannerViewModel? SelectedItem { get; set; }
     private bool _isDragging;
+    private bool _jsHandlingDrag; // Suppresses Blazor re-renders during JS drag
     private double _dragStartX;
     private double _dragStartY;
     private ElementReference _floorPlanElement;
 
-    // Cached bounds — fetched ONCE at drag start, reused during move (no JS per frame)
+    // Cached bounds — fetched ONCE, reused across drags
     private DOMRect? _cachedBounds;
+
+    // JS interop
+    private DotNetObjectReference<FurniturePlannerContainer>? _dotNetRef;
 
     // Group tracking
     private int _nextGroupId = 1;
 
     // Touch state
-    private bool _isTouchDragging;
     private CancellationTokenSource? _touchDelayCts;
 
     // Dialog state
@@ -340,6 +339,9 @@
         _selectedType.HasValue
             ? AvailableFurniture.Where(f => f.Type == _selectedType.Value && f.IsActive)
             : AvailableFurniture.Where(f => f.IsActive);
+
+    // Suppress Blazor re-renders while JS is handling drag
+    protected override bool ShouldRender() => !_jsHandlingDrag;
 
     protected override void OnParametersSet()
     {
@@ -354,6 +356,35 @@
             .DefaultIfEmpty(0)
             .Max();
         _nextGroupId = maxGroupId + 1;
+
+        // Invalidate cached bounds when room dimensions change
+        _cachedBounds = null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+        }
+
+        if (_cachedBounds == null)
+        {
+            _cachedBounds = await JS.InvokeAsync<DOMRect>("getBoundingClientRect", _floorPlanElement);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("furnitureDrag.stop");
+        }
+        catch
+        {
+            // Component may be disposed after circuit is gone
+        }
+        _dotNetRef?.Dispose();
     }
 
     // ========== Furniture Icon Helper ==========
@@ -432,17 +463,14 @@
         item.IsSelected = true;
     }
 
-    // ========== Offset-Based Dragging ==========
+    // ========== Client-Side Drag (JS handles mousemove, single SignalR call on drop) ==========
     private async Task StartDragging(FurniturePlannerViewModel item, MouseEventArgs mouseArgs)
     {
-        if (_isDragging) return;
+        if (_isDragging || _cachedBounds == null || _dotNetRef == null) return;
 
         SelectItem(item);
 
-        // Cache bounds ONCE at drag start — no JS interop during move
-        _cachedBounds = await JS.InvokeAsync<DOMRect>("getBoundingClientRect", _floorPlanElement);
-
-        // Calculate offset in pure C#: where the mouse grabbed relative to item origin
+        // Calculate offset: where the mouse grabbed relative to item origin
         item.OffsetX = (mouseArgs.ClientX - _cachedBounds.Left) - item.X;
         item.OffsetY = (mouseArgs.ClientY - _cachedBounds.Top) - item.Y;
 
@@ -451,68 +479,84 @@
         _dragStartX = item.X;
         _dragStartY = item.Y;
 
-        // Store initial positions for all group members (for delta-based group movement)
+        // Calculate display dimensions for the primary item
+        bool isRotated = ((int)Math.Round(item.Rotation / 90) % 2) == 1;
+        double primaryWidth = isRotated ? item.FurnitureLength.GetValueOrDefault() : item.FurnitureWidth.GetValueOrDefault();
+        double primaryHeight = isRotated ? item.FurnitureWidth.GetValueOrDefault() : item.FurnitureLength.GetValueOrDefault();
+
+        // Build group member info for JS
+        object[]? groupMembers = null;
         if (item.GroupID.HasValue)
         {
-            foreach (var groupMember in SelectedFurniture.Where(f => f.GroupID == item.GroupID))
+            var members = SelectedFurniture.Where(f => f.GroupID == item.GroupID && f.UIId != item.UIId).ToList();
+            groupMembers = members.Select(m =>
             {
-                groupMember.InitialGroupX = groupMember.X;
-                groupMember.InitialGroupY = groupMember.Y;
-            }
+                m.InitialGroupX = m.X;
+                m.InitialGroupY = m.Y;
+                bool mRotated = ((int)Math.Round(m.Rotation / 90) % 2) == 1;
+                return (object)new
+                {
+                    id = $"fi-{m.UIId}",
+                    initialX = m.X,
+                    initialY = m.Y,
+                    width = mRotated ? m.FurnitureLength.GetValueOrDefault() : m.FurnitureWidth.GetValueOrDefault(),
+                    height = mRotated ? m.FurnitureWidth.GetValueOrDefault() : m.FurnitureLength.GetValueOrDefault()
+                };
+            }).ToArray();
+            item.InitialGroupX = item.X;
+            item.InitialGroupY = item.Y;
         }
+
+        // Blazor renders here (adds "dragging" class) before the await
+        // Then JS takes over — zero SignalR during drag
+        _jsHandlingDrag = true;
+        await JS.InvokeVoidAsync("furnitureDrag.start", _dotNetRef, new
+        {
+            primaryId = $"fi-{item.UIId}",
+            offsetX = item.OffsetX,
+            offsetY = item.OffsetY,
+            boundsLeft = _cachedBounds.Left,
+            boundsTop = _cachedBounds.Top,
+            floorWidth = FloorPlanWidth,
+            floorHeight = FloorPlanHeight,
+            primaryWidth,
+            primaryHeight,
+            initialX = item.X,
+            initialY = item.Y,
+            groupMembers = groupMembers ?? Array.Empty<object>()
+        });
     }
 
-    private void OnMouseMove(MouseEventArgs e)
+    [JSInvokable]
+    public void OnClientDragEnd(double finalX, double finalY)
     {
-        // SYNCHRONOUS — no async, no JS interop. Uses cached bounds from drag start.
-        if (!_isDragging || SelectedItem == null || _cachedBounds == null) return;
+        _jsHandlingDrag = false;
 
-        double newX = e.ClientX - _cachedBounds.Left - SelectedItem.OffsetX;
-        double newY = e.ClientY - _cachedBounds.Top - SelectedItem.OffsetY;
-
-        if (SelectedItem.GroupID.HasValue)
-        {
-            MoveGroupWithCSharp(SelectedItem, newX, newY);
-        }
-        else
-        {
-            SelectedItem.X = newX;
-            SelectedItem.Y = newY;
-            EnsureWithinBounds(SelectedItem);
-        }
-
-        // Live snap feedback during drag
-        if (EnableSnapping)
-        {
-            ApplySnapping(SelectedItem);
-        }
-
-        StateHasChanged();
-    }
-
-    private void OnMouseUp()
-    {
-        EndDragging();
-    }
-
-    private void OnMouseLeave()
-    {
-        // End drag when cursor leaves the container — prevents "stuck drag"
-        if (_isDragging)
-        {
-            EndDragging();
-        }
-    }
-
-    private void EndDragging()
-    {
         if (!_isDragging || SelectedItem == null) return;
 
         _isDragging = false;
-        _isTouchDragging = false;
         SelectedItem.IsDragging = false;
 
-        // Final snap
+        // Apply final position from JS
+        if (SelectedItem.GroupID.HasValue)
+        {
+            double deltaX = finalX - SelectedItem.InitialGroupX;
+            double deltaY = finalY - SelectedItem.InitialGroupY;
+
+            // Apply delta to all group members
+            foreach (var member in SelectedFurniture.Where(f => f.GroupID == SelectedItem.GroupID))
+            {
+                member.X = member.InitialGroupX + deltaX;
+                member.Y = member.InitialGroupY + deltaY;
+            }
+        }
+        else
+        {
+            SelectedItem.X = finalX;
+            SelectedItem.Y = finalY;
+        }
+
+        // Snap on drop
         if (EnableSnapping)
         {
             ApplySnapping(SelectedItem);
@@ -521,10 +565,9 @@
         // Check boundaries
         EnsureWithinBounds(SelectedItem);
 
-        // Check for overlaps
+        // Overlap check — revert if needed
         if (PreventOverlap && HasOverlap(SelectedItem))
         {
-            // Revert to original position
             if (SelectedItem.GroupID.HasValue)
             {
                 foreach (var groupMember in SelectedFurniture.Where(f => f.GroupID == SelectedItem.GroupID))
@@ -542,27 +585,23 @@
         }
 
         // Clear snap state
-        foreach (var item in SelectedFurniture)
+        foreach (var furnitureItem in SelectedFurniture)
         {
-            item.SnapEdge = null;
-            item.SnapTargetUIId = null;
+            furnitureItem.SnapEdge = null;
+            furnitureItem.SnapTargetUIId = null;
         }
 
-        _cachedBounds = null;
         StateHasChanged();
     }
 
     // ========== Touch Support ==========
     private async Task OnTouchStart(FurniturePlannerViewModel item, TouchEventArgs touchArgs)
     {
-        if (_isDragging || touchArgs.Touches.Length == 0) return;
+        if (_isDragging || _cachedBounds == null || _dotNetRef == null || touchArgs.Touches.Length == 0) return;
 
         var firstTouch = touchArgs.Touches[0];
 
         SelectItem(item);
-
-        // Cache bounds at touch start
-        _cachedBounds = await JS.InvokeAsync<DOMRect>("getBoundingClientRect", _floorPlanElement);
 
         // 150ms delay before initiating drag (prevents accidental drags on touch)
         _touchDelayCts?.Cancel();
@@ -572,68 +611,66 @@
         try
         {
             await Task.Delay(150, token);
-
             if (token.IsCancellationRequested) return;
 
-            // Calculate offset in pure C#
+            // Calculate offset
             item.OffsetX = (firstTouch.ClientX - _cachedBounds.Left) - item.X;
             item.OffsetY = (firstTouch.ClientY - _cachedBounds.Top) - item.Y;
 
             _isDragging = true;
-            _isTouchDragging = true;
             item.IsDragging = true;
             _dragStartX = item.X;
             _dragStartY = item.Y;
 
-            // Store initial positions for group members
+            bool isRotated = ((int)Math.Round(item.Rotation / 90) % 2) == 1;
+            double primaryWidth = isRotated ? item.FurnitureLength.GetValueOrDefault() : item.FurnitureWidth.GetValueOrDefault();
+            double primaryHeight = isRotated ? item.FurnitureWidth.GetValueOrDefault() : item.FurnitureLength.GetValueOrDefault();
+
+            object[]? groupMembers = null;
             if (item.GroupID.HasValue)
             {
-                foreach (var groupMember in SelectedFurniture.Where(f => f.GroupID == item.GroupID))
+                var members = SelectedFurniture.Where(f => f.GroupID == item.GroupID && f.UIId != item.UIId).ToList();
+                groupMembers = members.Select(m =>
                 {
-                    groupMember.InitialGroupX = groupMember.X;
-                    groupMember.InitialGroupY = groupMember.Y;
-                }
+                    m.InitialGroupX = m.X;
+                    m.InitialGroupY = m.Y;
+                    bool mRotated = ((int)Math.Round(m.Rotation / 90) % 2) == 1;
+                    return (object)new
+                    {
+                        id = $"fi-{m.UIId}",
+                        initialX = m.X,
+                        initialY = m.Y,
+                        width = mRotated ? m.FurnitureLength.GetValueOrDefault() : m.FurnitureWidth.GetValueOrDefault(),
+                        height = mRotated ? m.FurnitureWidth.GetValueOrDefault() : m.FurnitureLength.GetValueOrDefault()
+                    };
+                }).ToArray();
+                item.InitialGroupX = item.X;
+                item.InitialGroupY = item.Y;
             }
 
+            _jsHandlingDrag = true;
             StateHasChanged();
+
+            await JS.InvokeVoidAsync("furnitureDrag.start", _dotNetRef, new
+            {
+                primaryId = $"fi-{item.UIId}",
+                offsetX = item.OffsetX,
+                offsetY = item.OffsetY,
+                boundsLeft = _cachedBounds.Left,
+                boundsTop = _cachedBounds.Top,
+                floorWidth = FloorPlanWidth,
+                floorHeight = FloorPlanHeight,
+                primaryWidth,
+                primaryHeight,
+                initialX = item.X,
+                initialY = item.Y,
+                groupMembers = groupMembers ?? Array.Empty<object>()
+            });
         }
         catch (TaskCanceledException)
         {
             // Touch ended before delay — not a drag
         }
-    }
-
-    private void OnTouchMove(TouchEventArgs e)
-    {
-        if (!_isDragging || SelectedItem == null || _cachedBounds == null || e.Touches.Length == 0) return;
-
-        var firstTouch = e.Touches[0];
-        double newX = firstTouch.ClientX - _cachedBounds.Left - SelectedItem.OffsetX;
-        double newY = firstTouch.ClientY - _cachedBounds.Top - SelectedItem.OffsetY;
-
-        if (SelectedItem.GroupID.HasValue)
-        {
-            MoveGroupWithCSharp(SelectedItem, newX, newY);
-        }
-        else
-        {
-            SelectedItem.X = newX;
-            SelectedItem.Y = newY;
-            EnsureWithinBounds(SelectedItem);
-        }
-
-        if (EnableSnapping)
-        {
-            ApplySnapping(SelectedItem);
-        }
-
-        StateHasChanged();
-    }
-
-    private void OnTouchEnd()
-    {
-        _touchDelayCts?.Cancel();
-        EndDragging();
     }
 
     // ========== Edge-Based Snapping ==========

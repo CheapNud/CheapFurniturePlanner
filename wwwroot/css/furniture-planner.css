@@ -82,6 +82,7 @@
         transform: scale(1.02);
         z-index: 6 !important;
         opacity: 0.9;
+        transition: none;
     }
 
     .furniture-item.snapped {

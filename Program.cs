@@ -23,6 +23,8 @@ class Program
         var builder = new CheapAvaloniaBlazor.Hosting.HostBuilder()
             .WithTitle("Cheap Furniture Planner")
             .WithDiagnostics()
+            .EnableDevTools()
+            .EnableContextMenu()
             .WithSize(1200, 800)
             .UseContentRoot(Directory.GetCurrentDirectory())
             .AddMudBlazor();
