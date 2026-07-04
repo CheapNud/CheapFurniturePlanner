@@ -14,7 +14,14 @@ public static class PricingEngine
             return new PricingResult { Errors = resolveErrors };
         }
 
-        var rounding = request.Context.Market.Rounding;
+        // The snapshot is authoritative for market parameters: ResolveStage has already confirmed
+        // the context market's code exists in the snapshot, so re-resolve the market from there and
+        // price with that instance instead. Context.Market is treated as a request (which market to
+        // use), not as the source of truth for its rates/rounding/markup.
+        var market = request.Snapshot.Markets.Single(m => m.Code == request.Context.Market.Code);
+        var context = request.Context with { Market = market };
+
+        var rounding = market.Rounding;
         List<PricingError> costErrors = [];
         List<(ResolvedElement Resolved, List<BreakdownLine> Lines)> costed = [];
 
@@ -30,12 +37,12 @@ public static class PricingEngine
             return new PricingResult { Errors = costErrors };
         }
 
-        var elements = costed.Select(c => FinalizeStages.Run(c.Resolved, c.Lines, request.Context)).ToList();
+        var elements = costed.Select(c => FinalizeStages.Run(c.Resolved, c.Lines, context)).ToList();
 
         var breakdown = new PriceBreakdown(
             request.Snapshot.Version,
             request.Snapshot.ContentHash,
-            request.Context.Market.Code,
+            market.Code,
             elements,
             elements.Sum(e => e.ElementTotal));
 

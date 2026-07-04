@@ -29,7 +29,7 @@ public class RoundingPolicyTests
     }
 
     [Fact]
-    public void LineStageePolicy_RoundsLinesToTwoDecimals()
+    public void LineStagePolicy_RoundsLinesToTwoDecimals()
     {
         // Arrange
         var policy = new RoundingPolicy(

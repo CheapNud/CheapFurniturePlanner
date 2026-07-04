@@ -18,7 +18,19 @@ public class CostStagesTests
         new(elementCode, 1, choices ?? new Dictionary<string, string>(), null);
 
     private static ResolvedElement CreateResolved(Element element, ElementSelection selection, IReadOnlyList<BomLine> lines, PriceGroup? priceGroup = null) =>
-        new(element, selection, "VARIANT", priceGroup ?? new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m }, lines);
+        new(element, selection, "VARIANT", priceGroup ?? new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m },
+            lines.Select(line => new EffectiveLine(SectionKindFor(line), line)).ToList());
+
+    private static BomSectionKind SectionKindFor(BomLine line) => line switch
+    {
+        FrameBomLine => BomSectionKind.Frame,
+        FoamBomLine => BomSectionKind.Foam,
+        CottonBomLine => BomSectionKind.Cotton,
+        CutSortBomLine => BomSectionKind.CutSort,
+        MiscBomLine => BomSectionKind.Misc,
+        LaborBomLine => BomSectionKind.Labor,
+        _ => throw new ArgumentOutOfRangeException(nameof(line))
+    };
 
     [Fact]
     public void Run_FrameLine_ComputesPriceFixedSurchargeAndSprayLines()
@@ -61,6 +73,52 @@ public class CostStagesTests
         Assert.Null(spray.SourceLineKey);
         Assert.Equal("pc", spray.Unit);
         Assert.Equal(12.50m, spray.LineTotal);
+    }
+
+    [Fact]
+    public void Run_FixedSurchargeAppliesToSectionMatchingFoamLine_EmitsSurchargeForFoamLine()
+    {
+        // Arrange: a FixedSurcharge scoped to Foam must attach to a Foam BOM line, not just Frame.
+        var element = CreateElement();
+        var lines = new List<BomLine> { new FoamBomLine { LineKey = "FM1", FoamCode = "FOAM1", Quantity = 2m } };
+        var resolved = CreateResolved(element, CreateSelection(), lines);
+        var snapshot = new CatalogueSnapshot
+        {
+            Version = "1",
+            Materials = [new Material("FOAM1", "Foam Std", 8.00m, "pc")],
+            FixedSurcharges = [new FixedSurcharge("Foam handling", BomSectionKind.Foam, 3.00m)]
+        };
+
+        // Act
+        var (result, errors) = CostStages.Run(resolved, snapshot, Rounding);
+
+        // Assert
+        Assert.Empty(errors);
+        Assert.Equal(2, result.Count);
+        var surcharge = Assert.Single(result, l => l.Category == "surcharge");
+        Assert.Equal(BreakdownStage.Materials, surcharge.Stage);
+        Assert.Equal(3.00m, surcharge.LineTotal);
+    }
+
+    [Fact]
+    public void Run_FoamLineErrors_DoesNotEmitFixedSurchargeForThatLine()
+    {
+        // Arrange: a surcharge scoped to Foam must not be emitted when the Foam line itself failed to resolve.
+        var element = CreateElement();
+        var lines = new List<BomLine> { new FoamBomLine { LineKey = "FM1", FoamCode = "MISSING" } };
+        var resolved = CreateResolved(element, CreateSelection(), lines);
+        var snapshot = new CatalogueSnapshot
+        {
+            Version = "1",
+            FixedSurcharges = [new FixedSurcharge("Foam handling", BomSectionKind.Foam, 3.00m)]
+        };
+
+        // Act
+        var (result, errors) = CostStages.Run(resolved, snapshot, Rounding);
+
+        // Assert
+        Assert.Single(errors);
+        Assert.Empty(result);
     }
 
     [Fact]

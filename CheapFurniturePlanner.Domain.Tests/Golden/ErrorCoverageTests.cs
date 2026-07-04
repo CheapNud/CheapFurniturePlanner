@@ -4,10 +4,8 @@ using Xunit;
 
 namespace CheapFurniturePlanner.Domain.Tests.Golden;
 
-// Provokes every PricingErrorKind at least once against the Fjord fixture (11 via the running
-// engine; MissingBomSection has no engine code path today - see the dedicated fact below), plus
-// the Task 9 review follow-up: a 2-element document where one element errors and one is valid
-// still yields an errors-only result with a null Breakdown.
+// Covers every PricingErrorKind against the demo catalogue, plus a 2-element document where one
+// element errors and one is valid still yields an errors-only result with a null Breakdown.
 public class ErrorCoverageTests
 {
     private static readonly Dictionary<string, string> BaselineChoices = new()
@@ -161,6 +159,18 @@ public class ErrorCoverageTests
                 return (snapshot, request);
             }),
         ];
+
+        yield return
+        [
+            PricingErrorKind.MissingBomSection,
+            (Func<(CatalogueSnapshot Snapshot, PricingRequest Request)>)(() =>
+            {
+                var snapshot = LoadMutatedSnapshot(s => s.Models.Single(m => m.Code == "FJORD").Elements.Single(e => e.Code == "FJ2").Bom.Sections.Clear());
+                var selection = new ElementSelection("FJ2", 1, new Dictionary<string, string>(BaselineChoices), "AQUA-BLUE");
+                var request = new PricingRequest(snapshot, new ProductConfiguration("FJORD", [selection]), new PricingContext(snapshot.Markets.Single(m => m.Code == "EUW")));
+                return (snapshot, request);
+            }),
+        ];
     }
 
     [Theory]
@@ -177,21 +187,6 @@ public class ErrorCoverageTests
         Assert.False(result.IsSuccess);
         Assert.Null(result.Breakdown);
         Assert.Contains(result.Errors, e => e.Kind == expectedKind);
-    }
-
-    // MissingBomSection is declared on PricingErrorKind but the current engine (ResolveStage /
-    // CostStages / FinalizeStages) has no code path that raises it - it is reserved for a future
-    // BOM-section-presence validation rule that doesn't exist yet. Documented in the Task 10
-    // report as a gap rather than silently faked through a manufactured engine scenario.
-    [Fact]
-    public void PricingError_MissingBomSectionKind_IsConstructibleAndCarriesSubject()
-    {
-        // Arrange & Act
-        var error = new PricingError(PricingErrorKind.MissingBomSection, "FJ2:Frame");
-
-        // Assert
-        Assert.Equal(PricingErrorKind.MissingBomSection, error.Kind);
-        Assert.Equal("FJ2:Frame", error.Subject);
     }
 
     [Fact]

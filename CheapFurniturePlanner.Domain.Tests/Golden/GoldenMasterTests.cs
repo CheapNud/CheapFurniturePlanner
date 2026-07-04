@@ -6,8 +6,8 @@ using Xunit;
 namespace CheapFurniturePlanner.Domain.Tests.Golden;
 
 // Byte-exact comparisons of PricingEngine output against hand-verified expected JSON for every
-// named scenario in golden-cases.json. See .superpowers/sdd/task-10-report.md for the hand
-// computations that back these fixtures.
+// named scenario in golden-cases.json. Expected JSON files are hand-computed from the fixture's
+// rates and the engine's documented stage rules.
 public class GoldenMasterTests
 {
     public static IEnumerable<object[]> Cases() => GoldenCaseLoader.LoadCases().Select(c => new object[] { c.Name });

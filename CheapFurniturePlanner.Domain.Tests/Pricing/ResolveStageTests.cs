@@ -86,11 +86,11 @@ public class ResolveStageTests
         Assert.Equal("SEAT-COLOR:RED", resolvedElement.VariantCodeValue);
         Assert.Equal("PG1", resolvedElement.ResolvedPriceGroup.Code);
         Assert.Equal(2, resolvedElement.EffectiveLines.Count);
-        var replacedFoam = Assert.IsType<FoamBomLine>(resolvedElement.EffectiveLines.Single(l => l.LineKey == "F1"));
+        var replacedFoam = Assert.IsType<FoamBomLine>(resolvedElement.EffectiveLines.Single(l => l.Line.LineKey == "F1").Line);
         Assert.Equal("FOAM-RED-SPECIAL", replacedFoam.FoamCode);
         Assert.Equal(2m, replacedFoam.Quantity);
-        Assert.Contains(resolvedElement.EffectiveLines, l => l.LineKey == "M1");
-        Assert.DoesNotContain(resolvedElement.EffectiveLines, l => l.LineKey == "F2");
+        Assert.Contains(resolvedElement.EffectiveLines, l => l.Line.LineKey == "M1");
+        Assert.DoesNotContain(resolvedElement.EffectiveLines, l => l.Line.LineKey == "F2");
     }
 
     [Fact]
@@ -101,7 +101,8 @@ public class ResolveStageTests
         {
             Code = "TABLE",
             Name = "Table",
-            Options = []
+            Options = [],
+            Bom = new BomDocument { Sections = [new BomSection { Kind = BomSectionKind.Misc, Lines = [new MiscBomLine { LineKey = "M1", MaterialCode = "GLUE" }] }] }
         };
         var model = new FurnitureModel { Code = "SOFA", Name = "Sofa", Elements = [element] };
         var snapshot = new CatalogueSnapshot { Version = "1", Models = [model], Markets = [CreateMarket()] };
@@ -294,7 +295,8 @@ public class ResolveStageTests
                     FabricGroupCodes = ["GRP1"],
                     VisibilityRules = [new VisibilityRule("SIZE", "LARGE", "FABRIC")]
                 }
-            ]
+            ],
+            Bom = new BomDocument { Sections = [new BomSection { Kind = BomSectionKind.Misc, Lines = [new MiscBomLine { LineKey = "M1", MaterialCode = "GLUE" }] }] }
         };
         var model = new FurnitureModel { Code = "SOFA", Name = "Sofa", Elements = [element] };
         var snapshot = new CatalogueSnapshot

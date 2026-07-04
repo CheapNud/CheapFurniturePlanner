@@ -2,6 +2,8 @@ using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Masters;
 using CheapFurniturePlanner.Domain.Pricing;
+using CheapFurniturePlanner.Domain.Serialization;
+using CheapFurniturePlanner.Domain.Tests.Fixtures;
 using Xunit;
 
 namespace CheapFurniturePlanner.Domain.Tests.Pricing;
@@ -153,6 +155,31 @@ public class PricingEngineTests
         Assert.Equal(88.57m, element.StageSubtotals["UnitPrice"]);
         Assert.Equal(88.57m, element.ElementTotal);
         Assert.Equal(88.57m, result.Breakdown.DocumentTotal);
+    }
+
+    [Fact]
+    public void Calculate_TamperedContextMarketRates_PricesWithSnapshotAuthoritativeMarketInstead()
+    {
+        // Arrange: the snapshot is authoritative for market parameters once ResolveStage has
+        // validated the context market's code - a caller-supplied Market with the right Code but
+        // tampered rates must not leak into pricing.
+        var snapshot = DemoWorld.Load();
+        var selection = new ElementSelection("FJ2", 1, new Dictionary<string, string> { ["DEPTH"] = "STD", ["MECH"] = "NONE", ["STITCH"] = "PLAIN" }, "AQUA-BLUE");
+        var configuration = new ProductConfiguration("FJORD", [selection]);
+        var untamperedMarket = snapshot.Markets.Single(m => m.Code == "EUW");
+        var tamperedMarket = untamperedMarket with { FixedCostPercent = 99m };
+
+        var untamperedRequest = new PricingRequest(snapshot, configuration, new PricingContext(untamperedMarket));
+        var tamperedRequest = new PricingRequest(snapshot, configuration, new PricingContext(tamperedMarket));
+
+        // Act
+        var untamperedResult = PricingEngine.Calculate(untamperedRequest);
+        var tamperedResult = PricingEngine.Calculate(tamperedRequest);
+
+        // Assert
+        Assert.True(untamperedResult.IsSuccess);
+        Assert.True(tamperedResult.IsSuccess);
+        Assert.Equal(CanonicalJson.Serialize(untamperedResult.Breakdown), CanonicalJson.Serialize(tamperedResult.Breakdown));
     }
 
     [Fact]

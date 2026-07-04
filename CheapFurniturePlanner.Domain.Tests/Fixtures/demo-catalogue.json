@@ -44,7 +44,7 @@
               "OptionDefinitionCode": "HEAD",
               "Required": true,
               "DisplayIndex": 2,
-              "AffectsBom": false,
+              "AffectsBom": true,
               "VisibilityRules": [
                 { "TriggerOptionDefinitionCode": "MECH", "TriggerChoiceCode": "REC", "RevealedOptionDefinitionCode": "HEAD" }
               ],
@@ -165,7 +165,7 @@
               "OptionDefinitionCode": "HEAD",
               "Required": true,
               "DisplayIndex": 2,
-              "AffectsBom": false,
+              "AffectsBom": true,
               "VisibilityRules": [
                 { "TriggerOptionDefinitionCode": "MECH", "TriggerChoiceCode": "REC", "RevealedOptionDefinitionCode": "HEAD" }
               ],
@@ -282,7 +282,7 @@
               "OptionDefinitionCode": "HEAD",
               "Required": true,
               "DisplayIndex": 2,
-              "AffectsBom": false,
+              "AffectsBom": true,
               "VisibilityRules": [
                 { "TriggerOptionDefinitionCode": "MECH", "TriggerChoiceCode": "REC", "RevealedOptionDefinitionCode": "HEAD" }
               ],

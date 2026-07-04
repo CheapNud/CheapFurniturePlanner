@@ -50,6 +50,13 @@ internal static class ResolveStage
                 continue;
             }
 
+            // Rule 7: an element with no BOM sections at all has nothing to cost.
+            if (element.Bom.Sections.Count == 0)
+            {
+                errors.Add(new PricingError(PricingErrorKind.MissingBomSection, element.Code));
+                continue;
+            }
+
             var effectiveLines = BuildEffectiveLines(element, selection);
             var variantCode = VariantCode.From(element, selection);
             resolved.Add(new ResolvedElement(element, selection, variantCode, priceGroup, effectiveLines));
@@ -129,12 +136,12 @@ internal static class ResolveStage
         return priceGroup;
     }
 
-    // Rule 5: condition-filtered BOM lines with substitution rules applied.
-    private static IReadOnlyList<BomLine> BuildEffectiveLines(Element element, ElementSelection selection)
+    // Rule 5: condition-filtered BOM lines (each paired with its section kind) with substitution rules applied.
+    private static IReadOnlyList<EffectiveLine> BuildEffectiveLines(Element element, ElementSelection selection)
     {
         var lines = element.Bom.Sections
-            .SelectMany(section => section.Lines)
-            .Where(line => line.Condition is null || line.Condition.IsSatisfiedBy(selection.ChoiceSelections))
+            .SelectMany(section => section.Lines.Select(line => new EffectiveLine(section.Kind, line)))
+            .Where(effective => effective.Line.Condition is null || effective.Line.Condition.IsSatisfiedBy(selection.ChoiceSelections))
             .ToList();
 
         foreach (var rule in element.Substitutions)
@@ -146,13 +153,13 @@ internal static class ResolveStage
 
             for (var i = 0; i < lines.Count; i++)
             {
-                lines[i] = lines[i] switch
+                lines[i] = lines[i].Line switch
                 {
                     FoamBomLine foam when foam.FoamCode == rule.ReplaceMaterialCode =>
-                        foam with { FoamCode = rule.WithMaterialCode, Quantity = rule.QuantityOverride ?? foam.Quantity },
+                        lines[i] with { Line = foam with { FoamCode = rule.WithMaterialCode, Quantity = rule.QuantityOverride ?? foam.Quantity } },
                     MiscBomLine misc when misc.MaterialCode == rule.ReplaceMaterialCode =>
-                        misc with { MaterialCode = rule.WithMaterialCode, Quantity = rule.QuantityOverride ?? misc.Quantity },
-                    var unchanged => unchanged
+                        lines[i] with { Line = misc with { MaterialCode = rule.WithMaterialCode, Quantity = rule.QuantityOverride ?? misc.Quantity } },
+                    _ => lines[i]
                 };
             }
         }
