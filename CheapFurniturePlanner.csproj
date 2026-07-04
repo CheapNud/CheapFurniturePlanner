@@ -9,8 +9,6 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <UserSecretsId>cheap-furniture-planner-desktop</UserSecretsId>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
 
     <!-- Package Information -->
     <AssemblyTitle>Cheap Furniture Planner</AssemblyTitle>
@@ -56,6 +54,13 @@
   <ItemGroup>
     <Folder Include="Properties\" />
     <Folder Include="Assets\Images\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
+    <Content Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
+    <None Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
+    <EmbeddedResource Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
   </ItemGroup>
 
 </Project>
