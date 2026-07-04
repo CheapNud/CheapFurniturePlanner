@@ -27,8 +27,13 @@ public class CatalogueSnapshot
     {
         var savedContentHash = ContentHash;
         ContentHash = "";
-        var hex = CanonicalJson.Sha256Hex(this);
-        ContentHash = savedContentHash;
-        return hex;
+        try
+        {
+            return CanonicalJson.Sha256Hex(this);
+        }
+        finally
+        {
+            ContentHash = savedContentHash;
+        }
     }
 }
