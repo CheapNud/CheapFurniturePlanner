@@ -17,12 +17,10 @@
                        Edge="Edge.Start" 
                        OnClick="@ToggleDrawer" />
         
-        <MudImage Src="images/logo.png" 
-                 Alt="Cheap Furniture Planner" 
-                 Height="32" 
-                 Class="mr-3"
-                 Style="cursor: pointer;"
-                 @onclick="@(() => Navigation.NavigateTo("/"))" />
+        <MudIconButton Icon="@Icons.Material.Filled.Weekend"
+                       Color="Color.Inherit"
+                       Class="mr-3"
+                       OnClick="@(() => Navigation.NavigateTo("/"))" />
         
         <MudText Typo="Typo.h6">Cheap Furniture Planner</MudText>
         

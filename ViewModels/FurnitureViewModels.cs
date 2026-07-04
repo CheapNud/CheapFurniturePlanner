@@ -125,6 +125,27 @@ public class FurniturePlannerViewModel
     [JsonIgnore]
     public bool IsDragging { get; set; }
 
+    // Drag offset so item doesn't jump to cursor
+    [JsonIgnore]
+    public double OffsetX { get; set; }
+
+    [JsonIgnore]
+    public double OffsetY { get; set; }
+
+    // Position when group drag starts (for delta calculation)
+    [JsonIgnore]
+    public double InitialGroupX { get; set; }
+
+    [JsonIgnore]
+    public double InitialGroupY { get; set; }
+
+    // Current snap state for visual feedback
+    [JsonIgnore]
+    public string? SnapEdge { get; set; }
+
+    [JsonIgnore]
+    public int? SnapTargetUIId { get; set; }
+
     /// <summary>
     /// Creates a clone of this furniture item for adding to the planner
     /// </summary>

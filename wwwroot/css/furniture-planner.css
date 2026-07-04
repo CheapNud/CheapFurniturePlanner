@@ -82,6 +82,27 @@
         transform: scale(1.02);
         z-index: 6 !important;
         opacity: 0.9;
+        transition: none;
+    }
+
+    .furniture-item.snapped {
+        box-shadow: 0 0 8px rgba(76, 175, 80, 0.7), 0 0 2px rgba(76, 175, 80, 1.0);
+        border-color: #4CAF50;
+    }
+
+    .furniture-item.group-dragging {
+        opacity: 0.85;
+        z-index: 6 !important;
+    }
+
+/* Drag-active state on the room plan container */
+.room-plan.dragging {
+    touch-action: none;
+    user-select: none;
+}
+
+    .room-plan.dragging .furniture-item {
+        transition: none;
     }
 
 /* Furniture content */

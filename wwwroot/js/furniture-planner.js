@@ -225,6 +225,218 @@ window.dragHelper = {
     }
 };
 
+// Client-side drag handler — bypasses SignalR during drag for smooth 60fps movement
+window.furnitureDrag = {
+    _dotNetRef: null,
+    _state: null,
+    _boundMouseMove: null,
+    _boundMouseUp: null,
+    _boundTouchMove: null,
+    _boundTouchEnd: null,
+
+    start: function (dotNetRef, config) {
+        // config: { primaryId, offsetX, offsetY, boundsLeft, boundsTop,
+        //           floorWidth, floorHeight, primaryWidth, primaryHeight,
+        //           initialX, initialY, groupMembers: [{id, initialX, initialY, width, height}] }
+        this._dotNetRef = dotNetRef;
+        this._state = config;
+        this._rafId = null;
+        this._pendingX = 0;
+        this._pendingY = 0;
+        // Track accumulated delta for transform-based movement
+        this._deltaX = 0;
+        this._deltaY = 0;
+
+        // Compute delta clamp limits for group bounds
+        if (config.groupMembers && config.groupMembers.length > 0) {
+            var minX = config.initialX, minY = config.initialY;
+            var maxR = config.initialX + config.primaryWidth;
+            var maxB = config.initialY + config.primaryHeight;
+            for (var i = 0; i < config.groupMembers.length; i++) {
+                var m = config.groupMembers[i];
+                minX = Math.min(minX, m.initialX);
+                minY = Math.min(minY, m.initialY);
+                maxR = Math.max(maxR, m.initialX + m.width);
+                maxB = Math.max(maxB, m.initialY + m.height);
+            }
+            this._state.minDeltaX = -minX;
+            this._state.minDeltaY = -minY;
+            this._state.maxDeltaX = config.floorWidth - maxR;
+            this._state.maxDeltaY = config.floorHeight - maxB;
+        }
+
+        // Kill CSS transition and promote to compositor layer BEFORE any transforms
+        // This must happen in JS (not via Blazor CSS class) to avoid the race condition
+        // where JS applies transforms before Blazor's render batch adds the .dragging class
+        var primaryEl = document.getElementById(config.primaryId);
+        if (primaryEl) {
+            primaryEl.style.transition = 'none';
+            primaryEl.style.willChange = 'transform';
+        }
+        if (config.groupMembers) {
+            for (var i = 0; i < config.groupMembers.length; i++) {
+                var gel = document.getElementById(config.groupMembers[i].id);
+                if (gel) {
+                    gel.style.transition = 'none';
+                    gel.style.willChange = 'transform';
+                }
+            }
+        }
+
+        this._boundMouseMove = this._onMouseMove.bind(this);
+        this._boundMouseUp = this._onMouseUp.bind(this);
+        this._boundTouchMove = this._onTouchMove.bind(this);
+        this._boundTouchEnd = this._onTouchEnd.bind(this);
+
+        document.addEventListener('mousemove', this._boundMouseMove);
+        document.addEventListener('mouseup', this._boundMouseUp);
+        document.addEventListener('touchmove', this._boundTouchMove, { passive: false });
+        document.addEventListener('touchend', this._boundTouchEnd);
+    },
+
+    _applyPosition: function () {
+        this._rafId = null;
+        var s = this._state;
+        if (!s) return;
+
+        var newX = this._pendingX - s.boundsLeft - s.offsetX;
+        var newY = this._pendingY - s.boundsTop - s.offsetY;
+
+        if (s.groupMembers && s.groupMembers.length > 0) {
+            // Group drag: clamp delta to keep all members in bounds
+            var deltaX = newX - s.initialX;
+            var deltaY = newY - s.initialY;
+            deltaX = Math.max(s.minDeltaX, Math.min(deltaX, s.maxDeltaX));
+            deltaY = Math.max(s.minDeltaY, Math.min(deltaY, s.maxDeltaY));
+
+            // Use transform instead of left/top — GPU composited, no layout reflow
+            var el = document.getElementById(s.primaryId);
+            if (el) el.style.transform = 'translate(' + deltaX + 'px,' + deltaY + 'px)';
+
+            for (var i = 0; i < s.groupMembers.length; i++) {
+                var m = s.groupMembers[i];
+                var gel = document.getElementById(m.id);
+                if (gel) gel.style.transform = 'translate(' + deltaX + 'px,' + deltaY + 'px)';
+            }
+
+            this._deltaX = deltaX;
+            this._deltaY = deltaY;
+        } else {
+            // Solo drag: clamp to bounds
+            newX = Math.max(0, Math.min(newX, s.floorWidth - s.primaryWidth));
+            newY = Math.max(0, Math.min(newY, s.floorHeight - s.primaryHeight));
+
+            var deltaX = newX - s.initialX;
+            var deltaY = newY - s.initialY;
+
+            var el = document.getElementById(s.primaryId);
+            if (el) el.style.transform = 'translate(' + deltaX + 'px,' + deltaY + 'px)';
+
+            this._deltaX = deltaX;
+            this._deltaY = deltaY;
+        }
+    },
+
+    _scheduleUpdate: function (clientX, clientY) {
+        this._pendingX = clientX;
+        this._pendingY = clientY;
+        // Batch to next animation frame — one paint per vsync, always latest position
+        if (!this._rafId) {
+            this._rafId = requestAnimationFrame(this._applyPosition.bind(this));
+        }
+    },
+
+    _onMouseMove: function (e) {
+        this._scheduleUpdate(e.clientX, e.clientY);
+    },
+
+    _onTouchMove: function (e) {
+        if (e.touches.length > 0) {
+            e.preventDefault();
+            this._scheduleUpdate(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    },
+
+    _endDrag: function () {
+        var s = this._state;
+        if (!s) return;
+
+        // Cancel pending rAF
+        if (this._rafId) {
+            cancelAnimationFrame(this._rafId);
+            this._rafId = null;
+        }
+
+        document.removeEventListener('mousemove', this._boundMouseMove);
+        document.removeEventListener('mouseup', this._boundMouseUp);
+        document.removeEventListener('touchmove', this._boundTouchMove);
+        document.removeEventListener('touchend', this._boundTouchEnd);
+
+        // Compute final position from initial + accumulated delta
+        var finalX = s.initialX + this._deltaX;
+        var finalY = s.initialY + this._deltaY;
+
+        // Clear inline overrides — Blazor re-render sets final left/top
+        var el = document.getElementById(s.primaryId);
+        if (el) {
+            el.style.transform = '';
+            el.style.willChange = '';
+            el.style.transition = '';
+        }
+        if (s.groupMembers) {
+            for (var i = 0; i < s.groupMembers.length; i++) {
+                var gel = document.getElementById(s.groupMembers[i].id);
+                if (gel) {
+                    gel.style.transform = '';
+                    gel.style.willChange = '';
+                    gel.style.transition = '';
+                }
+            }
+        }
+
+        this._state = null;
+
+        // Single SignalR call back to C# with final position
+        if (this._dotNetRef) {
+            this._dotNetRef.invokeMethodAsync('OnClientDragEnd', finalX, finalY);
+        }
+    },
+
+    _onMouseUp: function (e) {
+        this._endDrag();
+    },
+
+    _onTouchEnd: function (e) {
+        this._endDrag();
+    },
+
+    stop: function () {
+        if (this._rafId) {
+            cancelAnimationFrame(this._rafId);
+            this._rafId = null;
+        }
+        if (this._boundMouseMove) {
+            document.removeEventListener('mousemove', this._boundMouseMove);
+            document.removeEventListener('mouseup', this._boundMouseUp);
+            document.removeEventListener('touchmove', this._boundTouchMove);
+            document.removeEventListener('touchend', this._boundTouchEnd);
+        }
+        // Clear inline overrides on any active elements
+        if (this._state) {
+            var el = document.getElementById(this._state.primaryId);
+            if (el) { el.style.transform = ''; el.style.willChange = ''; el.style.transition = ''; }
+            if (this._state.groupMembers) {
+                for (var i = 0; i < this._state.groupMembers.length; i++) {
+                    var gel = document.getElementById(this._state.groupMembers[i].id);
+                    if (gel) { gel.style.transform = ''; gel.style.willChange = ''; gel.style.transition = ''; }
+                }
+            }
+        }
+        this._state = null;
+        this._dotNetRef = null;
+    }
+};
+
 // Keyboard shortcuts for planner
 window.setupKeyboardShortcuts = () => {
     document.addEventListener('keydown', (event) => {
