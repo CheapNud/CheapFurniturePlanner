@@ -7,16 +7,12 @@ namespace CheapFurniturePlanner.Domain.Pricing.Engine;
 
 internal static class ResolveStage
 {
-    // Sentinel price group for elements without a FabricOption: they have no material rate to resolve,
-    // but ResolvedElement always carries a PriceGroup, so a neutral zero-rate placeholder is used instead.
-    private static readonly PriceGroup NoFabricSentinel = new() { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
-
     // returns errors OR resolved elements; applies: model/element lookup, required+visibility validation,
     // fabric colour -> group -> price group (kind from selected material option context), BOM condition filter, substitution rules.
     internal static (List<ResolvedElement> Resolved, List<PricingError> Errors) Run(PricingRequest request)
     {
-        var errors = new List<PricingError>();
-        var resolved = new List<ResolvedElement>();
+        List<PricingError> errors = [];
+        List<ResolvedElement> resolved = [];
 
         // Rule 6: market must exist in the snapshot.
         var marketCode = request.Context.Market.Code;
@@ -43,7 +39,7 @@ internal static class ResolveStage
                 continue;
             }
 
-            var elementErrors = new List<PricingError>();
+            List<PricingError> elementErrors = [];
 
             ValidateOptions(element, selection, elementErrors);
             var priceGroup = ResolveFabricPriceGroup(request.Snapshot, element, selection, elementErrors);
@@ -87,7 +83,7 @@ internal static class ResolveStage
 
             if (!IsVisible(choiceOption, selection.ChoiceSelections))
             {
-                errors.Add(new PricingError(PricingErrorKind.SelectionViolatesVisibility, $"{element.Code}:{defCode}"));
+                errors.Add(new PricingError(PricingErrorKind.SelectionViolatesVisibility, $"{element.Code}:{defCode}={choiceCode}"));
             }
         }
     }
@@ -100,15 +96,17 @@ internal static class ResolveStage
     private static PriceGroup ResolveFabricPriceGroup(CatalogueSnapshot snapshot, Element element, ElementSelection selection, List<PricingError> errors)
     {
         var fabricOption = element.Options.OfType<FabricOption>().FirstOrDefault();
-        if (fabricOption is null)
+        if (fabricOption is null || !IsVisible(fabricOption, selection.ChoiceSelections))
         {
-            return NoFabricSentinel;
+            // Sentinel price group for elements without an active FabricOption: they have no material rate to
+            // resolve, but ResolvedElement always carries a PriceGroup, so a neutral zero-rate placeholder is used instead.
+            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
         }
 
         if (selection.FabricColorCode is null)
         {
             errors.Add(new PricingError(PricingErrorKind.IncompleteConfiguration, $"{element.Code}:{fabricOption.OptionDefinitionCode}"));
-            return NoFabricSentinel;
+            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
         }
 
         var group = fabricOption.FabricGroupCodes
@@ -118,14 +116,14 @@ internal static class ResolveStage
         if (group is null)
         {
             errors.Add(new PricingError(PricingErrorKind.UnknownFabricColor, $"{element.Code}:{selection.FabricColorCode}"));
-            return NoFabricSentinel;
+            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
         }
 
         var priceGroup = snapshot.PriceGroups.FirstOrDefault(pg => pg.Code == group.PriceGroupCode);
         if (priceGroup is null)
         {
             errors.Add(new PricingError(PricingErrorKind.NoPriceGroupForMaterialKind, $"{element.Code}:{group.PriceGroupCode}"));
-            return NoFabricSentinel;
+            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
         }
 
         return priceGroup;

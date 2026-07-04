@@ -242,7 +242,7 @@ public class ResolveStageTests
         Assert.Empty(resolved);
         var error = Assert.Single(errors);
         Assert.Equal(PricingErrorKind.SelectionViolatesVisibility, error.Kind);
-        Assert.Equal("SEAT:COLOR", error.Subject);
+        Assert.Equal("SEAT:COLOR=RED", error.Subject);
     }
 
     [Fact]
@@ -276,6 +276,47 @@ public class ResolveStageTests
         var error = Assert.Single(errors);
         Assert.Equal(PricingErrorKind.IncompleteConfiguration, error.Kind);
         Assert.Equal("SEAT:FABRIC", error.Subject);
+    }
+
+    [Fact]
+    public void Run_NonVisibleFabricOptionWithoutFabricColor_ResolvesWithSentinelPriceGroup()
+    {
+        // Arrange
+        var element = new Element
+        {
+            Code = "SEAT",
+            Name = "Seat",
+            Options =
+            [
+                new FabricOption
+                {
+                    OptionDefinitionCode = "FABRIC",
+                    FabricGroupCodes = ["GRP1"],
+                    VisibilityRules = [new VisibilityRule("SIZE", "LARGE", "FABRIC")]
+                }
+            ]
+        };
+        var model = new FurnitureModel { Code = "SOFA", Name = "Sofa", Elements = [element] };
+        var snapshot = new CatalogueSnapshot
+        {
+            Version = "1",
+            Models = [model],
+            FabricGroups = [new FabricGroup { Code = "GRP1", PriceGroupCode = "PG1", Colors = [new FabricColor { Code = "CRIMSON", Name = "Crimson" }] }],
+            PriceGroups = [new PriceGroup { Code = "PG1", Kind = MaterialKind.Fabric, RatePerMeter = 10m }],
+            Markets = [CreateMarket()]
+        };
+        var selection = new ElementSelection("SEAT", 1, new Dictionary<string, string>(), null);
+        var configuration = new ProductConfiguration("SOFA", [selection]);
+        var request = new PricingRequest(snapshot, configuration, new PricingContext(CreateMarket()));
+
+        // Act
+        var (resolved, errors) = ResolveStage.Run(request);
+
+        // Assert
+        Assert.Empty(errors);
+        var resolvedElement = Assert.Single(resolved);
+        Assert.Equal("", resolvedElement.ResolvedPriceGroup.Code);
+        Assert.Equal(0m, resolvedElement.ResolvedPriceGroup.RatePerMeter);
     }
 
     [Fact]
