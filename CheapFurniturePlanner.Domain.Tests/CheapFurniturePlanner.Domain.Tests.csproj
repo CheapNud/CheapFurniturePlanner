@@ -18,4 +18,10 @@
     <ProjectReference Include="..\CheapFurniturePlanner.Domain\CheapFurniturePlanner.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Fixtures\demo-catalogue.json" />
+    <EmbeddedResource Include="Golden\golden-cases.json" />
+    <EmbeddedResource Include="Golden\expected\*.json" />
+  </ItemGroup>
+
 </Project>
