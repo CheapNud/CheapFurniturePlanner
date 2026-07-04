@@ -1,3 +1,4 @@
+using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Options;
 
 namespace CheapFurniturePlanner.Domain.Catalog;
@@ -10,4 +11,6 @@ public class Element : TradeItem
     public double Height { get; set; }
     public int TransportUnits { get; set; }
     public List<ProductOption> Options { get; set; } = [];
+    public BomDocument Bom { get; set; } = new();
+    public List<SubstitutionRule> Substitutions { get; set; } = [];
 }
