@@ -1,0 +1,153 @@
+@page "/about"
+
+<PageTitle>About - Cheap Furniture Planner</PageTitle>
+
+<!-- Header -->
+<MudContainer MaxWidth="MaxWidth.Large">
+    <MudText Typo="Typo.h3" Class="mb-6 text-center">
+        About
+    </MudText>
+
+    <!-- About Section -->
+    <MudPaper Elevation="2" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h4" Class="mb-4">
+            <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-2" />
+            About Cheap Furniture Planner
+        </MudText>
+
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.body1">
+                        Cheap Furniture Planner is a free, open-source room planning application built with
+                        modern web technologies. It's designed to help you visualize and plan your room
+                        layouts with ease and precision.
+                    </MudText>
+
+                    <MudText Typo="Typo.h6">Built With:</MudText>
+                    <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                        <MudChip T=bool Color="Color.Primary">Blazor Server</MudChip>
+                        <MudChip T=bool Color="Color.Secondary">ASP.NET Core</MudChip>
+                        <MudChip T=bool Color="Color.Tertiary">MudBlazor</MudChip>
+                        <MudChip T=bool Color="Color.Success">SQLite</MudChip>
+                        <MudChip T=bool Color="Color.Info">Entity Framework</MudChip>
+                        <MudChip T=bool Color="Color.Warning">Avalonia</MudChip>
+                    </MudStack>
+
+                    <MudText Typo="Typo.h6">Features:</MudText>
+                    <MudList T=string Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Cross-platform desktop application
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Drag-and-drop furniture planning
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Comprehensive furniture catalog
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Export and sharing capabilities
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Responsive design for all devices
+                        </MudListItem>
+                    </MudList>
+                </MudStack>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudCard Elevation="1" Class="pa-4">
+                    <MudCardContent>
+                        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Code" Size="Size.Large" Color="Color.Primary" />
+                            <MudText Typo="Typo.h6" Align="Align.Center">Open Source</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">
+                                This application is open source and available for contributions.
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined"
+                                      Color="Color.Primary"
+                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                      Href="https://github.com/CheapNud/CheapFurniturePlanner"
+                                      Target="_blank">
+                                View on GitHub
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Contact & Support -->
+    <MudPaper Elevation="2" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h4" Class="mb-4">
+            <MudIcon Icon="@Icons.Material.Filled.Support" Class="mr-2" />
+            Support & Contact
+        </MudText>
+
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="1" Class="pa-4 text-center h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.BugReport" Size="Size.Large" Color="Color.Error" />
+                            <MudText Typo="Typo.h6">Report a Bug</MudText>
+                            <MudText Typo="Typo.body2">
+                                Found an issue? Let us know!
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined"
+                                      Color="Color.Error"
+                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                      Href="https://github.com/CheapNud/CheapFurniturePlanner/issues"
+                                      Target="_blank">
+                                Report Issue
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="1" Class="pa-4 text-center h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Large" Color="Color.Info" />
+                            <MudText Typo="Typo.h6">Feature Request</MudText>
+                            <MudText Typo="Typo.body2">
+                                Have an idea for improvement?
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined"
+                                      Color="Color.Info"
+                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                      Href="https://github.com/CheapNud/CheapFurniturePlanner/discussions"
+                                      Target="_blank">
+                                Suggest Feature
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="1" Class="pa-4 text-center h-100">
+                    <MudCardContent>
+                        <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.Favorite" Size="Size.Large" Color="Color.Success" />
+                            <MudText Typo="Typo.h6">Contribute</MudText>
+                            <MudText Typo="Typo.body2">
+                                Help improve the application!
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined"
+                                      Color="Color.Success"
+                                      StartIcon="@Icons.Material.Filled.OpenInNew"
+                                      Href="https://github.com/CheapNud/CheapFurniturePlanner"
+                                      Target="_blank">
+                                Contribute
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudContainer>
