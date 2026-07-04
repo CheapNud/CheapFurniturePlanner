@@ -384,6 +384,8 @@
         {
             // Component may be disposed after circuit is gone
         }
+        _touchDelayCts?.Cancel();
+        _touchDelayCts?.Dispose();
         _dotNetRef?.Dispose();
     }
 
@@ -466,9 +468,12 @@
     // ========== Client-Side Drag (JS handles mousemove, single SignalR call on drop) ==========
     private async Task StartDragging(FurniturePlannerViewModel item, MouseEventArgs mouseArgs)
     {
-        if (_isDragging || _cachedBounds == null || _dotNetRef == null) return;
+        if (_isDragging || _dotNetRef == null) return;
 
         SelectItem(item);
+
+        // Re-fetch bounds at drag start — a cached rect goes stale after window resize/scroll
+        _cachedBounds = await JS.InvokeAsync<DOMRect>("getBoundingClientRect", _floorPlanElement);
 
         // Calculate offset: where the mouse grabbed relative to item origin
         item.OffsetX = (mouseArgs.ClientX - _cachedBounds.Left) - item.X;
@@ -597,7 +602,7 @@
     // ========== Touch Support ==========
     private async Task OnTouchStart(FurniturePlannerViewModel item, TouchEventArgs touchArgs)
     {
-        if (_isDragging || _cachedBounds == null || _dotNetRef == null || touchArgs.Touches.Length == 0) return;
+        if (_isDragging || _dotNetRef == null || touchArgs.Touches.Length == 0) return;
 
         var firstTouch = touchArgs.Touches[0];
 
@@ -605,6 +610,7 @@
 
         // 150ms delay before initiating drag (prevents accidental drags on touch)
         _touchDelayCts?.Cancel();
+        _touchDelayCts?.Dispose();
         _touchDelayCts = new CancellationTokenSource();
         var token = _touchDelayCts.Token;
 
@@ -612,6 +618,9 @@
         {
             await Task.Delay(150, token);
             if (token.IsCancellationRequested) return;
+
+            // Re-fetch bounds at drag start — a cached rect goes stale after window resize/scroll
+            _cachedBounds = await JS.InvokeAsync<DOMRect>("getBoundingClientRect", _floorPlanElement);
 
             // Calculate offset
             item.OffsetX = (firstTouch.ClientX - _cachedBounds.Left) - item.X;
