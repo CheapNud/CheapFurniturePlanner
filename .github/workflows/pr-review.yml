@@ -120,16 +120,21 @@ jobs:
 
         **Stats**: +${ADDITIONS} / -${DELETIONS} lines across ${CHANGED_FILES} files
 
-        **Diff**:
-        \`\`\`diff
-        $(cat pr-diff.txt)
-        \`\`\`"
+        **Diff**:"
+
+        # Assemble the full prompt in a file — large diffs exceed the argv size limit
+        {
+          echo "$PROMPT"
+          echo '```diff'
+          cat pr-diff.txt
+          echo '```'
+        } > prompt.txt
 
         # Create JSON payload using jq to properly escape everything
         jq -n \
           --arg model "${{ env.CLAUDE_MODEL }}" \
           --argjson max_tokens ${{ env.MAX_TOKENS }} \
-          --arg prompt "$PROMPT" \
+          --rawfile prompt prompt.txt \
           '{
             model: $model,
             max_tokens: $max_tokens,
@@ -142,7 +147,7 @@ jobs:
           }' > review-request.json
 
         # Call Claude API with timeout
-        if ! RESPONSE=$(curl -s --max-time 60 https://api.anthropic.com/v1/messages \
+        if ! RESPONSE=$(curl -s --max-time 300 https://api.anthropic.com/v1/messages \
           -H "x-api-key: $ANTHROPIC_API_KEY" \
           -H "anthropic-version: 2023-06-01" \
           -H "content-type: application/json" \
