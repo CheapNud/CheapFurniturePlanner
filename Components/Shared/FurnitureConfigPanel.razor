@@ -4,11 +4,13 @@
 @using CheapFurniturePlanner.Domain.Fabrics
 @using CheapFurniturePlanner.Domain.Options
 @using CheapFurniturePlanner.Domain.Pricing
+@using CheapFurniturePlanner.Domain.Production
 @using CheapFurniturePlanner.Services
 @using CheapFurniturePlanner.ViewModels
 
 @inject ICatalogueSource CatalogueSource
 @inject PricingService PricingService
+@inject ProductionIdentityService ProductionIdentityService
 
 @if (Placement is null)
 {
@@ -29,6 +31,13 @@ else
                         <MudText Typo="Typo.caption" Color="Color.Secondary">@_variantCode</MudText>
                     }
                 </MudStack>
+                @if (_identity is not null)
+                {
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="production-code-row">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@_identity.EffectiveCode</MudText>
+                        <MudChip T="bool" Size="Size.Small" Color="@StatusColor(_identity.Status)">@StatusLabel(_identity.Status)</MudChip>
+                    </MudStack>
+                }
             </MudStack>
 
             @if (_errors.Count > 0)
@@ -104,6 +113,7 @@ else
     private decimal? _unitPrice;
     private string? _variantCode;
     private List<PricingError> _errors = [];
+    private ProductionIdentity? _identity;
 
     // Perf guard: the panel sits next to the drag-sensitive canvas, which re-renders the whole
     // page frequently (e.g. auto-save ticks, unrelated selection churn). Track the placement
@@ -125,6 +135,7 @@ else
             _unitPrice = null;
             _variantCode = null;
             _errors = [];
+            _identity = null;
             return;
         }
 
@@ -227,6 +238,10 @@ else
             Placement.CachedUnitPrice = null;
             Placement.CachedVariantCode = null;
         }
+
+        // Read-only display; production identity is independent of whether pricing itself succeeded
+        // (e.g. a stale fabric color still resolves an element/model and thus a variant code).
+        _identity = await ProductionIdentityService.ResolveForPlacementAsync(Placement);
     }
 
     /// <summary>
@@ -241,6 +256,20 @@ else
         await Reprice();
         await OnConfigured.InvokeAsync();
     }
+
+    private static Color StatusColor(ProductionCodeStatus status) => status switch
+    {
+        ProductionCodeStatus.Provisional => Color.Warning,
+        ProductionCodeStatus.Released => Color.Success,
+        _ => Color.Default
+    };
+
+    private static string StatusLabel(ProductionCodeStatus status) => status switch
+    {
+        ProductionCodeStatus.Provisional => "provisional (R&D)",
+        ProductionCodeStatus.Released => "released",
+        _ => "composed"
+    };
 
     private static string DescribeError(PricingError error) => error.Kind switch
     {
