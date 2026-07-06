@@ -1,0 +1,182 @@
+using CheapFurniturePlanner.Catalogue;
+using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Fabrics;
+using CheapFurniturePlanner.Domain.Options;
+using CheapFurniturePlanner.Domain.Pricing;
+using CheapFurniturePlanner.Domain.Serialization;
+using CheapFurniturePlanner.Models;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Xunit;
+
+namespace CheapFurniturePlanner.Tests.Catalogue;
+
+public class CataloguePublishServiceTests
+{
+    private static (IDbContextFactory<FurniturePlannerContext> Factory, SqliteConnection Connection) NewFactory()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(connection).Options;
+        using (var migrateContext = new FurniturePlannerContext(options))
+        {
+            migrateContext.Database.Migrate();
+        }
+        return (new TestDbContextFactory(options), connection);
+    }
+
+    [Fact]
+    public async Task PublishAsync_ValidSnapshot_WritesRowFlipsCurrentAndReturnsNextVersion()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            using (var seedContext = factory.CreateDbContext())
+            {
+                seedContext.PublishedCatalogues.Add(new PublishedCatalogue
+                {
+                    Version = "3",
+                    ContentHash = "irrelevant-hash",
+                    BundleJson = CanonicalJson.Serialize(new CatalogueSnapshot { Version = "3" }),
+                    IsCurrent = true,
+                });
+                seedContext.SaveChanges();
+            }
+
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                PriceGroups = [new PriceGroup { Code = "PGA", RatePerMeter = 21.50m }],
+                FabricGroups = [new FabricGroup { Code = "AQUA", PriceGroupCode = "PGA" }],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.True(result.Success);
+            Assert.Empty(result.Errors);
+            Assert.Equal("4", result.Version);
+            Assert.True(source.Invalidated);
+
+            using var verifyContext = factory.CreateDbContext();
+            var rows = verifyContext.PublishedCatalogues.OrderBy(c => c.Version).ToList();
+            Assert.Equal(2, rows.Count);
+            Assert.False(rows.Single(r => r.Version == "3").IsCurrent);
+            var newRow = rows.Single(r => r.Version == "4");
+            Assert.True(newRow.IsCurrent);
+            Assert.NotEmpty(newRow.ContentHash);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_DanglingPriceGroupReference_FailsAndWritesNoRow()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                FabricGroups = [new FabricGroup { Code = "AQUA", PriceGroupCode = "MISSING" }],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains("MISSING"));
+            Assert.Null(result.Version);
+            Assert.False(source.Invalidated);
+
+            using var verifyContext = factory.CreateDbContext();
+            Assert.Empty(verifyContext.PublishedCatalogues);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_ReservedMaterialOptionCode_FailsValidation()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Options = [new ChoiceOption { OptionDefinitionCode = VariantCode.MaterialDefCode }],
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains(VariantCode.MaterialDefCode));
+            Assert.Null(result.Version);
+
+            using var verifyContext = factory.CreateDbContext();
+            Assert.Empty(verifyContext.PublishedCatalogues);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_EmbeddedFjordSeed_PublishesSuccessfully()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+
+            var asm = typeof(CataloguePublishService).Assembly;
+            using var stream = asm.GetManifestResourceStream("CheapFurniturePlanner.Seed.demo-catalogue.json");
+            Assert.NotNull(stream);
+            using var reader = new StreamReader(stream!);
+            var json = reader.ReadToEnd();
+            var snapshot = CanonicalJson.Deserialize<CatalogueSnapshot>(json);
+            Assert.NotNull(snapshot);
+
+            var result = await service.PublishAsync(snapshot!);
+
+            Assert.True(result.Success);
+            Assert.Empty(result.Errors);
+            Assert.Equal("1", result.Version);
+
+            using var verifyContext = factory.CreateDbContext();
+            var row = Assert.Single(verifyContext.PublishedCatalogues);
+            Assert.True(row.IsCurrent);
+        }
+    }
+
+    private sealed class FakeCatalogueSource : ICatalogueSource
+    {
+        public bool Invalidated { get; private set; }
+        public Task<CatalogueSnapshot> GetCurrentAsync() => throw new NotSupportedException();
+        public void Invalidate() => Invalidated = true;
+    }
+
+    private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new(options);
+
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+}

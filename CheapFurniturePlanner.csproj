@@ -46,6 +46,7 @@
   <ItemGroup>
     <!-- Embedded resources -->
     <EmbeddedResource Include="Resources\**\*" />
+    <EmbeddedResource Include="Seed\demo-catalogue.json" />
 
     <!-- Static web assets -->
     <AvaloniaResource Include="Assets\**" />

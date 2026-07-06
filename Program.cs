@@ -2,6 +2,8 @@
 using CheapAvaloniaBlazor.Extensions;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Pricing;
+using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Mappings;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Repositories;
@@ -35,13 +37,33 @@ class Program
 
         builder.Services.AddDbContextFactory<FurniturePlannerContext>(options => options.UseSqlite(connectionString));
 
-        // Apply EF migrations at startup (replaces the orphaned EnsureCreated maintenance service).
+        // Apply EF migrations at startup (replaces the orphaned EnsureCreated maintenance service),
+        // then seed the Fjord demo catalogue on first run. Both live in this single ConfigureServices
+        // callback because CheapAvaloniaBlazor's HostBuilder keeps only the last registered callback,
+        // so a second builder.ConfigureServices(...) call would silently replace the migration step.
         builder.ConfigureServices(serviceProvider =>
         {
             using var scope = serviceProvider.CreateScope();
             var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>();
             using var migrateContext = factory.CreateDbContext();
             migrateContext.Database.Migrate();
+
+            if (!migrateContext.PublishedCatalogues.Any(c => c.IsCurrent))
+            {
+                var asm = typeof(Program).Assembly;
+                using var stream = asm.GetManifestResourceStream("CheapFurniturePlanner.Seed.demo-catalogue.json")
+                    ?? throw new InvalidOperationException("Embedded Fjord seed catalogue resource not found.");
+                using var reader = new StreamReader(stream);
+                var json = reader.ReadToEnd();
+                var snapshot = CanonicalJson.Deserialize<CatalogueSnapshot>(json)
+                    ?? throw new InvalidOperationException("Failed to deserialize the embedded Fjord seed catalogue.");
+                var publishService = scope.ServiceProvider.GetRequiredService<CataloguePublishService>();
+                var result = publishService.PublishAsync(snapshot).GetAwaiter().GetResult();
+                if (!result.Success)
+                {
+                    throw new InvalidOperationException("Seed catalogue failed validation: " + string.Join("; ", result.Errors));
+                }
+            }
         });
 
         // Configure Mapster
@@ -52,6 +74,7 @@ class Program
 
         // Add furniture planner services
         builder.Services.AddSingleton<ICatalogueSource, DbCatalogueSource>();
+        builder.Services.AddScoped<CataloguePublishService>();
         builder.Services.AddScoped<FurniturePlannerRepository>();
         builder.Services.AddScoped<FurnitureCatalogService>();
         builder.Services.AddScoped<RoomPlanService>();

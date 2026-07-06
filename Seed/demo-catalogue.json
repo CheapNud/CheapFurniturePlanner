@@ -1,0 +1,465 @@
+{
+  "Version": "fjord-1.0.0",
+  "ContentHash": "",
+  "Models": [
+    {
+      "Code": "FJORD",
+      "Name": "Fjord",
+      "CollectionCode": "SCANDI",
+      "Elements": [
+        {
+          "Code": "FJ2",
+          "Name": "Fjord 2-Seat",
+          "Width": 180.0,
+          "Depth": 95.0,
+          "Height": 80.0,
+          "TransportUnits": 2,
+          "Options": [
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "DEPTH",
+              "Required": true,
+              "DisplayIndex": 0,
+              "AffectsBom": true,
+              "VisibilityRules": [],
+              "Values": [
+                { "OptionChoiceCode": "STD", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "DEEP", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "MECH",
+              "Required": true,
+              "DisplayIndex": 1,
+              "AffectsBom": true,
+              "VisibilityRules": [],
+              "Values": [
+                { "OptionChoiceCode": "NONE", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "REC", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "HEAD",
+              "Required": true,
+              "DisplayIndex": 2,
+              "AffectsBom": true,
+              "VisibilityRules": [
+                { "TriggerOptionDefinitionCode": "MECH", "TriggerChoiceCode": "REC", "RevealedOptionDefinitionCode": "HEAD" }
+              ],
+              "Values": [
+                { "OptionChoiceCode": "HS1", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "HS2", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "STITCH",
+              "Required": true,
+              "DisplayIndex": 3,
+              "AffectsBom": false,
+              "VisibilityRules": [],
+              "Values": [
+                { "OptionChoiceCode": "PLAIN", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "CONTRAST", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "fabric",
+              "OptionDefinitionCode": "FABRIC",
+              "Required": true,
+              "DisplayIndex": 4,
+              "IsPriceDetermining": true,
+              "VisibilityRules": [],
+              "FabricGroupCodes": [ "AQUA", "TERRA", "HIDE" ]
+            }
+          ],
+          "Bom": {
+            "Sections": [
+              {
+                "Kind": "Frame",
+                "Lines": [
+                  { "$type": "frame", "LineKey": "FR-FJ2", "FrameBodyCode": "FBX", "Colored": true, "Quantity": 1 }
+                ]
+              },
+              {
+                "Kind": "Foam",
+                "Lines": [
+                  { "$type": "foam", "LineKey": "FM-BASE-FJ2", "FoamCode": "FM-STD", "Quantity": 2 },
+                  {
+                    "$type": "foam", "LineKey": "FM-DEEP-FJ2", "FoamCode": "FM-DEEP-PAD", "Quantity": 1,
+                    "Condition": { "RequiredSelections": [ { "OptionDefinitionCode": "DEPTH", "ChoiceCode": "DEEP" } ] }
+                  }
+                ]
+              },
+              {
+                "Kind": "Cotton",
+                "Lines": [
+                  { "$type": "cotton", "LineKey": "CT-FJ2", "CottonQualityCode": "COT-STD", "Measurement": 3.0, "CutUnits": 1, "UnitConversionFactor": 1 }
+                ]
+              },
+              {
+                "Kind": "CutSort",
+                "Lines": [
+                  { "$type": "cutsort", "LineKey": "FB-FJ2", "Metrage": 4.0, "CutUnits": 1, "SecondaryGroupMetrages": {} }
+                ]
+              },
+              {
+                "Kind": "Misc",
+                "Lines": [
+                  { "$type": "misc", "LineKey": "MI-FJ2", "MaterialCode": "GLUE", "Quantity": 4, "UnitConversionFactor": 2 },
+                  {
+                    "$type": "misc", "LineKey": "MI-ROUND-FJ2", "MaterialCode": "RESIN", "Quantity": 1, "UnitConversionFactor": 3,
+                    "Condition": { "RequiredSelections": [ { "OptionDefinitionCode": "HEAD", "ChoiceCode": "HS2" } ] }
+                  }
+                ]
+              },
+              {
+                "Kind": "Labor",
+                "Lines": [
+                  { "$type": "labor", "LineKey": "LB-CUT-FJ2", "OperationCode": "OP-CUT", "Units": 6 },
+                  { "$type": "labor", "LineKey": "LB-SEW-FJ2", "OperationCode": "OP-SEW", "Units": 4 }
+                ]
+              }
+            ]
+          },
+          "Substitutions": [
+            { "When": { "RequiredSelections": [ { "OptionDefinitionCode": "MECH", "ChoiceCode": "REC" } ] }, "ReplaceMaterialCode": "FM-STD", "WithMaterialCode": "FM-FIRM", "QuantityOverride": null }
+          ]
+        },
+        {
+          "Code": "FJ3",
+          "Name": "Fjord 3-Seat",
+          "Width": 220.0,
+          "Depth": 95.0,
+          "Height": 80.0,
+          "TransportUnits": 3,
+          "Options": [
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "DEPTH",
+              "Required": true,
+              "DisplayIndex": 0,
+              "AffectsBom": true,
+              "VisibilityRules": [],
+              "Values": [
+                { "OptionChoiceCode": "STD", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "DEEP", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "MECH",
+              "Required": true,
+              "DisplayIndex": 1,
+              "AffectsBom": true,
+              "VisibilityRules": [],
+              "Values": [
+                { "OptionChoiceCode": "NONE", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "REC", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "HEAD",
+              "Required": true,
+              "DisplayIndex": 2,
+              "AffectsBom": true,
+              "VisibilityRules": [
+                { "TriggerOptionDefinitionCode": "MECH", "TriggerChoiceCode": "REC", "RevealedOptionDefinitionCode": "HEAD" }
+              ],
+              "Values": [
+                { "OptionChoiceCode": "HS1", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "HS2", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "STITCH",
+              "Required": true,
+              "DisplayIndex": 3,
+              "AffectsBom": false,
+              "VisibilityRules": [],
+              "Values": [
+                { "OptionChoiceCode": "PLAIN", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "CONTRAST", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "fabric",
+              "OptionDefinitionCode": "FABRIC",
+              "Required": true,
+              "DisplayIndex": 4,
+              "IsPriceDetermining": true,
+              "VisibilityRules": [],
+              "FabricGroupCodes": [ "AQUA", "TERRA", "HIDE" ]
+            }
+          ],
+          "Bom": {
+            "Sections": [
+              {
+                "Kind": "Frame",
+                "Lines": [
+                  { "$type": "frame", "LineKey": "FR-FJ3", "FrameBodyCode": "FBX", "Colored": true, "Quantity": 1 }
+                ]
+              },
+              {
+                "Kind": "Foam",
+                "Lines": [
+                  { "$type": "foam", "LineKey": "FM-BASE-FJ3", "FoamCode": "FM-STD", "Quantity": 3 },
+                  {
+                    "$type": "foam", "LineKey": "FM-DEEP-FJ3", "FoamCode": "FM-DEEP-PAD", "Quantity": 1.5,
+                    "Condition": { "RequiredSelections": [ { "OptionDefinitionCode": "DEPTH", "ChoiceCode": "DEEP" } ] }
+                  }
+                ]
+              },
+              {
+                "Kind": "Cotton",
+                "Lines": [
+                  { "$type": "cotton", "LineKey": "CT-FJ3", "CottonQualityCode": "COT-STD", "Measurement": 4.5, "CutUnits": 1, "UnitConversionFactor": 1 }
+                ]
+              },
+              {
+                "Kind": "CutSort",
+                "Lines": [
+                  { "$type": "cutsort", "LineKey": "FB-FJ3", "Metrage": 6.0, "CutUnits": 1, "SecondaryGroupMetrages": {} }
+                ]
+              },
+              {
+                "Kind": "Misc",
+                "Lines": [
+                  { "$type": "misc", "LineKey": "MI-FJ3", "MaterialCode": "GLUE", "Quantity": 6, "UnitConversionFactor": 2 }
+                ]
+              },
+              {
+                "Kind": "Labor",
+                "Lines": [
+                  { "$type": "labor", "LineKey": "LB-CUT-FJ3", "OperationCode": "OP-CUT", "Units": 9 },
+                  { "$type": "labor", "LineKey": "LB-SEW-FJ3", "OperationCode": "OP-SEW", "Units": 6 }
+                ]
+              }
+            ]
+          },
+          "Substitutions": [
+            { "When": { "RequiredSelections": [ { "OptionDefinitionCode": "MECH", "ChoiceCode": "REC" } ] }, "ReplaceMaterialCode": "FM-STD", "WithMaterialCode": "FM-FIRM", "QuantityOverride": null }
+          ]
+        },
+        {
+          "Code": "FJCH",
+          "Name": "Fjord Chaise",
+          "Width": 160.0,
+          "Depth": 160.0,
+          "Height": 80.0,
+          "TransportUnits": 2,
+          "Options": [
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "DEPTH",
+              "Required": true,
+              "DisplayIndex": 0,
+              "AffectsBom": true,
+              "VisibilityRules": [],
+              "Values": [
+                { "OptionChoiceCode": "STD", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "DEEP", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "MECH",
+              "Required": true,
+              "DisplayIndex": 1,
+              "AffectsBom": true,
+              "VisibilityRules": [],
+              "Values": [
+                { "OptionChoiceCode": "NONE", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "REC", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "HEAD",
+              "Required": true,
+              "DisplayIndex": 2,
+              "AffectsBom": true,
+              "VisibilityRules": [
+                { "TriggerOptionDefinitionCode": "MECH", "TriggerChoiceCode": "REC", "RevealedOptionDefinitionCode": "HEAD" }
+              ],
+              "Values": [
+                { "OptionChoiceCode": "HS1", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "HS2", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "choice",
+              "OptionDefinitionCode": "STITCH",
+              "Required": true,
+              "DisplayIndex": 3,
+              "AffectsBom": false,
+              "VisibilityRules": [],
+              "Values": [
+                { "OptionChoiceCode": "PLAIN", "DisplayIndex": 0, "IsDefault": true },
+                { "OptionChoiceCode": "CONTRAST", "DisplayIndex": 1, "IsDefault": false }
+              ]
+            },
+            {
+              "$type": "fabric",
+              "OptionDefinitionCode": "FABRIC",
+              "Required": true,
+              "DisplayIndex": 4,
+              "IsPriceDetermining": true,
+              "VisibilityRules": [],
+              "FabricGroupCodes": [ "AQUA", "TERRA", "HIDE", "HIDE-THICK" ]
+            }
+          ],
+          "Bom": {
+            "Sections": [
+              {
+                "Kind": "Frame",
+                "Lines": [
+                  { "$type": "frame", "LineKey": "FR-FJCH", "FrameBodyCode": "FBX", "Colored": false, "Quantity": 1 }
+                ]
+              },
+              {
+                "Kind": "Foam",
+                "Lines": [
+                  { "$type": "foam", "LineKey": "FM-BASE-FJCH", "FoamCode": "FM-STD", "Quantity": 2 },
+                  {
+                    "$type": "foam", "LineKey": "FM-DEEP-FJCH", "FoamCode": "FM-DEEP-PAD", "Quantity": 1,
+                    "Condition": { "RequiredSelections": [ { "OptionDefinitionCode": "DEPTH", "ChoiceCode": "DEEP" } ] }
+                  }
+                ]
+              },
+              {
+                "Kind": "Cotton",
+                "Lines": [
+                  { "$type": "cotton", "LineKey": "CT-FJCH", "CottonQualityCode": "COT-STD", "Measurement": 2.0, "CutUnits": 1, "UnitConversionFactor": 1 }
+                ]
+              },
+              {
+                "Kind": "CutSort",
+                "Lines": [
+                  { "$type": "cutsort", "LineKey": "FB-FJCH", "Metrage": 3.0, "CutUnits": 1, "SecondaryGroupMetrages": { "PGB": 1.2 } }
+                ]
+              },
+              {
+                "Kind": "Misc",
+                "Lines": [
+                  { "$type": "misc", "LineKey": "MI-FJCH", "MaterialCode": "GLUE", "Quantity": 2, "UnitConversionFactor": 2 }
+                ]
+              },
+              {
+                "Kind": "Labor",
+                "Lines": [
+                  { "$type": "labor", "LineKey": "LB-CUT-FJCH", "OperationCode": "OP-CUT", "Units": 4 },
+                  { "$type": "labor", "LineKey": "LB-SEW-FJCH", "OperationCode": "OP-SEW", "Units": 3 },
+                  {
+                    "$type": "labor", "LineKey": "LB-LEATHERWORK-FJCH", "OperationCode": "OP-LEATHERWORK", "Units": 2,
+                    "Condition": { "RequiredSelections": [ { "OptionDefinitionCode": "__MATERIAL__", "ChoiceCode": "LEATHER-THICK" } ] }
+                  }
+                ]
+              }
+            ]
+          },
+          "Substitutions": [
+            { "When": { "RequiredSelections": [ { "OptionDefinitionCode": "MECH", "ChoiceCode": "REC" } ] }, "ReplaceMaterialCode": "FM-STD", "WithMaterialCode": "FM-FIRM", "QuantityOverride": null }
+          ]
+        }
+      ]
+    }
+  ],
+  "PriceGroups": [
+    { "Code": "PGA", "Kind": "Fabric", "RatePerMeter": 21.50 },
+    { "Code": "PGB", "Kind": "Fabric", "RatePerMeter": 34.00 },
+    { "Code": "PGL", "Kind": "Leather", "RatePerMeter": 55.00 },
+    { "Code": "PGLT", "Kind": "Leather", "RatePerMeter": 60.00, "MaterialTypeCode": "LEATHER-THICK" }
+  ],
+  "FabricGroups": [
+    {
+      "Code": "AQUA", "PriceGroupCode": "PGA",
+      "Colors": [
+        { "Code": "AQUA-BLUE", "Name": "Aqua Blue", "PurchasePrice": 18.00, "ShippingCost": 1.00, "Unit": "Meter" },
+        { "Code": "AQUA-GREEN", "Name": "Aqua Green", "PurchasePrice": 18.00, "ShippingCost": 1.00, "Unit": "Meter" }
+      ]
+    },
+    {
+      "Code": "TERRA", "PriceGroupCode": "PGB",
+      "Colors": [
+        { "Code": "TERRA-SAND", "Name": "Terra Sand", "PurchasePrice": 28.00, "ShippingCost": 1.50, "Unit": "Meter" },
+        { "Code": "TERRA-CLAY", "Name": "Terra Clay", "PurchasePrice": 28.00, "ShippingCost": 1.50, "Unit": "Meter" },
+        { "Code": "TERRA-OLIVE", "Name": "Terra Olive", "PurchasePrice": 28.00, "ShippingCost": 1.50, "Unit": "Meter" }
+      ]
+    },
+    {
+      "Code": "HIDE", "PriceGroupCode": "PGL",
+      "Colors": [
+        { "Code": "HIDE-BLACK", "Name": "Hide Black", "PurchasePrice": 45.00, "ShippingCost": 2.00, "Unit": "SquareMeter" },
+        { "Code": "HIDE-BROWN", "Name": "Hide Brown", "PurchasePrice": 45.00, "ShippingCost": 2.00, "Unit": "SquareMeter" }
+      ]
+    },
+    {
+      "Code": "HIDE-THICK", "PriceGroupCode": "PGLT",
+      "Colors": [
+        { "Code": "HIDE-THICK-ESPRESSO", "Name": "Hide Thick Espresso", "PurchasePrice": 52.00, "ShippingCost": 2.50, "Unit": "SquareMeter" },
+        { "Code": "HIDE-THICK-CHARCOAL", "Name": "Hide Thick Charcoal", "PurchasePrice": 52.00, "ShippingCost": 2.50, "Unit": "SquareMeter" }
+      ]
+    }
+  ],
+  "Operations": [
+    { "Code": "OP-CUT", "Name": "Cutting", "UnitCost": 1.75 },
+    { "Code": "OP-SEW", "Name": "Sewing", "UnitCost": 2.10 },
+    { "Code": "OP-LEATHERWORK", "Name": "Leather conditioning", "UnitCost": 3.25 }
+  ],
+  "FrameBodies": [
+    { "Code": "FBX", "Price": 120.00, "UnitCost": 0, "MachiningUnits": 0, "RefiningUnits": 0 }
+  ],
+  "Materials": [
+    { "Code": "FM-STD", "Name": "Foam Standard", "UnitCost": 8.00, "Unit": "pc" },
+    { "Code": "FM-FIRM", "Name": "Foam Firm", "UnitCost": 10.00, "Unit": "pc" },
+    { "Code": "FM-DEEP-PAD", "Name": "Foam Deep Pad", "UnitCost": 6.00, "Unit": "pc" },
+    { "Code": "COT-STD", "Name": "Cotton Standard", "UnitCost": 6.00, "Unit": "m" },
+    { "Code": "GLUE", "Name": "Glue", "UnitCost": 2.50, "Unit": "pc" },
+    { "Code": "RESIN", "Name": "Resin", "UnitCost": 1.00, "Unit": "pc" }
+  ],
+  "SprayPrices": [
+    { "FrameBodyCode": "FBX", "Price": 12.50 }
+  ],
+  "FixedSurcharges": [
+    { "Name": "frame assembly", "AppliesToSection": "Frame", "Amount": 5.00 }
+  ],
+  "ChoiceSurcharges": [
+    { "OptionChoiceCode": "CONTRAST", "ElementCode": null, "Amount": 18.00 }
+  ],
+  "CombinationPriceRules": [
+    {
+      "RequiredSelections": [
+        { "OptionDefinitionCode": "DEPTH", "ChoiceCode": "DEEP" },
+        { "OptionDefinitionCode": "MECH", "ChoiceCode": "REC" }
+      ],
+      "Adjustment": 25.00
+    }
+  ],
+  "Markets": [
+    {
+      "Code": "EUW",
+      "TransportRatePerUnit": 3.50,
+      "FixedCostPercent": 8,
+      "MarkupSteps": [
+        { "Name": "Margin block", "Percent": 26, "Mode": "Compound" },
+        { "Name": "Channel", "Percent": 4, "Mode": "Compound" }
+      ],
+      "Rounding": { "LineDecimals": 2, "FinalDecimals": 0, "Midpoint": "AwayFromZero", "Stages": "Final" }
+    },
+    {
+      "Code": "EUN",
+      "TransportRatePerUnit": 4.00,
+      "FixedCostPercent": 10,
+      "MarkupSteps": [
+        { "Name": "Base", "Percent": 20, "Mode": "Additive" },
+        { "Name": "Extra", "Percent": 6, "Mode": "Additive" }
+      ],
+      "Rounding": { "LineDecimals": 2, "FinalDecimals": 2, "Midpoint": "AwayFromZero", "Stages": "Line, Final" }
+    }
+  ]
+}
