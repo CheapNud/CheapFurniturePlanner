@@ -1,5 +1,6 @@
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Bom;
+using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Models;
@@ -57,6 +58,7 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
         var operationCodes = snapshot.Operations.Select(o => o.Code).ToHashSet();
         var frameCodes = snapshot.FrameBodies.Select(f => f.Code).ToHashSet();
         var materialCodes = snapshot.Materials.Select(m => m.Code).ToHashSet();
+        var fabricGroupCodes = snapshot.FabricGroups.Select(g => g.Code).ToHashSet();
 
         foreach (var group in snapshot.FabricGroups)
         {
@@ -75,12 +77,22 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
                     {
                         errors.Add($"Element '{element.Code}' uses reserved option code '{VariantCode.MaterialDefCode}'.");
                     }
+                    if (option is FabricOption fabricOption)
+                    {
+                        foreach (var fabricGroupCode in fabricOption.FabricGroupCodes)
+                        {
+                            if (!fabricGroupCodes.Contains(fabricGroupCode))
+                            {
+                                errors.Add($"Element '{element.Code}' BOM references missing fabric group '{fabricGroupCode}'.");
+                            }
+                        }
+                    }
                 }
                 foreach (var section in element.Bom.Sections)
                 {
                     foreach (var line in section.Lines)
                     {
-                        errors.AddRange(MissingBomCodes(element.Code, line, operationCodes, frameCodes, materialCodes));
+                        errors.AddRange(MissingBomCodes(element.Code, line, operationCodes, frameCodes, materialCodes, priceGroupCodes));
                     }
                 }
             }
@@ -89,7 +101,7 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
     }
 
     private static IEnumerable<string> MissingBomCodes(string elementCode, BomLine line,
-        HashSet<string> ops, HashSet<string> frames, HashSet<string> materials)
+        HashSet<string> ops, HashSet<string> frames, HashSet<string> materials, HashSet<string> priceGroups)
     {
         switch (line)
         {
@@ -101,6 +113,18 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
                 break;
             case FoamBomLine foam when !materials.Contains(foam.FoamCode):
                 yield return $"Element '{elementCode}' BOM references missing material '{foam.FoamCode}'.";
+                break;
+            case CottonBomLine cotton when !materials.Contains(cotton.CottonQualityCode):
+                yield return $"Element '{elementCode}' BOM references missing material '{cotton.CottonQualityCode}'.";
+                break;
+            case CutSortBomLine cutSort:
+                foreach (var groupCode in cutSort.SecondaryGroupMetrages.Keys)
+                {
+                    if (!priceGroups.Contains(groupCode))
+                    {
+                        yield return $"Element '{elementCode}' BOM references missing price group '{groupCode}'.";
+                    }
+                }
                 break;
             case MiscBomLine misc when !materials.Contains(misc.MaterialCode):
                 yield return $"Element '{elementCode}' BOM references missing material '{misc.MaterialCode}'.";

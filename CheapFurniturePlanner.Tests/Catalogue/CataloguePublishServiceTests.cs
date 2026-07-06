@@ -1,5 +1,6 @@
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Fabrics;
 using CheapFurniturePlanner.Domain.Options;
@@ -131,6 +132,163 @@ public class CataloguePublishServiceTests
             Assert.False(result.Success);
             Assert.Contains(result.Errors, e => e.Contains(VariantCode.MaterialDefCode));
             Assert.Null(result.Version);
+
+            using var verifyContext = factory.CreateDbContext();
+            Assert.Empty(verifyContext.PublishedCatalogues);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_DanglingCottonMaterialReference_FailsAndWritesNoRow()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Bom = new BomDocument
+                                {
+                                    Sections =
+                                    [
+                                        new BomSection
+                                        {
+                                            Kind = BomSectionKind.Cotton,
+                                            Lines =
+                                            [
+                                                new CottonBomLine { LineKey = "cotton1", CottonQualityCode = "MISSING" },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains("MISSING"));
+            Assert.Null(result.Version);
+            Assert.False(source.Invalidated);
+
+            using var verifyContext = factory.CreateDbContext();
+            Assert.Empty(verifyContext.PublishedCatalogues);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_DanglingCutSortSecondaryPriceGroupReference_FailsAndWritesNoRow()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Bom = new BomDocument
+                                {
+                                    Sections =
+                                    [
+                                        new BomSection
+                                        {
+                                            Kind = BomSectionKind.CutSort,
+                                            Lines =
+                                            [
+                                                new CutSortBomLine
+                                                {
+                                                    LineKey = "cutsort1",
+                                                    Metrage = 1m,
+                                                    SecondaryGroupMetrages = new Dictionary<string, decimal> { ["MISSING"] = 0.5m },
+                                                },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains("MISSING"));
+            Assert.Null(result.Version);
+            Assert.False(source.Invalidated);
+
+            using var verifyContext = factory.CreateDbContext();
+            Assert.Empty(verifyContext.PublishedCatalogues);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_DanglingFabricGroupReference_FailsAndWritesNoRow()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Options = [new FabricOption { OptionDefinitionCode = "FABRIC", FabricGroupCodes = ["MISSING"] }],
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains("MISSING"));
+            Assert.Null(result.Version);
+            Assert.False(source.Invalidated);
 
             using var verifyContext = factory.CreateDbContext();
             Assert.Empty(verifyContext.PublishedCatalogues);
