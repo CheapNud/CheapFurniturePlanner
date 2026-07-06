@@ -34,6 +34,15 @@ class Program
 
         builder.Services.AddDbContextFactory<FurniturePlannerContext>(options => options.UseSqlite(connectionString));
 
+        // Apply EF migrations at startup (replaces the orphaned EnsureCreated maintenance service).
+        builder.ConfigureServices(serviceProvider =>
+        {
+            using var scope = serviceProvider.CreateScope();
+            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>();
+            using var migrateContext = factory.CreateDbContext();
+            migrateContext.Database.Migrate();
+        });
+
         // Configure Mapster
         var config = new TypeAdapterConfig();
         FurniturePlannerMappingProfile.Configure(config);
