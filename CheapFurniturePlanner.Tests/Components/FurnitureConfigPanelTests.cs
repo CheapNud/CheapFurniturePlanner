@@ -147,4 +147,31 @@ public class FurnitureConfigPanelTests : TestContext
         Assert.Contains(cut.FindAll(".mud-alert"), _ => true);
         Assert.Contains("unavailable in this catalogue", cut.Markup);
     }
+
+    [Fact]
+    public async Task BreakingConfigAfterValidPrice_ClearsCachedPersistedPrice()
+    {
+        ConfigureServices();
+        var placement = Fj3Placement();
+
+        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
+
+        // Sanity check: the panel priced successfully on first render, so the persisted cache fields
+        // (which PlannerService writes into the saved plan) hold a real price.
+        Assert.NotNull(placement.CachedUnitPrice);
+        Assert.NotNull(placement.CachedVariantCode);
+
+        // Break the configuration by pointing at a fabric color that no longer exists in the
+        // catalogue, then trigger a reprice via a normal option change (as a user interaction would).
+        placement.FabricColorCode = "DOES-NOT-EXIST";
+        var stitch = FindSelect(cut, "STITCH");
+        await cut.InvokeAsync(() => stitch.Instance.ValueChanged.InvokeAsync("CONTRAST"));
+
+        // The pricing failure must clear the persisted cache fields, not just the panel's local
+        // display state - otherwise saving while this invalid config is showing would record the
+        // last-known-good price as if it were still valid.
+        Assert.Null(placement.CachedUnitPrice);
+        Assert.Null(placement.CachedVariantCode);
+        Assert.Contains(cut.FindAll(".mud-alert"), _ => true);
+    }
 }

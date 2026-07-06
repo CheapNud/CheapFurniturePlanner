@@ -64,7 +64,7 @@ else
                             @foreach (var color in group.Colors)
                             {
                                 <div class="@("fabric-swatch" + (color.Code == Placement.FabricColorCode ? " selected" : ""))"
-                                     style="background-color:@(color.Hex)"
+                                     style="background-color:@(string.IsNullOrEmpty(color.Hex) ? "#cccccc" : color.Hex)"
                                      title="@color.Name"
                                      @onclick="@(() => SelectFabric(color.Code))">
                                 </div>
@@ -187,6 +187,8 @@ else
             _breakdown = null;
             _unitPrice = null;
             _variantCode = null;
+            Placement.CachedUnitPrice = null;
+            Placement.CachedVariantCode = null;
         }
 
         await OnConfigured.InvokeAsync();
