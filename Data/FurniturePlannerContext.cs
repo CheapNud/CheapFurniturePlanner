@@ -39,6 +39,8 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<RoomPlan> RoomPlans { get; set; }
     public DbSet<PlannerFurnitureItem> PlannerFurnitureItems { get; set; }
     public DbSet<PublishedCatalogue> PublishedCatalogues { get; set; }
+    public DbSet<VariantCodeTemplate> VariantCodeTemplates => Set<VariantCodeTemplate>();
+    public DbSet<ModelStateRecord> ModelStates => Set<ModelStateRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -138,6 +140,10 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasIndex(e => e.IsCurrent);
             entity.Property(e => e.PublishedAt).HasDefaultValueSql("DATETIME('now')");
         });
+
+        modelBuilder.Entity<VariantCodeTemplate>().HasIndex(t => new { t.ModelCode, t.VariantCode }).IsUnique();
+        modelBuilder.Entity<ModelStateRecord>().HasIndex(s => s.ModelCode).IsUnique();
+        modelBuilder.Entity<ModelStateRecord>().Property(s => s.State).HasConversion<string>();
     }
 
     private static void SeedDefaultData(ModelBuilder modelBuilder)
