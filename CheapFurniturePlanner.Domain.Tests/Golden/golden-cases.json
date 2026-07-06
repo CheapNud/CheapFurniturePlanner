@@ -66,6 +66,17 @@
     }
   },
   {
+    "Name": "fjch-thick-leather",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJCH", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "NONE", "STITCH": "PLAIN" }, "FabricColorCode": "HIDE-THICK-ESPRESSO" }
+      ]
+    }
+  },
+  {
     "Name": "multi-element-document",
     "Market": "EUW",
     "SellerMultiplier": 1.0,

@@ -83,7 +83,7 @@ public class ResolveStageTests
         // Assert
         Assert.Empty(errors);
         var resolvedElement = Assert.Single(resolved);
-        Assert.Equal("SEAT-COLOR:RED", resolvedElement.VariantCodeValue);
+        Assert.Equal("SEAT-COLOR:RED-__MATERIAL__:Fabric", resolvedElement.VariantCodeValue);
         Assert.Equal("PG1", resolvedElement.ResolvedPriceGroup.Code);
         Assert.Equal(2, resolvedElement.EffectiveLines.Count);
         var replacedFoam = Assert.IsType<FoamBomLine>(resolvedElement.EffectiveLines.Single(l => l.Line.LineKey == "F1").Line);

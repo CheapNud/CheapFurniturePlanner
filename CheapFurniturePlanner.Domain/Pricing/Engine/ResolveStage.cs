@@ -57,8 +57,15 @@ internal static class ResolveStage
                 continue;
             }
 
-            var effectiveLines = BuildEffectiveLines(element, selection);
-            var variantCode = VariantCode.From(element, selection);
+            // Material type is BOM-significant (fabric vs leather vs thick-leather); colour is not.
+            // A sentinel price group (empty Code, elements with no active fabric option) carries no material.
+            var materialTypeCode = priceGroup.Code.Length == 0
+                ? null
+                : priceGroup.MaterialTypeCode ?? priceGroup.Kind.ToString();
+            var effectiveSelections = BuildEffectiveSelections(selection.ChoiceSelections, materialTypeCode);
+
+            var effectiveLines = BuildEffectiveLines(element, effectiveSelections);
+            var variantCode = VariantCode.From(element, selection, materialTypeCode);
             resolved.Add(new ResolvedElement(element, selection, variantCode, priceGroup, effectiveLines));
         }
 
@@ -136,17 +143,31 @@ internal static class ResolveStage
         return priceGroup;
     }
 
+    // Augments the raw choice selections with the synthetic __MATERIAL__ selection (resolved material
+    // type code) so BOM conditions and substitution rules can key on material without colour leaking in.
+    private static IReadOnlyDictionary<string, string> BuildEffectiveSelections(
+        IReadOnlyDictionary<string, string> baseSelections, string? materialTypeCode)
+    {
+        if (string.IsNullOrEmpty(materialTypeCode))
+        {
+            return baseSelections;
+        }
+        Dictionary<string, string> augmented = new(baseSelections) { [VariantCode.MaterialDefCode] = materialTypeCode };
+        return augmented;
+    }
+
     // Rule 5: condition-filtered BOM lines (each paired with its section kind) with substitution rules applied.
-    private static IReadOnlyList<EffectiveLine> BuildEffectiveLines(Element element, ElementSelection selection)
+    private static IReadOnlyList<EffectiveLine> BuildEffectiveLines(
+        Element element, IReadOnlyDictionary<string, string> selections)
     {
         var lines = element.Bom.Sections
             .SelectMany(section => section.Lines.Select(line => new EffectiveLine(section.Kind, line)))
-            .Where(effective => effective.Line.Condition is null || effective.Line.Condition.IsSatisfiedBy(selection.ChoiceSelections))
+            .Where(effective => effective.Line.Condition is null || effective.Line.Condition.IsSatisfiedBy(selections))
             .ToList();
 
         foreach (var rule in element.Substitutions)
         {
-            if (!rule.When.IsSatisfiedBy(selection.ChoiceSelections))
+            if (!rule.When.IsSatisfiedBy(selections))
             {
                 continue;
             }

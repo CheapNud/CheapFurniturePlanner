@@ -310,7 +310,7 @@
               "DisplayIndex": 4,
               "IsPriceDetermining": true,
               "VisibilityRules": [],
-              "FabricGroupCodes": [ "AQUA", "TERRA", "HIDE" ]
+              "FabricGroupCodes": [ "AQUA", "TERRA", "HIDE", "HIDE-THICK" ]
             }
           ],
           "Bom": {
@@ -353,7 +353,11 @@
                 "Kind": "Labor",
                 "Lines": [
                   { "$type": "labor", "LineKey": "LB-CUT-FJCH", "OperationCode": "OP-CUT", "Units": 4 },
-                  { "$type": "labor", "LineKey": "LB-SEW-FJCH", "OperationCode": "OP-SEW", "Units": 3 }
+                  { "$type": "labor", "LineKey": "LB-SEW-FJCH", "OperationCode": "OP-SEW", "Units": 3 },
+                  {
+                    "$type": "labor", "LineKey": "LB-LEATHERWORK-FJCH", "OperationCode": "OP-LEATHERWORK", "Units": 2,
+                    "Condition": { "RequiredSelections": [ { "OptionDefinitionCode": "__MATERIAL__", "ChoiceCode": "LEATHER-THICK" } ] }
+                  }
                 ]
               }
             ]
@@ -368,7 +372,8 @@
   "PriceGroups": [
     { "Code": "PGA", "Kind": "Fabric", "RatePerMeter": 21.50 },
     { "Code": "PGB", "Kind": "Fabric", "RatePerMeter": 34.00 },
-    { "Code": "PGL", "Kind": "Leather", "RatePerMeter": 55.00 }
+    { "Code": "PGL", "Kind": "Leather", "RatePerMeter": 55.00 },
+    { "Code": "PGLT", "Kind": "Leather", "RatePerMeter": 60.00, "MaterialTypeCode": "LEATHER-THICK" }
   ],
   "FabricGroups": [
     {
@@ -392,11 +397,19 @@
         { "Code": "HIDE-BLACK", "Name": "Hide Black", "PurchasePrice": 45.00, "ShippingCost": 2.00, "Unit": "SquareMeter" },
         { "Code": "HIDE-BROWN", "Name": "Hide Brown", "PurchasePrice": 45.00, "ShippingCost": 2.00, "Unit": "SquareMeter" }
       ]
+    },
+    {
+      "Code": "HIDE-THICK", "PriceGroupCode": "PGLT",
+      "Colors": [
+        { "Code": "HIDE-THICK-ESPRESSO", "Name": "Hide Thick Espresso", "PurchasePrice": 52.00, "ShippingCost": 2.50, "Unit": "SquareMeter" },
+        { "Code": "HIDE-THICK-CHARCOAL", "Name": "Hide Thick Charcoal", "PurchasePrice": 52.00, "ShippingCost": 2.50, "Unit": "SquareMeter" }
+      ]
     }
   ],
   "Operations": [
     { "Code": "OP-CUT", "Name": "Cutting", "UnitCost": 1.75 },
-    { "Code": "OP-SEW", "Name": "Sewing", "UnitCost": 2.10 }
+    { "Code": "OP-SEW", "Name": "Sewing", "UnitCost": 2.10 },
+    { "Code": "OP-LEATHERWORK", "Name": "Leather conditioning", "UnitCost": 3.25 }
   ],
   "FrameBodies": [
     { "Code": "FBX", "Price": 120.00, "UnitCost": 0, "MachiningUnits": 0, "RefiningUnits": 0 }
