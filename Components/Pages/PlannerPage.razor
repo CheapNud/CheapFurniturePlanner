@@ -1,4 +1,7 @@
 @page "/planner/{RoomPlanId:int}"
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Configurator
+@using CheapFurniturePlanner.Domain.Pricing
 @using CheapFurniturePlanner.Services
 @using CheapFurniturePlanner.ViewModels
 @implements IDisposable
@@ -6,6 +9,8 @@
 @inject RoomPlanService RoomPlanService
 @inject FurnitureCatalogService FurnitureCatalogService
 @inject PlannerService PlannerService
+@inject PricingService PricingService
+@inject ICatalogueSource CatalogueSource
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
@@ -104,14 +109,32 @@
         </MudStack>
     </MudPaper>
 
-    <!-- Main Planner Component -->
-    <FurniturePlannerContainer RoomPlan="@_roomPlan"
-                      SelectedFurniture="@_selectedFurniture"
-                      AvailableFurniture="@_availableFurniture"
-                      SelectedFurnitureChanged="OnSelectedFurnitureChanged"
-                      OnFurnitureAdded="OnFurnitureAdded"
-                      OnFurnitureRemoved="OnFurnitureRemoved"
-                      OnFurnitureModified="OnFurnitureModified" />
+    <!-- Main Planner Component + Configuration Panel -->
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <FurniturePlannerContainer RoomPlan="@_roomPlan"
+                              SelectedFurniture="@_selectedFurniture"
+                              AvailableFurniture="@_availableFurniture"
+                              AvailableElements="@_availableElements"
+                              SelectedFurnitureChanged="OnSelectedFurnitureChanged"
+                              OnFurnitureAdded="OnFurnitureAdded"
+                              OnFurnitureRemoved="OnFurnitureRemoved"
+                              OnFurnitureModified="OnFurnitureModified"
+                              SelectedItemChanged="HandleSelectionChanged" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            @if (_selectedItem is not null)
+            {
+                <FurnitureConfigPanel Placement="_selectedItem" OnConfigured="HandleConfigured" />
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="config-panel">
+                    Select an element to configure it.
+                </MudText>
+            }
+        </MudItem>
+    </MudGrid>
 
     <!-- Room Settings Dialog -->
     <MudDialog @bind-Visible="_roomSettingsOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium })">
@@ -226,6 +249,8 @@ else
     private RoomPlanViewModel _editingRoomPlan = new();
     private List<FurniturePlannerViewModel> _selectedFurniture = new();
     private List<FurnitureCatalogViewModel> _availableFurniture = new();
+    private List<CatalogueElementOption> _availableElements = [];
+    private FurniturePlannerViewModel? _selectedItem;
 
     private bool _loading = true;
     private bool _hasUnsavedChanges = false;
@@ -240,6 +265,7 @@ else
     {
         await LoadRoomPlan();
         await LoadFurnitureCatalog();
+        await LoadCatalogueElements();
 
         // Setup auto-save timer (save every 30 seconds if there are changes)
         _autoSaveTimer = new Timer(AutoSave, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
@@ -269,6 +295,18 @@ else
             if (_roomPlan != null)
             {
                 _selectedFurniture = _roomPlan.FurnitureItems.ToList();
+
+                // Config + Selections are already restored from SelectionsJson (RoomPlanService);
+                // hydrate the display fields the DB doesn't persist for element placements (Name +
+                // dimensions - see PlannerElementHydrator) and reprice against the current catalogue
+                // snapshot so cached prices stay fresh. Single snapshot fetch shared by both steps.
+                var snapshot = await CatalogueSource.GetCurrentAsync();
+                foreach (var placement in _selectedFurniture.Where(f => !string.IsNullOrEmpty(f.ElementCode)))
+                {
+                    PlannerElementHydrator.Hydrate(placement, snapshot);
+                    await RepriceAsync(placement, snapshot);
+                }
+
                 _editingRoomPlan = new RoomPlanViewModel
                 {
                     Id = _roomPlan.Id,
@@ -306,6 +344,19 @@ else
         }
     }
 
+    private async Task LoadCatalogueElements()
+    {
+        try
+        {
+            var snapshot = await CatalogueSource.GetCurrentAsync();
+            _availableElements = CatalogueElementOption.FromSnapshot(snapshot);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading catalogue elements: {ex.Message}", Severity.Error);
+        }
+    }
+
     private async Task OnSelectedFurnitureChanged(List<FurniturePlannerViewModel> furniture)
     {
         _selectedFurniture = furniture;
@@ -313,10 +364,48 @@ else
         await InvokeAsync(StateHasChanged);
     }
 
+    private Task HandleSelectionChanged(FurniturePlannerViewModel? item)
+    {
+        _selectedItem = item;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Persists the selected placement's configuration (options/fabric/price) whenever
+    /// <see cref="FurnitureConfigPanel"/> reports a genuine edit (not a display-only reprice from
+    /// merely selecting an item), and marks the room dirty for auto-save.
+    /// </summary>
+    private async Task HandleConfigured()
+    {
+        if (_selectedItem is not null)
+        {
+            await PlannerService.UpdateFurniturePositionAsync(RoomPlanId, _selectedItem);
+        }
+
+        _hasUnsavedChanges = true;
+    }
+
     private async Task OnFurnitureAdded(FurniturePlannerViewModel furniture)
     {
         try
         {
+            var snapshot = await CatalogueSource.GetCurrentAsync();
+            var element = snapshot.Models.SelectMany(m => m.Elements).FirstOrDefault(e => e.Code == furniture.ElementCode);
+            if (element is not null)
+            {
+                // Only seed defaults for a brand-new placement. A duplicated element (via
+                // FurniturePlannerViewModel.PlannerClone, which preserves config) arrives here with
+                // Selections/FabricColorCode already populated - stomping them would silently reset
+                // the duplicate's configuration back to defaults.
+                if (furniture.Selections.Count == 0 && string.IsNullOrEmpty(furniture.FabricColorCode))
+                {
+                    furniture.Selections = ConfigurationResolver.DefaultSelections(element);
+                    furniture.FabricColorCode = ConfigurationResolver.DefaultFabricColorCode(element, snapshot);
+                }
+                furniture.CatalogueVersion = snapshot.Version;
+                await RepriceAsync(furniture, snapshot);
+            }
+
             await PlannerService.AddFurnitureToRoomAsync(RoomPlanId, furniture);
             _hasUnsavedChanges = true;
             Snackbar.Add($"Added {furniture.Name} to room plan", Severity.Success);
@@ -324,6 +413,32 @@ else
         catch (Exception ex)
         {
             Snackbar.Add($"Error adding furniture: {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// Prices a placement against the current catalogue and caches the resulting unit price/variant code.
+    /// Used by the add flow; <see cref="FurnitureConfigPanel"/> reprices independently while the side panel is open.
+    /// </summary>
+    /// <param name="snapshot">
+    /// The snapshot the caller already has in scope for this pricing pass. On success, its Version is
+    /// stamped onto the placement so the persisted CatalogueVersion matches the snapshot it was priced
+    /// against (rather than staying stuck at whatever version it was first added/loaded with).
+    /// </param>
+    private async Task RepriceAsync(FurniturePlannerViewModel placement, CatalogueSnapshot snapshot)
+    {
+        var result = await PricingService.PriceAsync(placement);
+        if (result.IsSuccess && result.Breakdown is not null)
+        {
+            var elementBreakdown = result.Breakdown.Elements.FirstOrDefault(e => e.ElementCode == placement.ElementCode);
+            placement.CachedUnitPrice = elementBreakdown?.ElementTotal;
+            placement.CachedVariantCode = elementBreakdown?.VariantCode;
+            placement.CatalogueVersion = snapshot.Version;
+        }
+        else
+        {
+            placement.CachedUnitPrice = null;
+            placement.CachedVariantCode = null;
         }
     }
 
@@ -508,7 +623,16 @@ else
                     FurnitureLength = furniture.FurnitureLength,
                     FurnitureHeight = furniture.FurnitureHeight,
                     ImageUrl = furniture.ImageUrl,
-                    Price = furniture.Price
+                    Price = furniture.Price,
+                    // Config fields (Phase 2B) - without these an element placement duplicates with
+                    // ElementCode=null and its configuration/price silently reset.
+                    ElementCode = furniture.ElementCode,
+                    CatalogueVersion = furniture.CatalogueVersion,
+                    SelectionsJson = furniture.SelectionsJson,
+                    FabricColorCode = furniture.FabricColorCode,
+                    CachedVariantCode = furniture.CachedVariantCode,
+                    CachedUnitPrice = furniture.CachedUnitPrice,
+                    Selections = new Dictionary<string, string>(furniture.Selections)
                 };
 
                 await PlannerService.AddFurnitureToRoomAsync(newPlan.Id, duplicatedFurniture);

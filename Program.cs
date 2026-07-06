@@ -79,6 +79,7 @@ class Program
         builder.Services.AddScoped<FurnitureCatalogService>();
         builder.Services.AddScoped<RoomPlanService>();
         builder.Services.AddScoped<PlannerService>();
+        builder.Services.AddScoped<PricingService>();
 
         // Run the app - all Avalonia complexity handled by the package
         builder.RunApp(args);

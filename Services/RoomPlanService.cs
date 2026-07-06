@@ -81,17 +81,12 @@ public class RoomPlanService
 
             var viewModel = _mapper.Map<RoomPlanViewModel>(roomPlan);
 
-            // Map furniture items
+            // Map furniture items (config-aware, null-safe map handles both flat-catalog
+            // and element placements and carries position + config fields in one pass)
             viewModel.FurnitureItems = roomPlan.FurnitureItems.Select(pfi =>
             {
-                var furnitureVm = _mapper.Map<FurniturePlannerViewModel>(pfi.FurnitureItem);
-                furnitureVm.UIId = pfi.UIId;
-                furnitureVm.X = pfi.X;
-                furnitureVm.Y = pfi.Y;
-                furnitureVm.Rotation = pfi.Rotation;
-                furnitureVm.GroupID = pfi.GroupId;
-                furnitureVm.CustomName = pfi.CustomName;
-                furnitureVm.Notes = pfi.Notes;
+                var furnitureVm = _mapper.Map<FurniturePlannerViewModel>(pfi);
+                furnitureVm.Selections = PlannerService.DeserializeSelections(pfi.SelectionsJson);
                 return furnitureVm;
             }).ToList();
 

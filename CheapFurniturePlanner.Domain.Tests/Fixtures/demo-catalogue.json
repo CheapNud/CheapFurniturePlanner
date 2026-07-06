@@ -379,30 +379,30 @@
     {
       "Code": "AQUA", "PriceGroupCode": "PGA",
       "Colors": [
-        { "Code": "AQUA-BLUE", "Name": "Aqua Blue", "PurchasePrice": 18.00, "ShippingCost": 1.00, "Unit": "Meter" },
-        { "Code": "AQUA-GREEN", "Name": "Aqua Green", "PurchasePrice": 18.00, "ShippingCost": 1.00, "Unit": "Meter" }
+        { "Code": "AQUA-BLUE", "Name": "Aqua Blue", "PurchasePrice": 18.00, "ShippingCost": 1.00, "Unit": "Meter", "Hex": "#2E5E8C" },
+        { "Code": "AQUA-GREEN", "Name": "Aqua Green", "PurchasePrice": 18.00, "ShippingCost": 1.00, "Unit": "Meter", "Hex": "#2E8C6E" }
       ]
     },
     {
       "Code": "TERRA", "PriceGroupCode": "PGB",
       "Colors": [
-        { "Code": "TERRA-SAND", "Name": "Terra Sand", "PurchasePrice": 28.00, "ShippingCost": 1.50, "Unit": "Meter" },
-        { "Code": "TERRA-CLAY", "Name": "Terra Clay", "PurchasePrice": 28.00, "ShippingCost": 1.50, "Unit": "Meter" },
-        { "Code": "TERRA-OLIVE", "Name": "Terra Olive", "PurchasePrice": 28.00, "ShippingCost": 1.50, "Unit": "Meter" }
+        { "Code": "TERRA-SAND", "Name": "Terra Sand", "PurchasePrice": 28.00, "ShippingCost": 1.50, "Unit": "Meter", "Hex": "#C9A66B" },
+        { "Code": "TERRA-CLAY", "Name": "Terra Clay", "PurchasePrice": 28.00, "ShippingCost": 1.50, "Unit": "Meter", "Hex": "#B5651D" },
+        { "Code": "TERRA-OLIVE", "Name": "Terra Olive", "PurchasePrice": 28.00, "ShippingCost": 1.50, "Unit": "Meter", "Hex": "#6B7A3B" }
       ]
     },
     {
       "Code": "HIDE", "PriceGroupCode": "PGL",
       "Colors": [
-        { "Code": "HIDE-BLACK", "Name": "Hide Black", "PurchasePrice": 45.00, "ShippingCost": 2.00, "Unit": "SquareMeter" },
-        { "Code": "HIDE-BROWN", "Name": "Hide Brown", "PurchasePrice": 45.00, "ShippingCost": 2.00, "Unit": "SquareMeter" }
+        { "Code": "HIDE-BLACK", "Name": "Hide Black", "PurchasePrice": 45.00, "ShippingCost": 2.00, "Unit": "SquareMeter", "Hex": "#1A1A1A" },
+        { "Code": "HIDE-BROWN", "Name": "Hide Brown", "PurchasePrice": 45.00, "ShippingCost": 2.00, "Unit": "SquareMeter", "Hex": "#5A3A22" }
       ]
     },
     {
       "Code": "HIDE-THICK", "PriceGroupCode": "PGLT",
       "Colors": [
-        { "Code": "HIDE-THICK-ESPRESSO", "Name": "Hide Thick Espresso", "PurchasePrice": 52.00, "ShippingCost": 2.50, "Unit": "SquareMeter" },
-        { "Code": "HIDE-THICK-CHARCOAL", "Name": "Hide Thick Charcoal", "PurchasePrice": 52.00, "ShippingCost": 2.50, "Unit": "SquareMeter" }
+        { "Code": "HIDE-THICK-ESPRESSO", "Name": "Hide Thick Espresso", "PurchasePrice": 52.00, "ShippingCost": 2.50, "Unit": "SquareMeter", "Hex": "#3B2417" },
+        { "Code": "HIDE-THICK-CHARCOAL", "Name": "Hide Thick Charcoal", "PurchasePrice": 52.00, "ShippingCost": 2.50, "Unit": "SquareMeter", "Hex": "#36393B" }
       ]
     }
   ],

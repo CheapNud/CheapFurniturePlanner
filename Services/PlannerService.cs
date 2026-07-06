@@ -3,6 +3,7 @@ using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Repositories;
 using CheapFurniturePlanner.ViewModels;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace CheapFurniturePlanner.Services;
 
@@ -49,6 +50,15 @@ public class PlannerService
                 CreatedAt = DateTime.UtcNow
             };
 
+            plannerItem.ElementCode = furnitureViewModel.ElementCode;
+            plannerItem.CatalogueVersion = furnitureViewModel.CatalogueVersion;
+            plannerItem.SelectionsJson = furnitureViewModel.Selections.Count > 0
+                ? JsonSerializer.Serialize(furnitureViewModel.Selections)
+                : furnitureViewModel.SelectionsJson;
+            plannerItem.FabricColorCode = furnitureViewModel.FabricColorCode;
+            plannerItem.CachedVariantCode = furnitureViewModel.CachedVariantCode;
+            plannerItem.CachedUnitPrice = furnitureViewModel.CachedUnitPrice;
+
             var addedItem = await _repository.AddPlannerFurnitureItemAsync(plannerItem, cancellationToken);
 
             _logger.LogInformation("Added furniture {FurnitureId} to room plan {RoomPlanId}",
@@ -91,6 +101,15 @@ public class PlannerService
             existingItem.GroupId = furnitureViewModel.GroupID;
             existingItem.CustomName = furnitureViewModel.CustomName;
             existingItem.Notes = furnitureViewModel.Notes;
+
+            existingItem.ElementCode = furnitureViewModel.ElementCode;
+            existingItem.CatalogueVersion = furnitureViewModel.CatalogueVersion;
+            existingItem.SelectionsJson = furnitureViewModel.Selections.Count > 0
+                ? JsonSerializer.Serialize(furnitureViewModel.Selections)
+                : furnitureViewModel.SelectionsJson;
+            existingItem.FabricColorCode = furnitureViewModel.FabricColorCode;
+            existingItem.CachedVariantCode = furnitureViewModel.CachedVariantCode;
+            existingItem.CachedUnitPrice = furnitureViewModel.CachedUnitPrice;
 
             await _repository.UpdatePlannerFurnitureItemAsync(existingItem, cancellationToken);
 
@@ -238,6 +257,16 @@ public class PlannerService
                     existingItem.GroupId = viewModel.GroupID;
                     existingItem.CustomName = viewModel.CustomName;
                     existingItem.Notes = viewModel.Notes;
+
+                    existingItem.ElementCode = viewModel.ElementCode;
+                    existingItem.CatalogueVersion = viewModel.CatalogueVersion;
+                    existingItem.SelectionsJson = viewModel.Selections.Count > 0
+                        ? JsonSerializer.Serialize(viewModel.Selections)
+                        : viewModel.SelectionsJson;
+                    existingItem.FabricColorCode = viewModel.FabricColorCode;
+                    existingItem.CachedVariantCode = viewModel.CachedVariantCode;
+                    existingItem.CachedUnitPrice = viewModel.CachedUnitPrice;
+
                     itemsToUpdate.Add(existingItem);
                 }
             }
@@ -305,6 +334,15 @@ public class PlannerService
 
         return result;
     }
+
+    /// <summary>
+    /// Deserializes a placement's SelectionsJson into the editable Selections dictionary.
+    /// Returns an empty dictionary for null/empty input or malformed JSON.
+    /// </summary>
+    public static Dictionary<string, string> DeserializeSelections(string? json) =>
+        string.IsNullOrEmpty(json)
+            ? []
+            : JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? [];
 
     private static bool CheckOverlap(FurniturePlannerViewModel item1, FurniturePlannerViewModel item2)
     {

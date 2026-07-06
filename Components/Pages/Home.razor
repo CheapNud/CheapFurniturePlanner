@@ -398,7 +398,16 @@
                         FurnitureLength = furniture.FurnitureLength,
                         FurnitureHeight = furniture.FurnitureHeight,
                         ImageUrl = furniture.ImageUrl,
-                        Price = furniture.Price
+                        Price = furniture.Price,
+                        // Config fields (Phase 2B) - without these an element placement duplicates with
+                        // ElementCode=null and its configuration/price silently reset.
+                        ElementCode = furniture.ElementCode,
+                        CatalogueVersion = furniture.CatalogueVersion,
+                        SelectionsJson = furniture.SelectionsJson,
+                        FabricColorCode = furniture.FabricColorCode,
+                        CachedVariantCode = furniture.CachedVariantCode,
+                        CachedUnitPrice = furniture.CachedUnitPrice,
+                        Selections = new Dictionary<string, string>(furniture.Selections)
                     };
 
                     await PlannerService.AddFurnitureToRoomAsync(newPlan.Id, duplicatedFurniture);

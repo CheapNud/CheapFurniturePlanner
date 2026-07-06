@@ -14,9 +14,9 @@ public class FurniturePlannerViewModel
     public int UIId { get; set; }
 
     /// <summary>
-    /// Reference to the furniture catalog item
+    /// Reference to the furniture catalog item (legacy flat-catalog link; null for element placements)
     /// </summary>
-    public int FurnitureItemId { get; set; }
+    public int? FurnitureItemId { get; set; }
 
     /// <summary>
     /// Furniture item code
@@ -146,6 +146,18 @@ public class FurniturePlannerViewModel
     [JsonIgnore]
     public int? SnapTargetUIId { get; set; }
 
+    // --- configuration payload (Phase 2B) ---
+    public string? ElementCode { get; set; }
+    public string? CatalogueVersion { get; set; }
+    public string? SelectionsJson { get; set; }
+    public string? FabricColorCode { get; set; }
+    public string? CachedVariantCode { get; set; }
+    public decimal? CachedUnitPrice { get; set; }
+
+    /// <summary>Editable in-memory form of SelectionsJson (OptionDefinitionCode -> OptionChoiceCode).</summary>
+    [JsonIgnore]
+    public Dictionary<string, string> Selections { get; set; } = [];
+
     /// <summary>
     /// Creates a clone of this furniture item for adding to the planner
     /// </summary>
@@ -171,7 +183,14 @@ public class FurniturePlannerViewModel
             ImageUrl = ImageUrl,
             Price = Price,
             Brand = Brand,
-            Model = Model
+            Model = Model,
+            ElementCode = ElementCode,
+            CatalogueVersion = CatalogueVersion,
+            SelectionsJson = SelectionsJson,
+            FabricColorCode = FabricColorCode,
+            CachedVariantCode = CachedVariantCode,
+            CachedUnitPrice = CachedUnitPrice,
+            Selections = new Dictionary<string, string>(Selections)
         };
     }
 }

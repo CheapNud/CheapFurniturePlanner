@@ -260,6 +260,7 @@
 .furniture-card {
     transition: all 0.2s ease-in-out;
     height: 100%;
+    cursor: pointer;
 }
 
     .furniture-card:hover {
@@ -270,6 +271,55 @@
     .furniture-card .mud-card-content {
         padding: 12px;
         text-align: center;
+    }
+
+/* Scrollable list of catalogue elements inside the Add Furniture dialog */
+.furniture-dialog-scroll {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Placeholder thumbnail shown for a catalogue element without an image */
+.furniture-card-placeholder {
+    height: 100px;
+    background-color: #f5f5f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+
+/* Configuration panel (right-hand column hosting FurnitureConfigPanel) */
+.config-panel {
+    max-height: calc(100vh - 220px);
+    overflow-y: auto;
+}
+
+.config-panel-errors {
+    margin-bottom: 4px;
+}
+
+.fabric-swatch-row {
+    flex-wrap: wrap;
+}
+
+.fabric-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 2px solid #ddd;
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+    .fabric-swatch:hover {
+        transform: scale(1.08);
+    }
+
+    .fabric-swatch.selected {
+        border-color: #1976d2;
+        box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.4);
     }
 
 /* Responsive adjustments */
@@ -295,6 +345,16 @@
     .width-text, .height-text {
         font-size: 8px;
         padding: 1px 2px;
+    }
+
+    /* Config panel stacks below the canvas instead of scrolling in a fixed side column */
+    .config-panel {
+        max-height: none;
+    }
+
+    .fabric-swatch {
+        width: 28px;
+        height: 28px;
     }
 }
 
@@ -363,5 +423,14 @@
         background-color: rgba(0, 0, 0, 0.8);
         color: #fff;
         border-color: #555;
+    }
+
+    .fabric-swatch {
+        border-color: #666;
+    }
+
+    .fabric-swatch.selected {
+        border-color: #64b5f6;
+        box-shadow: 0 0 0 2px rgba(100, 181, 246, 0.5);
     }
 }
