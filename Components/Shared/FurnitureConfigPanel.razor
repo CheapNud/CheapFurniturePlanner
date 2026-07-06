@@ -12,7 +12,7 @@
 
 @if (Placement is null)
 {
-    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="config-panel">Select an item to configure it.</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="config-panel">Select an element to configure it.</MudText>
 }
 else
 {
@@ -137,7 +137,7 @@ else
         _snapshot = await CatalogueSource.GetCurrentAsync();
         _element = _snapshot.Models.SelectMany(m => m.Elements).FirstOrDefault(e => e.Code == Placement.ElementCode);
         RecomputeVisible();
-        await RepriceAndNotify();
+        await Reprice();
     }
 
     /// <summary>Signature of the parts of a placement that affect its price/visible options.</summary>
@@ -186,7 +186,13 @@ else
         await RepriceAndNotify();
     }
 
-    private async Task RepriceAndNotify()
+    /// <summary>
+    /// Recomputes price/variant/errors for the current placement and updates the cached display
+    /// fields. Used for both display-only repricing (initial load/selection) and genuine edits -
+    /// it never raises <see cref="OnConfigured"/> itself; callers that represent a genuine edit
+    /// should call <see cref="RepriceAndNotify"/> instead.
+    /// </summary>
+    private async Task Reprice()
     {
         if (Placement is null)
         {
@@ -217,7 +223,18 @@ else
             Placement.CachedUnitPrice = null;
             Placement.CachedVariantCode = null;
         }
+    }
 
+    /// <summary>
+    /// Reprices after a genuine configuration edit (option change or fabric selection) and notifies
+    /// the parent via <see cref="OnConfigured"/> so it can persist the change and mark the plan dirty.
+    /// Must NOT be used for display-only repricing (e.g. selecting an already-placed item to inspect
+    /// it) - that path should call <see cref="Reprice"/> directly, otherwise merely viewing an item
+    /// would spuriously dirty the plan and write to the DB.
+    /// </summary>
+    private async Task RepriceAndNotify()
+    {
+        await Reprice();
         await OnConfigured.InvokeAsync();
     }
 

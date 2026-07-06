@@ -117,6 +117,27 @@ public class FurnitureConfigPanelTests : TestContext
     }
 
     [Fact]
+    public void InitialRender_DoesNotRaiseOnConfigured()
+    {
+        // Selecting an already-placed item to inspect it must not look like an edit: the initial/
+        // selection-driven reprice in OnParametersSetAsync updates the display + cached price fields
+        // but must not notify the parent, otherwise merely viewing an item would dirty the plan and
+        // trigger a DB write (see PlannerPage.HandleConfigured).
+        ConfigureServices();
+        var placement = Fj3Placement();
+        var raisedCount = 0;
+
+        var cut = RenderComponent<FurnitureConfigPanel>(p =>
+        {
+            p.Add(x => x.Placement, placement);
+            p.Add(x => x.OnConfigured, EventCallback.Factory.Create(this, () => raisedCount++));
+        });
+
+        Assert.Equal(0, raisedCount);
+        Assert.NotNull(placement.CachedUnitPrice); // display state still gets primed
+    }
+
+    [Fact]
     public async Task ChangingOption_RaisesOnConfigured()
     {
         ConfigureServices();
@@ -129,9 +150,29 @@ public class FurnitureConfigPanelTests : TestContext
             p.Add(x => x.OnConfigured, EventCallback.Factory.Create(this, () => raisedCount++));
         });
 
-        var initialCount = raisedCount; // OnParametersSetAsync already prices (and notifies) once on first render
+        var initialCount = raisedCount; // initial render reprices for display only - does not notify
         var stitch = FindSelect(cut, "STITCH");
         await cut.InvokeAsync(() => stitch.Instance.ValueChanged.InvokeAsync("CONTRAST"));
+
+        Assert.True(raisedCount > initialCount);
+    }
+
+    [Fact]
+    public async Task SelectingFabricChip_RaisesOnConfigured()
+    {
+        ConfigureServices();
+        var placement = Fj3Placement();
+        var raisedCount = 0;
+
+        var cut = RenderComponent<FurnitureConfigPanel>(p =>
+        {
+            p.Add(x => x.Placement, placement);
+            p.Add(x => x.OnConfigured, EventCallback.Factory.Create(this, () => raisedCount++));
+        });
+
+        var initialCount = raisedCount;
+        var terraChip = cut.FindAll(".fabric-swatch").Single(e => e.GetAttribute("title") == "Terra Sand");
+        await cut.InvokeAsync(() => terraChip.Click());
 
         Assert.True(raisedCount > initialCount);
     }

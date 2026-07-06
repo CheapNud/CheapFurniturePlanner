@@ -362,13 +362,13 @@ else
     private Task HandleSelectionChanged(FurniturePlannerViewModel? item)
     {
         _selectedItem = item;
-        StateHasChanged();
         return Task.CompletedTask;
     }
 
     /// <summary>
     /// Persists the selected placement's configuration (options/fabric/price) whenever
-    /// <see cref="FurnitureConfigPanel"/> reprices it, and marks the room dirty for auto-save.
+    /// <see cref="FurnitureConfigPanel"/> reports a genuine edit (not a display-only reprice from
+    /// merely selecting an item), and marks the room dirty for auto-save.
     /// </summary>
     private async Task HandleConfigured()
     {
@@ -378,7 +378,6 @@ else
         }
 
         _hasUnsavedChanges = true;
-        StateHasChanged();
     }
 
     private async Task OnFurnitureAdded(FurniturePlannerViewModel furniture)
