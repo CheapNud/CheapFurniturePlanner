@@ -272,6 +272,39 @@
         text-align: center;
     }
 
+/* Configuration panel (right-hand column hosting FurnitureConfigPanel) */
+.config-panel {
+    max-height: calc(100vh - 220px);
+    overflow-y: auto;
+}
+
+.config-panel-errors {
+    margin-bottom: 4px;
+}
+
+.fabric-swatch-row {
+    flex-wrap: wrap;
+}
+
+.fabric-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 2px solid #ddd;
+    box-sizing: border-box;
+    cursor: pointer;
+    transition: transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+    .fabric-swatch:hover {
+        transform: scale(1.08);
+    }
+
+    .fabric-swatch.selected {
+        border-color: #1976d2;
+        box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.4);
+    }
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .furniture-planner-container {
@@ -295,6 +328,16 @@
     .width-text, .height-text {
         font-size: 8px;
         padding: 1px 2px;
+    }
+
+    /* Config panel stacks below the canvas instead of scrolling in a fixed side column */
+    .config-panel {
+        max-height: none;
+    }
+
+    .fabric-swatch {
+        width: 28px;
+        height: 28px;
     }
 }
 
@@ -363,5 +406,14 @@
         background-color: rgba(0, 0, 0, 0.8);
         color: #fff;
         border-color: #555;
+    }
+
+    .fabric-swatch {
+        border-color: #666;
+    }
+
+    .fabric-swatch.selected {
+        border-color: #64b5f6;
+        box-shadow: 0 0 0 2px rgba(100, 181, 246, 0.5);
     }
 }

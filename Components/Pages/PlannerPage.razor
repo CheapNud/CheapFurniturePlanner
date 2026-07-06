@@ -108,16 +108,32 @@
         </MudStack>
     </MudPaper>
 
-    <!-- Main Planner Component -->
-    <FurniturePlannerContainer RoomPlan="@_roomPlan"
-                      SelectedFurniture="@_selectedFurniture"
-                      AvailableFurniture="@_availableFurniture"
-                      AvailableElements="@_availableElements"
-                      SelectedFurnitureChanged="OnSelectedFurnitureChanged"
-                      OnFurnitureAdded="OnFurnitureAdded"
-                      OnFurnitureRemoved="OnFurnitureRemoved"
-                      OnFurnitureModified="OnFurnitureModified"
-                      SelectedItemChanged="OnSelectedItemChanged" />
+    <!-- Main Planner Component + Configuration Panel -->
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <FurniturePlannerContainer RoomPlan="@_roomPlan"
+                              SelectedFurniture="@_selectedFurniture"
+                              AvailableFurniture="@_availableFurniture"
+                              AvailableElements="@_availableElements"
+                              SelectedFurnitureChanged="OnSelectedFurnitureChanged"
+                              OnFurnitureAdded="OnFurnitureAdded"
+                              OnFurnitureRemoved="OnFurnitureRemoved"
+                              OnFurnitureModified="OnFurnitureModified"
+                              SelectedItemChanged="HandleSelectionChanged" />
+        </MudItem>
+        <MudItem xs="12" md="4">
+            @if (_selectedItem is not null)
+            {
+                <FurnitureConfigPanel Placement="_selectedItem" OnConfigured="HandleConfigured" />
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="config-panel">
+                    Select an element to configure it.
+                </MudText>
+            }
+        </MudItem>
+    </MudGrid>
 
     <!-- Room Settings Dialog -->
     <MudDialog @bind-Visible="_roomSettingsOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium })">
@@ -278,6 +294,14 @@ else
             if (_roomPlan != null)
             {
                 _selectedFurniture = _roomPlan.FurnitureItems.ToList();
+
+                // Config + Selections are already restored from SelectionsJson (RoomPlanService);
+                // reprice against the current catalogue snapshot so cached prices stay fresh.
+                foreach (var placement in _selectedFurniture.Where(f => !string.IsNullOrEmpty(f.ElementCode)))
+                {
+                    await RepriceAsync(placement);
+                }
+
                 _editingRoomPlan = new RoomPlanViewModel
                 {
                     Id = _roomPlan.Id,
@@ -335,10 +359,26 @@ else
         await InvokeAsync(StateHasChanged);
     }
 
-    private Task OnSelectedItemChanged(FurniturePlannerViewModel? item)
+    private Task HandleSelectionChanged(FurniturePlannerViewModel? item)
     {
         _selectedItem = item;
+        StateHasChanged();
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Persists the selected placement's configuration (options/fabric/price) whenever
+    /// <see cref="FurnitureConfigPanel"/> reprices it, and marks the room dirty for auto-save.
+    /// </summary>
+    private async Task HandleConfigured()
+    {
+        if (_selectedItem is not null)
+        {
+            await PlannerService.UpdateFurniturePositionAsync(RoomPlanId, _selectedItem);
+        }
+
+        _hasUnsavedChanges = true;
+        StateHasChanged();
     }
 
     private async Task OnFurnitureAdded(FurniturePlannerViewModel furniture)

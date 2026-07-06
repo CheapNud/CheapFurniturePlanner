@@ -105,10 +105,19 @@ else
     private string? _variantCode;
     private List<PricingError> _errors = [];
 
+    // Perf guard: the panel sits next to the drag-sensitive canvas, which re-renders the whole
+    // page frequently (e.g. auto-save ticks, unrelated selection churn). Track the placement
+    // instance + a signature of its priceable state so OnParametersSetAsync only reloads/reprices
+    // when the selection actually changed or its configuration was actually mutated.
+    private FurniturePlannerViewModel? _lastPricedPlacement;
+    private string? _lastPricedSignature;
+
     protected override async Task OnParametersSetAsync()
     {
         if (Placement is null)
         {
+            _lastPricedPlacement = null;
+            _lastPricedSignature = null;
             _element = null;
             _visibleOptions = [];
             _fabricGroups = [];
@@ -119,11 +128,24 @@ else
             return;
         }
 
+        if (ReferenceEquals(_lastPricedPlacement, Placement) && BuildSignature(Placement) == _lastPricedSignature)
+        {
+            // Same placement, unchanged config since the last (re)price — skip the reload/reprice.
+            return;
+        }
+
         _snapshot = await CatalogueSource.GetCurrentAsync();
         _element = _snapshot.Models.SelectMany(m => m.Elements).FirstOrDefault(e => e.Code == Placement.ElementCode);
         RecomputeVisible();
         await RepriceAndNotify();
     }
+
+    /// <summary>Signature of the parts of a placement that affect its price/visible options.</summary>
+    private static string BuildSignature(FurniturePlannerViewModel placement) =>
+        $"{placement.ElementCode}|{placement.FabricColorCode}|" +
+        string.Join(',', placement.Selections
+            .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => $"{kv.Key}={kv.Value}"));
 
     private void RecomputeVisible()
     {
@@ -170,6 +192,11 @@ else
         {
             return;
         }
+
+        // Record the state we're pricing now so a subsequent OnParametersSetAsync triggered by an
+        // unrelated parent re-render (same instance, same config) can skip redundant work.
+        _lastPricedPlacement = Placement;
+        _lastPricedSignature = BuildSignature(Placement);
 
         var result = await PricingService.PriceAsync(Placement);
         if (result.IsSuccess && result.Breakdown is not null && result.Breakdown.Elements.Count > 0)
