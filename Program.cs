@@ -1,5 +1,6 @@
 ﻿using CheapAvaloniaBlazor.Hosting;
 using CheapAvaloniaBlazor.Extensions;
+using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Mappings;
 using CheapFurniturePlanner.Models;
@@ -50,6 +51,7 @@ class Program
         builder.Services.AddScoped<IMapper, ServiceMapper>();
 
         // Add furniture planner services
+        builder.Services.AddSingleton<ICatalogueSource, DbCatalogueSource>();
         builder.Services.AddScoped<FurniturePlannerRepository>();
         builder.Services.AddScoped<FurnitureCatalogService>();
         builder.Services.AddScoped<RoomPlanService>();
