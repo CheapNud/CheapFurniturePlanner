@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapFurniturePlanner project work tracker
-  Last updated: 2026-03-28
+  Last updated: 2026-07-05
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -32,7 +32,12 @@ _Nothing blocking._
 
 ## Planned
 
-_Nothing planned._
+- [ ] (2026-07-05) variant code: validate option/element codes exclude '-' and ':' separators (Domain/Pricing/VariantCode.cs) [audit]
+- [ ] (2026-07-05) pricing: enforce MaterialKind match between fabric color's price group and price group kind (Domain/Pricing/Engine/ResolveStage.cs) [audit]
+- [ ] (2026-07-05) pricing: add subtotal-stage rounding coverage (no market/test currently enables RoundStage.Subtotal) [audit]
+- [ ] (2026-07-05) pricing: consult FabricOption.Required for optional fabric options (Domain/Pricing/Engine/ResolveStage.cs) [audit]
+- [ ] (2026-07-05) serialization: add property-order pin test asserting PriceBreakdown's canonical key sequence [audit]
+- [ ] (2026-07-05) pricing: substitution rules only rewrite foam and misc lines; extend or document (Domain/Pricing/Engine/ResolveStage.cs) [audit]
 
 ## Future
 

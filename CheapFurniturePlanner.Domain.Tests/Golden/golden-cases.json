@@ -1,0 +1,135 @@
+[
+  {
+    "Name": "std-plain-aqua-euw",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "NONE", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  },
+  {
+    "Name": "deep-conditioned-foam",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 1, "ChoiceSelections": { "DEPTH": "DEEP", "MECH": "NONE", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  },
+  {
+    "Name": "rec-substitution-head",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "REC", "HEAD": "HS1", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  },
+  {
+    "Name": "contrast-surcharge",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "NONE", "STITCH": "CONTRAST" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  },
+  {
+    "Name": "hide-leather",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "NONE", "STITCH": "PLAIN" }, "FabricColorCode": "HIDE-BLACK" }
+      ]
+    }
+  },
+  {
+    "Name": "fjch-secondary-metrage",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJCH", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "NONE", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  },
+  {
+    "Name": "multi-element-document",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "NONE", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" },
+        { "ElementCode": "FJ3", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "NONE", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  },
+  {
+    "Name": "eun-additive-market",
+    "Market": "EUN",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "NONE", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  },
+  {
+    "Name": "seller-multiplier",
+    "Market": "EUW",
+    "SellerMultiplier": 1.15,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "NONE", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  },
+  {
+    "Name": "rounding-stage-precision",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 1, "ChoiceSelections": { "DEPTH": "STD", "MECH": "REC", "HEAD": "HS2", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  },
+  {
+    "Name": "combination-deep-rec",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 1, "ChoiceSelections": { "DEPTH": "DEEP", "MECH": "REC", "HEAD": "HS1", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  },
+  {
+    "Name": "quantity-two",
+    "Market": "EUW",
+    "SellerMultiplier": 1.0,
+    "Configuration": {
+      "ModelCode": "FJORD",
+      "Selections": [
+        { "ElementCode": "FJ2", "Quantity": 2, "ChoiceSelections": { "DEPTH": "STD", "MECH": "NONE", "STITCH": "PLAIN" }, "FabricColorCode": "AQUA-BLUE" }
+      ]
+    }
+  }
+]

@@ -56,4 +56,11 @@
     <Folder Include="Assets\Images\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
+    <Content Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
+    <None Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
+    <EmbeddedResource Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
+  </ItemGroup>
+
 </Project>

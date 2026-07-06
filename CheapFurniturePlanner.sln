@@ -5,6 +5,10 @@ VisualStudioVersion = 18.0.11123.170 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheapFurniturePlanner", "CheapFurniturePlanner.csproj", "{C865BB4A-A1D5-40FF-8F32-2F024BEEDADC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheapFurniturePlanner.Domain", "CheapFurniturePlanner.Domain\CheapFurniturePlanner.Domain.csproj", "{25ACC916-D376-4BC7-9A88-F3D072B141D0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CheapFurniturePlanner.Domain.Tests", "CheapFurniturePlanner.Domain.Tests\CheapFurniturePlanner.Domain.Tests.csproj", "{8AC01D64-706E-4C78-B901-EBB879F2EA7F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +19,14 @@ Global
 		{C865BB4A-A1D5-40FF-8F32-2F024BEEDADC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C865BB4A-A1D5-40FF-8F32-2F024BEEDADC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C865BB4A-A1D5-40FF-8F32-2F024BEEDADC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{25ACC916-D376-4BC7-9A88-F3D072B141D0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{25ACC916-D376-4BC7-9A88-F3D072B141D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{25ACC916-D376-4BC7-9A88-F3D072B141D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{25ACC916-D376-4BC7-9A88-F3D072B141D0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8AC01D64-706E-4C78-B901-EBB879F2EA7F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8AC01D64-706E-4C78-B901-EBB879F2EA7F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8AC01D64-706E-4C78-B901-EBB879F2EA7F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8AC01D64-706E-4C78-B901-EBB879F2EA7F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
