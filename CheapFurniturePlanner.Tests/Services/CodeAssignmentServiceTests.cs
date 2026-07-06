@@ -8,25 +8,28 @@ namespace CheapFurniturePlanner.Tests.Services;
 
 public class CodeAssignmentServiceTests
 {
-    // Mirrors SchemaTests.NewContext(): the connection is not owned by the context, so callers
-    // must dispose it themselves to keep the in-memory database alive for the test's duration.
-    private static (FurniturePlannerContext Context, Microsoft.Data.Sqlite.SqliteConnection Connection) NewContext()
+    // Mirrors DbCatalogueSourceTests.NewFactory(): the connection is not owned by any single context
+    // handed out by the factory, so callers must dispose it themselves to keep the in-memory database
+    // alive for the test's duration. CodeAssignmentService now depends on IDbContextFactory (matching
+    // Program.cs's AddDbContextFactory registration) rather than a directly-injected context.
+    private static (IDbContextFactory<FurniturePlannerContext> Factory, Microsoft.Data.Sqlite.SqliteConnection Connection) NewFactory()
     {
         var conn = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
         conn.Open();
         var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
-        var ctx = new FurniturePlannerContext(options);
-        ctx.Database.Migrate();
-        return (ctx, conn);
+        using (var migrateContext = new FurniturePlannerContext(options))
+        {
+            migrateContext.Database.Migrate();
+        }
+        return (new TestDbContextFactory(options), conn);
     }
 
     [Fact]
     public async Task RegisterVariantAsync_IsIdempotent_AndCreatesDraftModelState()
     {
-        var (ctx, conn) = NewContext();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        using var ctxDispose = ctx;
-        var service = new CodeAssignmentService(ctx);
+        var service = new CodeAssignmentService(factory);
 
         await service.RegisterVariantAsync("FJORD", "FJ3-__MATERIAL__:Fabric");
         await service.RegisterVariantAsync("FJORD", "FJ3-__MATERIAL__:Fabric");
@@ -35,17 +38,16 @@ public class CodeAssignmentServiceTests
         Assert.Single(rows);
         Assert.Null(rows[0].SuggestedCode);
 
-        var state = await ctx.ModelStates.SingleAsync(s => s.ModelCode == "FJORD");
-        Assert.Equal(TradeItemState.Draft, state.State);
+        var state = await service.GetModelStateAsync("FJORD");
+        Assert.Equal(TradeItemState.Draft, state);
     }
 
     [Fact]
     public async Task GetModelStateAsync_UnseenModel_ReturnsDraft()
     {
-        var (ctx, conn) = NewContext();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        using var ctxDispose = ctx;
-        var service = new CodeAssignmentService(ctx);
+        var service = new CodeAssignmentService(factory);
 
         var state = await service.GetModelStateAsync("UNSEEN");
 
@@ -55,10 +57,9 @@ public class CodeAssignmentServiceTests
     [Fact]
     public async Task AssignAsync_WhileDraft_PersistsTrimmedCodeAndNotes()
     {
-        var (ctx, conn) = NewContext();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        using var ctxDispose = ctx;
-        var service = new CodeAssignmentService(ctx);
+        var service = new CodeAssignmentService(factory);
 
         await service.RegisterVariantAsync("FJORD", "FJ3-__MATERIAL__:Fabric");
         var template = (await service.GetForModelAsync("FJORD")).Single();
@@ -76,10 +77,9 @@ public class CodeAssignmentServiceTests
     [Fact]
     public async Task ReleaseModelAsync_FreezesModel_SubsequentAssignThrows()
     {
-        var (ctx, conn) = NewContext();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        using var ctxDispose = ctx;
-        var service = new CodeAssignmentService(ctx);
+        var service = new CodeAssignmentService(factory);
 
         await service.RegisterVariantAsync("FJORD", "FJ3-__MATERIAL__:Fabric");
         var template = (await service.GetForModelAsync("FJORD")).Single();
@@ -93,10 +93,9 @@ public class CodeAssignmentServiceTests
     [Fact]
     public async Task SuggestionsForModelAsync_ExcludesNullCodeRows()
     {
-        var (ctx, conn) = NewContext();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        using var ctxDispose = ctx;
-        var service = new CodeAssignmentService(ctx);
+        var service = new CodeAssignmentService(factory);
 
         await service.RegisterVariantAsync("FJORD", "FJ3-__MATERIAL__:Fabric");
         await service.RegisterVariantAsync("FJORD", "FJ3-__MATERIAL__:Leather");
@@ -109,5 +108,12 @@ public class CodeAssignmentServiceTests
         Assert.Single(suggestions);
         Assert.False(suggestions.ContainsKey("FJ3-__MATERIAL__:Leather"));
         Assert.Equal("18E", suggestions["FJ3-__MATERIAL__:Fabric"]);
+    }
+
+    private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new(options);
+
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
     }
 }

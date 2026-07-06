@@ -67,8 +67,8 @@ public class FurnitureConfigPanelTests : TestContext
         Services.AddMudServices();
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(snapshot));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
-        Services.AddSingleton(sp => new FurniturePlannerContext(dbOptions));
-        Services.AddSingleton(sp => new CodeAssignmentService(sp.GetRequiredService<FurniturePlannerContext>()));
+        Services.AddSingleton<IDbContextFactory<FurniturePlannerContext>>(new TestDbContextFactory(dbOptions));
+        Services.AddSingleton(sp => new CodeAssignmentService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<CodeAssignmentService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
@@ -81,6 +81,13 @@ public class FurnitureConfigPanelTests : TestContext
 
     private static IRenderedComponent<MudSelect<string>> FindSelect(IRenderedComponent<FurnitureConfigPanel> cut, string optionDefinitionCode) =>
         cut.FindComponents<MudSelect<string>>().Single(c => c.Instance.Label == optionDefinitionCode);
+
+    private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new(options);
+
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
 
     [Fact]
     public void Render_ShowsOneSelectPerVisibleOption_AndHidesTriggerGatedOption()
@@ -264,14 +271,11 @@ public class FurnitureConfigPanelTests : TestContext
             [new ElementSelection("FJ3", 1, placement.Selections, placement.FabricColorCode)]);
         var variantCode = ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), Domain.Catalog.TradeItemState.Draft)[0].VariantCode;
 
-        using (var seedContext = new FurniturePlannerContext(dbOptions))
-        {
-            var seedAssignments = new CodeAssignmentService(seedContext);
-            await seedAssignments.RegisterVariantAsync("FJORD", variantCode);
-            var template = (await seedAssignments.GetForModelAsync("FJORD")).Single(t => t.VariantCode == variantCode);
-            await seedAssignments.AssignAsync(template.Id, "18E", null);
-            await seedAssignments.ReleaseModelAsync("FJORD");
-        }
+        var seedAssignments = new CodeAssignmentService(new TestDbContextFactory(dbOptions));
+        await seedAssignments.RegisterVariantAsync("FJORD", variantCode);
+        var template = (await seedAssignments.GetForModelAsync("FJORD")).Single(t => t.VariantCode == variantCode);
+        await seedAssignments.AssignAsync(template.Id, "18E", null);
+        await seedAssignments.ReleaseModelAsync("FJORD");
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
 

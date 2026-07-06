@@ -7,11 +7,12 @@ namespace CheapFurniturePlanner.Services;
 
 public sealed class TemplateFrozenException(string modelCode) : Exception($"Model '{modelCode}' is not in Draft; codes are frozen.");
 
-public sealed class CodeAssignmentService(FurniturePlannerContext db)
+public sealed class CodeAssignmentService(IDbContextFactory<FurniturePlannerContext> factory)
 {
     public async Task RegisterVariantAsync(string modelCode, string variantCode, CancellationToken ct = default)
     {
-        await EnsureModelStateAsync(modelCode, ct);
+        await using var db = await factory.CreateDbContextAsync(ct);
+        await EnsureModelStateAsync(db, modelCode, ct);
         var exists = await db.VariantCodeTemplates.AnyAsync(t => t.ModelCode == modelCode && t.VariantCode == variantCode, ct);
         if (exists) { return; }
         var now = DateTime.UtcNow;
@@ -19,17 +20,24 @@ public sealed class CodeAssignmentService(FurniturePlannerContext db)
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<IReadOnlyList<VariantCodeTemplate>> GetForModelAsync(string modelCode, CancellationToken ct = default) =>
-        await db.VariantCodeTemplates.Where(t => t.ModelCode == modelCode).OrderBy(t => t.VariantCode).AsNoTracking().ToListAsync(ct);
+    public async Task<IReadOnlyList<VariantCodeTemplate>> GetForModelAsync(string modelCode, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.VariantCodeTemplates.Where(t => t.ModelCode == modelCode).OrderBy(t => t.VariantCode).AsNoTracking().ToListAsync(ct);
+    }
 
-    public async Task<TradeItemState> GetModelStateAsync(string modelCode, CancellationToken ct = default) =>
-        (await db.ModelStates.AsNoTracking().FirstOrDefaultAsync(s => s.ModelCode == modelCode, ct))?.State ?? TradeItemState.Draft;
+    public async Task<TradeItemState> GetModelStateAsync(string modelCode, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await GetModelStateAsync(db, modelCode, ct);
+    }
 
     public async Task AssignAsync(int templateId, string? code, string? notes, CancellationToken ct = default)
     {
+        await using var db = await factory.CreateDbContextAsync(ct);
         var template = await db.VariantCodeTemplates.FirstOrDefaultAsync(t => t.Id == templateId, ct)
             ?? throw new InvalidOperationException($"Template {templateId} not found.");
-        if (await GetModelStateAsync(template.ModelCode, ct) != TradeItemState.Draft)
+        if (await GetModelStateAsync(db, template.ModelCode, ct) != TradeItemState.Draft)
         {
             throw new TemplateFrozenException(template.ModelCode);
         }
@@ -39,24 +47,31 @@ public sealed class CodeAssignmentService(FurniturePlannerContext db)
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<IReadOnlyDictionary<string, string>> SuggestionsForModelAsync(string modelCode, CancellationToken ct = default) =>
-        await db.VariantCodeTemplates
+    public async Task<IReadOnlyDictionary<string, string>> SuggestionsForModelAsync(string modelCode, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.VariantCodeTemplates
             .Where(t => t.ModelCode == modelCode && t.SuggestedCode != null)
             .AsNoTracking()
             .ToDictionaryAsync(t => t.VariantCode, t => t.SuggestedCode!, ct);
+    }
 
     public Task ReleaseModelAsync(string modelCode, CancellationToken ct = default) => TransitionAsync(modelCode, TradeItemState.Draft, TradeItemState.Active, ct);
     public Task DiscontinueModelAsync(string modelCode, CancellationToken ct = default) => TransitionAsync(modelCode, TradeItemState.Active, TradeItemState.Discontinued, ct);
 
     private async Task TransitionAsync(string modelCode, TradeItemState from, TradeItemState to, CancellationToken ct)
     {
-        var row = await EnsureModelStateAsync(modelCode, ct);
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var row = await EnsureModelStateAsync(db, modelCode, ct);
         if (row.State != from) { throw new InvalidOperationException($"Model '{modelCode}' is {row.State}; cannot transition to {to}."); }
         row.State = to;
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task<ModelStateRecord> EnsureModelStateAsync(string modelCode, CancellationToken ct)
+    private static async Task<TradeItemState> GetModelStateAsync(FurniturePlannerContext db, string modelCode, CancellationToken ct) =>
+        (await db.ModelStates.AsNoTracking().FirstOrDefaultAsync(s => s.ModelCode == modelCode, ct))?.State ?? TradeItemState.Draft;
+
+    private static async Task<ModelStateRecord> EnsureModelStateAsync(FurniturePlannerContext db, string modelCode, CancellationToken ct)
     {
         var row = await db.ModelStates.FirstOrDefaultAsync(s => s.ModelCode == modelCode, ct);
         if (row is null)

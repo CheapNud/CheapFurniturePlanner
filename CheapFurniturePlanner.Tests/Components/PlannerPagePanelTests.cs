@@ -113,8 +113,8 @@ public class PlannerPagePanelTests : TestContext
 
         // FurnitureConfigPanel also resolves/registers the production identity of the selected
         // placement; wire the same DB the placements themselves live in.
-        Services.AddSingleton(sp => new FurniturePlannerContext(options));
-        Services.AddSingleton(sp => new CodeAssignmentService(sp.GetRequiredService<FurniturePlannerContext>()));
+        Services.AddSingleton<IDbContextFactory<FurniturePlannerContext>>(new TestDbContextFactory(options));
+        Services.AddSingleton(sp => new CodeAssignmentService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<CodeAssignmentService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 

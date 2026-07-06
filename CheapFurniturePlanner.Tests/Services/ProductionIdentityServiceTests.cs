@@ -16,16 +16,27 @@ namespace CheapFurniturePlanner.Tests.Services;
 // suggestions + model state so the panel can display the effective code and its status.
 public class ProductionIdentityServiceTests
 {
-    // Mirrors CodeAssignmentServiceTests.NewContext(): the connection is not owned by the context, so
-    // callers must dispose it themselves to keep the in-memory database alive for the test's duration.
-    private static (FurniturePlannerContext Context, Microsoft.Data.Sqlite.SqliteConnection Connection) NewContext()
+    // Mirrors CodeAssignmentServiceTests.NewFactory(): the connection is not owned by any single
+    // context handed out by the factory, so callers must dispose it themselves to keep the in-memory
+    // database alive for the test's duration. CodeAssignmentService now depends on IDbContextFactory
+    // (matching Program.cs's AddDbContextFactory registration) rather than a directly-injected context.
+    private static (IDbContextFactory<FurniturePlannerContext> Factory, Microsoft.Data.Sqlite.SqliteConnection Connection) NewFactory()
     {
         var conn = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
         conn.Open();
         var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
-        var ctx = new FurniturePlannerContext(options);
-        ctx.Database.Migrate();
-        return (ctx, conn);
+        using (var migrateContext = new FurniturePlannerContext(options))
+        {
+            migrateContext.Database.Migrate();
+        }
+        return (new TestDbContextFactory(options), conn);
+    }
+
+    private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new(options);
+
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
     }
 
     private sealed class FakeCatalogueSource(CatalogueSnapshot snapshot) : ICatalogueSource
@@ -56,11 +67,10 @@ public class ProductionIdentityServiceTests
     [Fact]
     public async Task ResolveForPlacementAsync_NoSuggestionYet_ReturnsComposedWithCorrectVariantCode_AndRegistersTemplateRow()
     {
-        var (ctx, conn) = NewContext();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        using var ctxDispose = ctx;
         var snapshot = LoadFjordSnapshot();
-        var assignments = new CodeAssignmentService(ctx);
+        var assignments = new CodeAssignmentService(factory);
         var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot), assignments);
         var placement = Fj2Placement();
 
@@ -83,11 +93,10 @@ public class ProductionIdentityServiceTests
     [Fact]
     public async Task ResolveForPlacementAsync_AfterAssignAndRelease_ReturnsReleasedWithAssignedCode()
     {
-        var (ctx, conn) = NewContext();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        using var ctxDispose = ctx;
         var snapshot = LoadFjordSnapshot();
-        var assignments = new CodeAssignmentService(ctx);
+        var assignments = new CodeAssignmentService(factory);
         var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot), assignments);
         var placement = Fj2Placement();
 
@@ -108,11 +117,10 @@ public class ProductionIdentityServiceTests
     [Fact]
     public async Task ResolveForPlacementAsync_MissingElementCode_ReturnsNull()
     {
-        var (ctx, conn) = NewContext();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        using var ctxDispose = ctx;
         var snapshot = LoadFjordSnapshot();
-        var assignments = new CodeAssignmentService(ctx);
+        var assignments = new CodeAssignmentService(factory);
         var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot), assignments);
         var placement = new FurniturePlannerViewModel { ElementCode = null };
 
