@@ -19,6 +19,10 @@ public sealed class PricingService(ICatalogueSource catalogue)
         {
             return new PricingResult { Errors = [new PricingError(PricingErrorKind.UnknownElement, placement.ElementCode)] };
         }
+        if (snapshot.Markets.Count == 0)
+        {
+            return new PricingResult { Errors = [new PricingError(PricingErrorKind.UnknownMarket, "")] };
+        }
         var config = new ProductConfiguration(modelCode,
             [new ElementSelection(placement.ElementCode, 1, placement.Selections, placement.FabricColorCode)]);
         var market = snapshot.Markets[0]; // demo uses the first market; market selection is a later phase

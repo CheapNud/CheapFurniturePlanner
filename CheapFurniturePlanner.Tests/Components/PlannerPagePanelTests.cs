@@ -55,7 +55,10 @@ public class PlannerPagePanelTests : TestContext
 
     // Mirrors SchemaTests/PlannerConfigPersistenceTests: the connection is not owned by any single
     // context, so the caller must keep it open (and dispose it) for the duration of the test.
-    private static (DbContextOptions<FurniturePlannerContext> Options, SqliteConnection Connection, int RoomId) SeedDatabase(bool withPlacement)
+    private static (DbContextOptions<FurniturePlannerContext> Options, SqliteConnection Connection, int RoomId) SeedDatabase(
+        bool withPlacement,
+        string fabricColorCode = "AQUA-BLUE",
+        Dictionary<string, string>? selections = null)
     {
         var conn = new SqliteConnection("Data Source=:memory:");
         conn.Open();
@@ -80,8 +83,8 @@ public class PlannerPagePanelTests : TestContext
                     Y = 20,
                     ElementCode = "FJ2",
                     CatalogueVersion = "1",
-                    FabricColorCode = "AQUA-BLUE",
-                    SelectionsJson = JsonSerializer.Serialize(new Dictionary<string, string> { ["DEPTH"] = "STD" }),
+                    FabricColorCode = fabricColorCode,
+                    SelectionsJson = JsonSerializer.Serialize(selections ?? new Dictionary<string, string> { ["DEPTH"] = "STD" }),
                     CreatedAt = DateTime.UtcNow
                 });
                 seedContext.SaveChanges();
@@ -143,5 +146,85 @@ public class PlannerPagePanelTests : TestContext
         var panel = Assert.Single(cut.FindComponents<FurnitureConfigPanel>());
         Assert.Equal("FJ2", panel.Instance.Placement?.ElementCode);
         Assert.DoesNotContain("Select an element to configure", cut.Markup);
+    }
+
+    // F1 regression: PlannerFurnitureItem persists no Name/dimensions for element placements, so the
+    // Mapster map alone leaves them empty/null after a reload. PlannerPage.LoadRoomPlan must hydrate
+    // them (via PlannerElementHydrator) against the current catalogue snapshot so the reloaded
+    // placement doesn't render as an invisible 0x0 box.
+    [Fact]
+    public void LoadingRoomPlan_HydratesElementPlacementNameAndDimensions_FromCatalogueSnapshot()
+    {
+        var (options, conn, roomId) = SeedDatabase(withPlacement: true);
+        using var _ = conn;
+        ConfigureServices(options);
+
+        var cut = RenderComponent<PlannerPage>(p => p.Add(x => x.RoomPlanId, roomId));
+
+        var furnitureItem = cut.Find(".furniture-item");
+        cut.InvokeAsync(() => furnitureItem.Click());
+
+        var panel = Assert.Single(cut.FindComponents<FurnitureConfigPanel>());
+        var placement = panel.Instance.Placement!;
+
+        Assert.False(string.IsNullOrEmpty(placement.Name));
+        Assert.Equal("Fjord 2-Seat", placement.Name);
+        Assert.NotNull(placement.FurnitureWidth);
+        Assert.NotNull(placement.FurnitureLength);
+        Assert.NotNull(placement.FurnitureHeight);
+        Assert.Equal(180.0, placement.FurnitureWidth);
+        Assert.Equal(95.0, placement.FurnitureLength);
+        Assert.Equal(80.0, placement.FurnitureHeight);
+    }
+
+    // F2 + F3 regression: duplicating a configured element must (F2) keep its selections/fabric
+    // instead of resetting to catalogue defaults, and (F3) hand selection over to the duplicate so the
+    // config panel follows it. The seeded configuration is deliberately all non-default values (FJ2's
+    // defaults are DEPTH=STD/MECH=NONE/STITCH=PLAIN/fabric=AQUA-BLUE) so a "reset to defaults"
+    // regression is provably caught rather than accidentally matching the defaults.
+    [Fact]
+    public void DuplicatingSelectedElement_PreservesConfig_AndSelectsTheDuplicate()
+    {
+        var (options, conn, roomId) = SeedDatabase(
+            withPlacement: true,
+            fabricColorCode: "TERRA-CLAY",
+            selections: new Dictionary<string, string>
+            {
+                ["DEPTH"] = "DEEP",
+                ["MECH"] = "REC",
+                ["HEAD"] = "HS2",
+                ["STITCH"] = "CONTRAST"
+            });
+        using var _ = conn;
+        ConfigureServices(options);
+
+        var cut = RenderComponent<PlannerPage>(p => p.Add(x => x.RoomPlanId, roomId));
+
+        var furnitureItem = cut.Find(".furniture-item");
+        cut.InvokeAsync(() => furnitureItem.Click());
+
+        var originalPanel = Assert.Single(cut.FindComponents<FurnitureConfigPanel>());
+        var original = originalPanel.Instance.Placement!;
+        Assert.Equal("TERRA-CLAY", original.FabricColorCode);
+        Assert.Equal("DEEP", original.Selections["DEPTH"]);
+
+        var duplicateButton = cut.Find("[title='Duplicate']");
+        cut.InvokeAsync(() => duplicateButton.Click());
+
+        Assert.Equal(2, cut.FindAll(".furniture-item").Count);
+
+        var panelAfterDuplicate = Assert.Single(cut.FindComponents<FurnitureConfigPanel>());
+        var duplicate = panelAfterDuplicate.Instance.Placement!;
+
+        // F3: the config panel must now follow the duplicate, not stay pinned on the original.
+        Assert.NotSame(original, duplicate);
+
+        // F2: the duplicate must retain the original's configuration rather than reset to defaults.
+        Assert.Equal("FJ2", duplicate.ElementCode);
+        Assert.Equal("TERRA-CLAY", duplicate.FabricColorCode);
+        Assert.Equal("DEEP", duplicate.Selections["DEPTH"]);
+        Assert.Equal("REC", duplicate.Selections["MECH"]);
+        Assert.Equal("HS2", duplicate.Selections["HEAD"]);
+        Assert.Equal("CONTRAST", duplicate.Selections["STITCH"]);
     }
 }

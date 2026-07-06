@@ -1,6 +1,7 @@
 @page "/planner/{RoomPlanId:int}"
 @using CheapFurniturePlanner.Catalogue
 @using CheapFurniturePlanner.Configurator
+@using CheapFurniturePlanner.Domain.Pricing
 @using CheapFurniturePlanner.Services
 @using CheapFurniturePlanner.ViewModels
 @implements IDisposable
@@ -296,10 +297,14 @@ else
                 _selectedFurniture = _roomPlan.FurnitureItems.ToList();
 
                 // Config + Selections are already restored from SelectionsJson (RoomPlanService);
-                // reprice against the current catalogue snapshot so cached prices stay fresh.
+                // hydrate the display fields the DB doesn't persist for element placements (Name +
+                // dimensions - see PlannerElementHydrator) and reprice against the current catalogue
+                // snapshot so cached prices stay fresh. Single snapshot fetch shared by both steps.
+                var snapshot = await CatalogueSource.GetCurrentAsync();
                 foreach (var placement in _selectedFurniture.Where(f => !string.IsNullOrEmpty(f.ElementCode)))
                 {
-                    await RepriceAsync(placement);
+                    PlannerElementHydrator.Hydrate(placement, snapshot);
+                    await RepriceAsync(placement, snapshot);
                 }
 
                 _editingRoomPlan = new RoomPlanViewModel
@@ -388,10 +393,17 @@ else
             var element = snapshot.Models.SelectMany(m => m.Elements).FirstOrDefault(e => e.Code == furniture.ElementCode);
             if (element is not null)
             {
-                furniture.Selections = ConfigurationResolver.DefaultSelections(element);
-                furniture.FabricColorCode = ConfigurationResolver.DefaultFabricColorCode(element, snapshot);
+                // Only seed defaults for a brand-new placement. A duplicated element (via
+                // FurniturePlannerViewModel.PlannerClone, which preserves config) arrives here with
+                // Selections/FabricColorCode already populated - stomping them would silently reset
+                // the duplicate's configuration back to defaults.
+                if (furniture.Selections.Count == 0 && string.IsNullOrEmpty(furniture.FabricColorCode))
+                {
+                    furniture.Selections = ConfigurationResolver.DefaultSelections(element);
+                    furniture.FabricColorCode = ConfigurationResolver.DefaultFabricColorCode(element, snapshot);
+                }
                 furniture.CatalogueVersion = snapshot.Version;
-                await RepriceAsync(furniture);
+                await RepriceAsync(furniture, snapshot);
             }
 
             await PlannerService.AddFurnitureToRoomAsync(RoomPlanId, furniture);
@@ -408,7 +420,12 @@ else
     /// Prices a placement against the current catalogue and caches the resulting unit price/variant code.
     /// Used by the add flow; <see cref="FurnitureConfigPanel"/> reprices independently while the side panel is open.
     /// </summary>
-    private async Task RepriceAsync(FurniturePlannerViewModel placement)
+    /// <param name="snapshot">
+    /// The snapshot the caller already has in scope for this pricing pass. On success, its Version is
+    /// stamped onto the placement so the persisted CatalogueVersion matches the snapshot it was priced
+    /// against (rather than staying stuck at whatever version it was first added/loaded with).
+    /// </param>
+    private async Task RepriceAsync(FurniturePlannerViewModel placement, CatalogueSnapshot snapshot)
     {
         var result = await PricingService.PriceAsync(placement);
         if (result.IsSuccess && result.Breakdown is not null)
@@ -416,6 +433,7 @@ else
             var elementBreakdown = result.Breakdown.Elements.FirstOrDefault(e => e.ElementCode == placement.ElementCode);
             placement.CachedUnitPrice = elementBreakdown?.ElementTotal;
             placement.CachedVariantCode = elementBreakdown?.VariantCode;
+            placement.CatalogueVersion = snapshot.Version;
         }
         else
         {
@@ -605,7 +623,16 @@ else
                     FurnitureLength = furniture.FurnitureLength,
                     FurnitureHeight = furniture.FurnitureHeight,
                     ImageUrl = furniture.ImageUrl,
-                    Price = furniture.Price
+                    Price = furniture.Price,
+                    // Config fields (Phase 2B) - without these an element placement duplicates with
+                    // ElementCode=null and its configuration/price silently reset.
+                    ElementCode = furniture.ElementCode,
+                    CatalogueVersion = furniture.CatalogueVersion,
+                    SelectionsJson = furniture.SelectionsJson,
+                    FabricColorCode = furniture.FabricColorCode,
+                    CachedVariantCode = furniture.CachedVariantCode,
+                    CachedUnitPrice = furniture.CachedUnitPrice,
+                    Selections = new Dictionary<string, string>(furniture.Selections)
                 };
 
                 await PlannerService.AddFurnitureToRoomAsync(newPlan.Id, duplicatedFurniture);

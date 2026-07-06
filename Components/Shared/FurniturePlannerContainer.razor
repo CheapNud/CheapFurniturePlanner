@@ -235,7 +235,7 @@
         <MudText Typo="Typo.h6" Class="mb-3">Select Furniture</MudText>
 
         <!-- Catalogue Elements, grouped by model -->
-        <div style="max-height: 400px; overflow-y: auto;">
+        <div class="furniture-dialog-scroll">
             @foreach (var modelGroup in AvailableElements.GroupBy(e => e.ModelName))
             {
                 <MudText Typo="Typo.subtitle1" Class="mt-2 mb-1">@modelGroup.Key</MudText>
@@ -243,9 +243,9 @@
                     @foreach (var option in modelGroup)
                     {
                         <MudItem xs="12" sm="6" md="4">
-                            <MudCard Class="furniture-card" Style="cursor: pointer;" @onclick="@(() => AddElement(option))">
+                            <MudCard Class="furniture-card" @onclick="@(() => AddElement(option))">
                                 <MudCardContent>
-                                    <div style="height: 100px; background-color: #f5f5f5; display: flex; align-items: center; justify-content: center; margin-bottom: 8px;">
+                                    <div class="furniture-card-placeholder">
                                         <MudIcon Icon="@Icons.Material.Filled.Chair" Size="Size.Large" />
                                     </div>
 
@@ -1058,7 +1058,7 @@
             duplicate.Y = item.Y + 30;
 
             SelectedFurniture.Add(duplicate);
-            SelectedItem = duplicate;
+            await SelectItem(duplicate);
 
             await OnFurnitureAdded.InvokeAsync(duplicate);
             await SelectedFurnitureChanged.InvokeAsync(SelectedFurniture);

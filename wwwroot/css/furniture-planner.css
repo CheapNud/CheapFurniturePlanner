@@ -260,6 +260,7 @@
 .furniture-card {
     transition: all 0.2s ease-in-out;
     height: 100%;
+    cursor: pointer;
 }
 
     .furniture-card:hover {
@@ -271,6 +272,22 @@
         padding: 12px;
         text-align: center;
     }
+
+/* Scrollable list of catalogue elements inside the Add Furniture dialog */
+.furniture-dialog-scroll {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Placeholder thumbnail shown for a catalogue element without an image */
+.furniture-card-placeholder {
+    height: 100px;
+    background-color: #f5f5f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+}
 
 /* Configuration panel (right-hand column hosting FurnitureConfigPanel) */
 .config-panel {

@@ -212,6 +212,10 @@ else
             _variantCode = _breakdown.VariantCode;
             Placement.CachedUnitPrice = _unitPrice;
             Placement.CachedVariantCode = _variantCode;
+            if (_snapshot is not null)
+            {
+                Placement.CatalogueVersion = _snapshot.Version;
+            }
             _errors = [];
         }
         else

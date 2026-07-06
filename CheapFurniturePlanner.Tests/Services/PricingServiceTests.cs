@@ -76,4 +76,26 @@ public class PricingServiceTests
         Assert.False(result.IsSuccess);
         Assert.Contains(result.Errors, e => e.Kind == PricingErrorKind.UnknownElement);
     }
+
+    // F6 regression: snapshot.Markets[0] used to be indexed unconditionally, so a snapshot published
+    // with no markets configured would throw an unhandled ArgumentOutOfRangeException instead of
+    // surfacing a normal pricing error.
+    [Fact]
+    public async Task PriceAsync_ReturnsErrorInsteadOfThrowing_WhenSnapshotHasNoMarkets()
+    {
+        var snapshot = LoadFjordSnapshot();
+        snapshot.Markets.Clear();
+        var service = new PricingService(new FakeCatalogueSource(snapshot));
+        var placement = new FurniturePlannerViewModel
+        {
+            ElementCode = "FJ2",
+            Selections = new Dictionary<string, string> { ["DEPTH"] = "STD", ["MECH"] = "NONE", ["STITCH"] = "PLAIN" },
+            FabricColorCode = "AQUA-BLUE",
+        };
+
+        var result = await service.PriceAsync(placement);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Errors, e => e.Kind == PricingErrorKind.UnknownMarket);
+    }
 }
