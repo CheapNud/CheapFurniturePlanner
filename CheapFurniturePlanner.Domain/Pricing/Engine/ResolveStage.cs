@@ -42,7 +42,7 @@ internal static class ResolveStage
             List<PricingError> elementErrors = [];
 
             ValidateOptions(element, selection, elementErrors);
-            var priceGroup = ResolveFabricPriceGroup(request.Snapshot, element, selection, elementErrors);
+            var priceGroup = MaterialResolution.ResolveFabricPriceGroup(request.Snapshot, element, selection, elementErrors);
 
             if (elementErrors.Count > 0)
             {
@@ -57,11 +57,7 @@ internal static class ResolveStage
                 continue;
             }
 
-            // Material type is BOM-significant (fabric vs leather vs thick-leather); colour is not.
-            // A sentinel price group (empty Code, elements with no active fabric option) carries no material.
-            var materialTypeCode = priceGroup.Code.Length == 0
-                ? null
-                : priceGroup.MaterialTypeCode ?? priceGroup.Kind.ToString();
+            var materialTypeCode = MaterialResolution.MaterialTypeCode(priceGroup);
             var effectiveSelections = BuildEffectiveSelections(selection.ChoiceSelections, materialTypeCode);
 
             var effectiveLines = BuildEffectiveLines(element, effectiveSelections);
@@ -77,7 +73,7 @@ internal static class ResolveStage
     {
         foreach (var option in element.Options)
         {
-            var isVisible = IsVisible(option, selection.ChoiceSelections);
+            var isVisible = OptionVisibility.IsVisible(option, selection.ChoiceSelections);
 
             if (option is ChoiceOption choiceOption && isVisible && choiceOption.Required
                 && !selection.ChoiceSelections.ContainsKey(choiceOption.OptionDefinitionCode))
@@ -95,52 +91,11 @@ internal static class ResolveStage
                 continue;
             }
 
-            if (!IsVisible(choiceOption, selection.ChoiceSelections))
+            if (!OptionVisibility.IsVisible(choiceOption, selection.ChoiceSelections))
             {
                 errors.Add(new PricingError(PricingErrorKind.SelectionViolatesVisibility, $"{element.Code}:{defCode}={choiceCode}"));
             }
         }
-    }
-
-    private static bool IsVisible(ProductOption option, IReadOnlyDictionary<string, string> choiceSelections) =>
-        option.VisibilityRules.Count == 0
-        || option.VisibilityRules.Any(r => choiceSelections.TryGetValue(r.TriggerOptionDefinitionCode, out var chosen) && chosen == r.TriggerChoiceCode);
-
-    // Rule 4: fabric colour -> group -> price group.
-    private static PriceGroup ResolveFabricPriceGroup(CatalogueSnapshot snapshot, Element element, ElementSelection selection, List<PricingError> errors)
-    {
-        var fabricOption = element.Options.OfType<FabricOption>().FirstOrDefault();
-        if (fabricOption is null || !IsVisible(fabricOption, selection.ChoiceSelections))
-        {
-            // Sentinel price group for elements without an active FabricOption: they have no material rate to
-            // resolve, but ResolvedElement always carries a PriceGroup, so a neutral zero-rate placeholder is used instead.
-            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
-        }
-
-        if (selection.FabricColorCode is null)
-        {
-            errors.Add(new PricingError(PricingErrorKind.IncompleteConfiguration, $"{element.Code}:{fabricOption.OptionDefinitionCode}"));
-            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
-        }
-
-        var group = fabricOption.FabricGroupCodes
-            .Select(code => snapshot.FabricGroups.FirstOrDefault(g => g.Code == code))
-            .FirstOrDefault(g => g is not null && g.Colors.Any(c => c.Code == selection.FabricColorCode));
-
-        if (group is null)
-        {
-            errors.Add(new PricingError(PricingErrorKind.UnknownFabricColor, $"{element.Code}:{selection.FabricColorCode}"));
-            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
-        }
-
-        var priceGroup = snapshot.PriceGroups.FirstOrDefault(pg => pg.Code == group.PriceGroupCode);
-        if (priceGroup is null)
-        {
-            errors.Add(new PricingError(PricingErrorKind.NoPriceGroupForMaterialKind, $"{element.Code}:{group.PriceGroupCode}"));
-            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
-        }
-
-        return priceGroup;
     }
 
     // Augments the raw choice selections with the synthetic __MATERIAL__ selection (resolved material
