@@ -16,6 +16,8 @@ public static class CanonicalJson
 
     public static string Serialize<T>(T subject) => JsonSerializer.Serialize(subject, Options);
 
+    public static T? Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, Options);
+
     public static string Sha256Hex<T>(T subject)
     {
         var bytes = Encoding.UTF8.GetBytes(Serialize(subject));

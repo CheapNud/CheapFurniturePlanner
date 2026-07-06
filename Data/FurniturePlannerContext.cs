@@ -38,6 +38,7 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<FurnitureItem> FurnitureItems { get; set; }
     public DbSet<RoomPlan> RoomPlans { get; set; }
     public DbSet<PlannerFurnitureItem> PlannerFurnitureItems { get; set; }
+    public DbSet<PublishedCatalogue> PublishedCatalogues { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -125,7 +126,17 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasOne(e => e.FurnitureItem)
                 .WithMany(f => f.PlannerItems)
                 .HasForeignKey(e => e.FurnitureItemId)
-                .OnDelete(DeleteBehavior.Restrict); // Don't delete furniture catalog items
+                .OnDelete(DeleteBehavior.Restrict) // Don't delete furniture catalog items
+                .IsRequired(false);
+        });
+
+        // Configure PublishedCatalogue
+        modelBuilder.Entity<PublishedCatalogue>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Version).IsUnique();
+            entity.HasIndex(e => e.IsCurrent);
+            entity.Property(e => e.PublishedAt).HasDefaultValueSql("DATETIME('now')");
         });
     }
 

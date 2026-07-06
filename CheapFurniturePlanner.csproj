@@ -46,6 +46,7 @@
   <ItemGroup>
     <!-- Embedded resources -->
     <EmbeddedResource Include="Resources\**\*" />
+    <EmbeddedResource Include="Seed\demo-catalogue.json" />
 
     <!-- Static web assets -->
     <AvaloniaResource Include="Assets\**" />
@@ -57,10 +58,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
-    <Content Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
-    <None Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
-    <EmbeddedResource Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**" />
+    <ProjectReference Include="CheapFurniturePlanner.Domain\CheapFurniturePlanner.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**" />
+    <Content Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**" />
+    <None Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**" />
+    <EmbeddedResource Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**" />
   </ItemGroup>
 
 </Project>

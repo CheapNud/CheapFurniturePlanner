@@ -15,8 +15,8 @@ public class PlannerFurnitureItem : IEntityId
     [Required]
     public int RoomPlanId { get; set; }
 
-    [Required]
-    public int FurnitureItemId { get; set; }
+    // Legacy flat-catalog link — no longer the planner's source. New placements leave this null.
+    public int? FurnitureItemId { get; set; }
 
     /// <summary>
     /// Unique identifier for this instance in the planner (for UI purposes)
@@ -55,10 +55,31 @@ public class PlannerFurnitureItem : IEntityId
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 
+    // --- configuration payload (Phase 2) ---
+    /// <summary>Element code from the catalogue snapshot this placement was configured against.</summary>
+    [MaxLength(64)]
+    public string? ElementCode { get; set; }
+
+    /// <summary>Catalogue snapshot version the configuration was resolved against.</summary>
+    [MaxLength(64)]
+    public string? CatalogueVersion { get; set; }
+
+    /// <summary>JSON map of option-definition code -> chosen option-choice code.</summary>
+    public string? SelectionsJson { get; set; }
+
+    [MaxLength(64)]
+    public string? FabricColorCode { get; set; }
+
+    [MaxLength(128)]
+    public string? CachedVariantCode { get; set; }
+
+    [Column(TypeName = "REAL")]
+    public decimal? CachedUnitPrice { get; set; }
+
     // Navigation properties
     [ForeignKey(nameof(RoomPlanId))]
     public virtual RoomPlan RoomPlan { get; set; } = null!;
 
     [ForeignKey(nameof(FurnitureItemId))]
-    public virtual FurnitureItem FurnitureItem { get; set; } = null!;
+    public virtual FurnitureItem? FurnitureItem { get; set; }
 }
