@@ -27,14 +27,13 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
             .Select(c => c.Version).ToListAsync();
         var next = (existingVersions.Select(v => int.TryParse(v, out var n) ? n : 0).DefaultIfEmpty(0).Max() + 1).ToString();
 
-        foreach (var current in ctx.PublishedCatalogues.Where(c => c.IsCurrent))
+        foreach (var current in await ctx.PublishedCatalogues.Where(c => c.IsCurrent).ToListAsync())
         {
             current.IsCurrent = false;
         }
 
         snapshot.Version = next;
-        snapshot.ContentHash = "";
-        var hash = CanonicalJson.Sha256Hex(snapshot);
+        var hash = snapshot.ComputeContentHash();
         snapshot.ContentHash = hash;
 
         ctx.PublishedCatalogues.Add(new PublishedCatalogue
@@ -93,6 +92,13 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
                     foreach (var line in section.Lines)
                     {
                         errors.AddRange(MissingBomCodes(element.Code, line, operationCodes, frameCodes, materialCodes, priceGroupCodes));
+                    }
+                }
+                foreach (var rule in element.Substitutions)
+                {
+                    if (!materialCodes.Contains(rule.WithMaterialCode))
+                    {
+                        errors.Add($"Element '{element.Code}' substitution references missing material '{rule.WithMaterialCode}'.");
                     }
                 }
             }

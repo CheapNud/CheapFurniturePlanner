@@ -47,6 +47,14 @@ public class CatalogueEndToEndTests
 
             var roundTrippedSnapshot = await source.GetCurrentAsync();
 
+            // Whole-snapshot determinism proof: the entire published bundle round-trips
+            // byte-exactly through SQLite, not just the two priced configurations checked below.
+            using (var verifyContext = factory.CreateDbContext())
+            {
+                var publishedRow = await verifyContext.PublishedCatalogues.SingleAsync(c => c.Version == publishResult.Version);
+                Assert.Equal(publishedRow.ContentHash, roundTrippedSnapshot.ComputeContentHash());
+            }
+
             // Plain fabric configuration - the same scenario covered by the Domain golden
             // "std-plain-aqua-euw".
             AssertPricesLikeDomainGolden(roundTrippedSnapshot, "std-plain-aqua-euw");
