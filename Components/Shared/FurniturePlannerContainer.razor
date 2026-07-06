@@ -234,53 +234,32 @@
     <DialogContent>
         <MudText Typo="Typo.h6" Class="mb-3">Select Furniture</MudText>
 
-        <!-- Furniture Type Filter -->
-        <MudSelect T="FurnitureType?"
-                   @bind-Value="_selectedType"
-                   Label="Filter by Type"
-                   Clearable="true"
-                   Class="mb-3">
-            @foreach (FurnitureType type in Enum.GetValues<FurnitureType>())
-            {
-                <MudSelectItem T="FurnitureType?" Value="type">@type</MudSelectItem>
-            }
-        </MudSelect>
-
-        <!-- Furniture Grid -->
+        <!-- Catalogue Elements, grouped by model -->
         <div style="max-height: 400px; overflow-y: auto;">
-            <MudGrid>
-                @foreach (var furniture in FilteredFurniture)
-                {
-                    <MudItem xs="12" sm="6" md="4">
-                        <MudCard Class="furniture-card" Style="cursor: pointer;" @onclick="@(() => AddFurnitureAndCloseDialog(furniture))">
-                            <MudCardContent>
-                                @if (!string.IsNullOrEmpty(furniture.ImageUrl))
-                                {
-                                    <MudImage Src="@furniture.ImageUrl" Alt="@furniture.Name" Height="100" ObjectFit="ObjectFit.Cover" Class="mb-2" />
-                                }
-                                else
-                                {
+            @foreach (var modelGroup in AvailableElements.GroupBy(e => e.ModelName))
+            {
+                <MudText Typo="Typo.subtitle1" Class="mt-2 mb-1">@modelGroup.Key</MudText>
+                <MudGrid Class="mb-3">
+                    @foreach (var option in modelGroup)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCard Class="furniture-card" Style="cursor: pointer;" @onclick="@(() => AddElement(option))">
+                                <MudCardContent>
                                     <div style="height: 100px; background-color: #f5f5f5; display: flex; align-items: center; justify-content: center; margin-bottom: 8px;">
-                                        <MudIcon Icon="@GetFurnitureIcon(furniture.Type)" Size="Size.Large" />
+                                        <MudIcon Icon="@Icons.Material.Filled.Chair" Size="Size.Large" />
                                     </div>
-                                }
 
-                                <MudText Typo="Typo.subtitle2">@furniture.Name</MudText>
-                                <MudText Typo="Typo.caption">@furniture.Code</MudText>
-                                <MudText Typo="Typo.body2" Class="mt-1">
-                                    @furniture.Width × @furniture.Length cm
-                                </MudText>
-                                @if (furniture.Price.HasValue)
-                                {
-                                    <MudText Typo="Typo.subtitle2" Color="Color.Primary">
-                                        @furniture.Price.Value.ToString("C")
+                                    <MudText Typo="Typo.subtitle2">@option.ElementName</MudText>
+                                    <MudText Typo="Typo.caption">@option.ElementCode</MudText>
+                                    <MudText Typo="Typo.body2" Class="mt-1">
+                                        @option.Width × @option.Depth × @option.Height cm
                                     </MudText>
-                                }
-                            </MudCardContent>
-                        </MudCard>
-                    </MudItem>
-                }
-            </MudGrid>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
         </div>
     </DialogContent>
     <DialogActions>
@@ -294,10 +273,12 @@
     [Parameter] public RoomPlanViewModel RoomPlan { get; set; } = new();
     [Parameter] public List<FurniturePlannerViewModel> SelectedFurniture { get; set; } = new();
     [Parameter] public List<FurnitureCatalogViewModel> AvailableFurniture { get; set; } = new();
+    [Parameter] public List<CatalogueElementOption> AvailableElements { get; set; } = [];
     [Parameter] public EventCallback<List<FurniturePlannerViewModel>> SelectedFurnitureChanged { get; set; }
     [Parameter] public EventCallback<FurniturePlannerViewModel> OnFurnitureAdded { get; set; }
     [Parameter] public EventCallback<FurniturePlannerViewModel> OnFurnitureRemoved { get; set; }
     [Parameter] public EventCallback<FurniturePlannerViewModel> OnFurnitureModified { get; set; }
+    [Parameter] public EventCallback<FurniturePlannerViewModel?> SelectedItemChanged { get; set; }
 
     // Planner settings
     public int FloorPlanWidth => (int)RoomPlan.Width;
@@ -333,12 +314,6 @@
 
     // Dialog state
     private bool _furnitureDialogOpen;
-    private FurnitureType? _selectedType;
-
-    private IEnumerable<FurnitureCatalogViewModel> FilteredFurniture =>
-        _selectedType.HasValue
-            ? AvailableFurniture.Where(f => f.Type == _selectedType.Value && f.IsActive)
-            : AvailableFurniture.Where(f => f.IsActive);
 
     // Suppress Blazor re-renders while JS is handling drag
     protected override bool ShouldRender() => !_jsHandlingDrag;
@@ -389,70 +364,50 @@
         _dotNetRef?.Dispose();
     }
 
-    // ========== Furniture Icon Helper ==========
-    private string GetFurnitureIcon(FurnitureType type) => type switch
-    {
-        FurnitureType.Sofa => Icons.Material.Filled.Chair,
-        FurnitureType.Chair => Icons.Material.Filled.Chair,
-        FurnitureType.Table => Icons.Material.Filled.TableRestaurant,
-        FurnitureType.Bed => Icons.Material.Filled.Bed,
-        FurnitureType.Wardrobe => Icons.Material.Filled.Checkroom,
-        FurnitureType.Desk => Icons.Material.Filled.Desk,
-        FurnitureType.DiningTable => Icons.Material.Filled.TableRestaurant,
-        FurnitureType.CoffeeTable => Icons.Material.Filled.TableBar,
-        _ => Icons.Material.Filled.Chair
-    };
-
     // ========== Dialog & Add ==========
     private void OpenFurnitureDialog()
     {
         _furnitureDialogOpen = true;
-        _selectedType = null;
     }
 
-    private async Task AddFurniture(FurnitureCatalogViewModel furniture)
+    private int GetNextUiId() => SelectedFurniture.Any() ? SelectedFurniture.Max(f => f.UIId) + 1 : 1;
+
+    private async Task AddElement(CatalogueElementOption option)
     {
         try
         {
-            int newId = SelectedFurniture.Any() ? SelectedFurniture.Max(f => f.UIId) + 1 : 1;
-            var plannerItem = furniture.ToPlannerViewModel();
-            plannerItem.UIId = newId;
-
-            // Position the new item at the top right corner with margin
-            double width = plannerItem.FurnitureWidth.GetValueOrDefault();
-            double height = plannerItem.FurnitureLength.GetValueOrDefault();
-
-            // Make sure the item fits within the floor plan
-            width = Math.Min(width, FloorPlanWidth - 40);
-            height = Math.Min(height, FloorPlanHeight - 40);
-
-            // Position at top-right with margin
-            plannerItem.X = FloorPlanWidth - width - 20;
-            plannerItem.Y = 20;
-
-            SelectedFurniture.Add(plannerItem);
-            SelectedItem = plannerItem;
-
-            await OnFurnitureAdded.InvokeAsync(plannerItem);
+            var placement = new FurniturePlannerViewModel
+            {
+                UIId = GetNextUiId(),
+                FurnitureItemId = null,
+                ElementCode = option.ElementCode,
+                Code = option.ElementCode,
+                Name = option.ElementName,
+                FurnitureWidth = option.Width,
+                FurnitureLength = option.Depth,
+                FurnitureHeight = option.Height,
+                X = 20,
+                Y = 20,
+                Rotation = 0
+            };
+            // Defaults + fabric + first price are computed by the parent (which holds the snapshot) after add:
+            SelectedFurniture.Add(placement);
+            await SelectItem(placement);
+            await OnFurnitureAdded.InvokeAsync(placement);
             await SelectedFurnitureChanged.InvokeAsync(SelectedFurniture);
+            _furnitureDialogOpen = false;
 
-            ToastService.Add($"Added {plannerItem.Name} to room plan", Severity.Success);
+            ToastService.Add($"Added {placement.Name} to room plan", Severity.Success);
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error in AddFurniture: {ex.Message}");
+            Debug.WriteLine($"Error in AddElement: {ex.Message}");
             ToastService.Add("Error adding furniture", Severity.Error);
         }
     }
 
-    private async Task AddFurnitureAndCloseDialog(FurnitureCatalogViewModel furniture)
-    {
-        await AddFurniture(furniture);
-        _furnitureDialogOpen = false;
-    }
-
     // ========== Selection ==========
-    private void SelectItem(FurniturePlannerViewModel item)
+    private async Task SelectItem(FurniturePlannerViewModel item)
     {
         SelectedItem = item;
 
@@ -463,6 +418,8 @@
         }
 
         item.IsSelected = true;
+
+        await SelectedItemChanged.InvokeAsync(item);
     }
 
     // ========== Client-Side Drag (JS handles mousemove, single SignalR call on drop) ==========
@@ -470,7 +427,7 @@
     {
         if (_isDragging || _dotNetRef == null) return;
 
-        SelectItem(item);
+        await SelectItem(item);
 
         // Re-fetch bounds at drag start — a cached rect goes stale after window resize/scroll
         _cachedBounds = await JS.InvokeAsync<DOMRect>("getBoundingClientRect", _floorPlanElement);
@@ -606,7 +563,7 @@
 
         var firstTouch = touchArgs.Touches[0];
 
-        SelectItem(item);
+        await SelectItem(item);
 
         // 150ms delay before initiating drag (prevents accidental drags on touch)
         _touchDelayCts?.Cancel();
@@ -1124,6 +1081,7 @@
             if (SelectedItem == item)
             {
                 SelectedItem = null;
+                await SelectedItemChanged.InvokeAsync(null);
             }
 
             await OnFurnitureRemoved.InvokeAsync(item);
@@ -1139,6 +1097,7 @@
         {
             SelectedFurniture.Clear();
             SelectedItem = null;
+            await SelectedItemChanged.InvokeAsync(null);
 
             await SelectedFurnitureChanged.InvokeAsync(SelectedFurniture);
             ToastService.Add("Cleared all furniture", Severity.Info);

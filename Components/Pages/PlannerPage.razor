@@ -1,4 +1,6 @@
 @page "/planner/{RoomPlanId:int}"
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Configurator
 @using CheapFurniturePlanner.Services
 @using CheapFurniturePlanner.ViewModels
 @implements IDisposable
@@ -6,6 +8,8 @@
 @inject RoomPlanService RoomPlanService
 @inject FurnitureCatalogService FurnitureCatalogService
 @inject PlannerService PlannerService
+@inject PricingService PricingService
+@inject ICatalogueSource CatalogueSource
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
@@ -108,10 +112,12 @@
     <FurniturePlannerContainer RoomPlan="@_roomPlan"
                       SelectedFurniture="@_selectedFurniture"
                       AvailableFurniture="@_availableFurniture"
+                      AvailableElements="@_availableElements"
                       SelectedFurnitureChanged="OnSelectedFurnitureChanged"
                       OnFurnitureAdded="OnFurnitureAdded"
                       OnFurnitureRemoved="OnFurnitureRemoved"
-                      OnFurnitureModified="OnFurnitureModified" />
+                      OnFurnitureModified="OnFurnitureModified"
+                      SelectedItemChanged="OnSelectedItemChanged" />
 
     <!-- Room Settings Dialog -->
     <MudDialog @bind-Visible="_roomSettingsOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium })">
@@ -226,6 +232,8 @@ else
     private RoomPlanViewModel _editingRoomPlan = new();
     private List<FurniturePlannerViewModel> _selectedFurniture = new();
     private List<FurnitureCatalogViewModel> _availableFurniture = new();
+    private List<CatalogueElementOption> _availableElements = [];
+    private FurniturePlannerViewModel? _selectedItem;
 
     private bool _loading = true;
     private bool _hasUnsavedChanges = false;
@@ -240,6 +248,7 @@ else
     {
         await LoadRoomPlan();
         await LoadFurnitureCatalog();
+        await LoadCatalogueElements();
 
         // Setup auto-save timer (save every 30 seconds if there are changes)
         _autoSaveTimer = new Timer(AutoSave, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
@@ -306,6 +315,19 @@ else
         }
     }
 
+    private async Task LoadCatalogueElements()
+    {
+        try
+        {
+            var snapshot = await CatalogueSource.GetCurrentAsync();
+            _availableElements = CatalogueElementOption.FromSnapshot(snapshot);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading catalogue elements: {ex.Message}", Severity.Error);
+        }
+    }
+
     private async Task OnSelectedFurnitureChanged(List<FurniturePlannerViewModel> furniture)
     {
         _selectedFurniture = furniture;
@@ -313,10 +335,26 @@ else
         await InvokeAsync(StateHasChanged);
     }
 
+    private Task OnSelectedItemChanged(FurniturePlannerViewModel? item)
+    {
+        _selectedItem = item;
+        return Task.CompletedTask;
+    }
+
     private async Task OnFurnitureAdded(FurniturePlannerViewModel furniture)
     {
         try
         {
+            var snapshot = await CatalogueSource.GetCurrentAsync();
+            var element = snapshot.Models.SelectMany(m => m.Elements).FirstOrDefault(e => e.Code == furniture.ElementCode);
+            if (element is not null)
+            {
+                furniture.Selections = ConfigurationResolver.DefaultSelections(element);
+                furniture.FabricColorCode = ConfigurationResolver.DefaultFabricColorCode(element, snapshot);
+                furniture.CatalogueVersion = snapshot.Version;
+                await RepriceAsync(furniture);
+            }
+
             await PlannerService.AddFurnitureToRoomAsync(RoomPlanId, furniture);
             _hasUnsavedChanges = true;
             Snackbar.Add($"Added {furniture.Name} to room plan", Severity.Success);
@@ -324,6 +362,21 @@ else
         catch (Exception ex)
         {
             Snackbar.Add($"Error adding furniture: {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// Prices a placement against the current catalogue and caches the resulting unit price/variant code.
+    /// Minimal stub for Task 4 — refined with error surfacing/live re-pricing in Task 5.
+    /// </summary>
+    private async Task RepriceAsync(FurniturePlannerViewModel placement)
+    {
+        var result = await PricingService.PriceAsync(placement);
+        if (result.IsSuccess && result.Breakdown is not null)
+        {
+            var elementBreakdown = result.Breakdown.Elements.FirstOrDefault(e => e.ElementCode == placement.ElementCode);
+            placement.CachedUnitPrice = elementBreakdown?.ElementTotal;
+            placement.CachedVariantCode = elementBreakdown?.VariantCode;
         }
     }
 
