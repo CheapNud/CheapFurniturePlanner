@@ -8,4 +8,6 @@ public class FabricColor : TradeItem
     public decimal PurchasePrice { get; set; }
     public decimal ShippingCost { get; set; }
     public FabricUnit Unit { get; set; } = FabricUnit.Meter;
+    // Display-only swatch colour (e.g. "#3A6EA5"). NOT read by the pricing engine.
+    public string? Hex { get; set; }
 }
