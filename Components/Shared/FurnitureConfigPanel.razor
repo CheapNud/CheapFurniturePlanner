@@ -1,0 +1,203 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Configurator
+@using CheapFurniturePlanner.Domain.Catalog
+@using CheapFurniturePlanner.Domain.Fabrics
+@using CheapFurniturePlanner.Domain.Options
+@using CheapFurniturePlanner.Domain.Pricing
+@using CheapFurniturePlanner.Services
+@using CheapFurniturePlanner.ViewModels
+
+@inject ICatalogueSource CatalogueSource
+@inject PricingService PricingService
+
+@if (Placement is null)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="config-panel">Select an item to configure it.</MudText>
+}
+else
+{
+    <MudPaper Class="config-panel pa-4" Elevation="1">
+        <MudStack Spacing="3">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h6">@(_element?.Name ?? Placement.Name)</MudText>
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.subtitle1" Color="Color.Primary">
+                        @(_unitPrice.HasValue ? _unitPrice.Value.ToString("C2") : "-")
+                    </MudText>
+                    @if (!string.IsNullOrEmpty(_variantCode))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@_variantCode</MudText>
+                    }
+                </MudStack>
+            </MudStack>
+
+            @if (_errors.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Class="config-panel-errors">
+                    @foreach (var error in _errors)
+                    {
+                        <div>@DescribeError(error)</div>
+                    }
+                </MudAlert>
+            }
+
+            @if (_element is not null)
+            {
+                @foreach (var option in _visibleOptions)
+                {
+                    <MudSelect T="string"
+                               Label="@option.OptionDefinitionCode"
+                               Value="@GetSelection(option.OptionDefinitionCode)"
+                               ValueChanged="@((string choice) => OnOptionChanged(option.OptionDefinitionCode, choice))">
+                        @foreach (var value in option.Values.OrderBy(v => v.DisplayIndex))
+                        {
+                            <MudSelectItem T="string" Value="@value.OptionChoiceCode">@value.OptionChoiceCode</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+
+                @foreach (var group in _fabricGroups)
+                {
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.subtitle2">@ConfigurationResolver.MaterialTypeLabel(group, _snapshot!)</MudText>
+                        <MudStack Row="true" Spacing="1" Class="fabric-swatch-row">
+                            @foreach (var color in group.Colors)
+                            {
+                                <div class="@("fabric-swatch" + (color.Code == Placement.FabricColorCode ? " selected" : ""))"
+                                     style="background-color:@(color.Hex)"
+                                     title="@color.Name"
+                                     @onclick="@(() => SelectFabric(color.Code))">
+                                </div>
+                            }
+                        </MudStack>
+                    </MudStack>
+                }
+            }
+
+            @if (_breakdown is not null)
+            {
+                <MudExpansionPanels>
+                    <MudExpansionPanel Text="Price breakdown">
+                        @foreach (var line in _breakdown.Lines)
+                        {
+                            <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.body2">@line.Category - @line.Description</MudText>
+                                <MudText Typo="Typo.body2">@line.LineTotal.ToString("C2")</MudText>
+                            </MudStack>
+                        }
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public FurniturePlannerViewModel? Placement { get; set; }
+    [Parameter] public EventCallback OnConfigured { get; set; }
+
+    private CatalogueSnapshot? _snapshot;
+    private Element? _element;
+    private IReadOnlyList<ChoiceOption> _visibleOptions = [];
+    private IReadOnlyList<FabricGroup> _fabricGroups = [];
+    private ElementBreakdown? _breakdown;
+    private decimal? _unitPrice;
+    private string? _variantCode;
+    private List<PricingError> _errors = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Placement is null)
+        {
+            _element = null;
+            _visibleOptions = [];
+            _fabricGroups = [];
+            _breakdown = null;
+            _unitPrice = null;
+            _variantCode = null;
+            _errors = [];
+            return;
+        }
+
+        _snapshot = await CatalogueSource.GetCurrentAsync();
+        _element = _snapshot.Models.SelectMany(m => m.Elements).FirstOrDefault(e => e.Code == Placement.ElementCode);
+        RecomputeVisible();
+        await RepriceAndNotify();
+    }
+
+    private void RecomputeVisible()
+    {
+        if (_element is null || Placement is null)
+        {
+            _visibleOptions = [];
+            _fabricGroups = [];
+            return;
+        }
+
+        _visibleOptions = ConfigurationResolver.VisibleOptions(_element, Placement.Selections);
+        _fabricGroups = _snapshot is null ? [] : ConfigurationResolver.FabricGroupsFor(_element, _snapshot);
+    }
+
+    private string GetSelection(string optionDefinitionCode) =>
+        Placement is not null && Placement.Selections.TryGetValue(optionDefinitionCode, out var choice) ? choice : string.Empty;
+
+    private async Task OnOptionChanged(string optionDefinitionCode, string choice)
+    {
+        if (Placement is null)
+        {
+            return;
+        }
+
+        Placement.Selections[optionDefinitionCode] = choice;
+        RecomputeVisible();
+        await RepriceAndNotify();
+    }
+
+    private async Task SelectFabric(string colorCode)
+    {
+        if (Placement is null)
+        {
+            return;
+        }
+
+        Placement.FabricColorCode = colorCode;
+        await RepriceAndNotify();
+    }
+
+    private async Task RepriceAndNotify()
+    {
+        if (Placement is null)
+        {
+            return;
+        }
+
+        var result = await PricingService.PriceAsync(Placement);
+        if (result.IsSuccess && result.Breakdown is not null && result.Breakdown.Elements.Count > 0)
+        {
+            _breakdown = result.Breakdown.Elements[0];
+            _unitPrice = _breakdown.ElementTotal;
+            _variantCode = _breakdown.VariantCode;
+            Placement.CachedUnitPrice = _unitPrice;
+            Placement.CachedVariantCode = _variantCode;
+            _errors = [];
+        }
+        else
+        {
+            _errors = result.Errors;
+            _breakdown = null;
+            _unitPrice = null;
+            _variantCode = null;
+        }
+
+        await OnConfigured.InvokeAsync();
+    }
+
+    private static string DescribeError(PricingError error) => error.Kind switch
+    {
+        PricingErrorKind.UnknownElement => $"'{error.Subject}' is unavailable in this catalogue.",
+        PricingErrorKind.UnknownFabricColor => $"Fabric color '{error.Subject}' is unavailable in this catalogue.",
+        PricingErrorKind.UnknownOptionSelection => $"Selection '{error.Subject}' is unavailable in this catalogue.",
+        PricingErrorKind.UnknownModel => $"Model '{error.Subject}' is unavailable in this catalogue.",
+        _ => $"{error.Kind}: {error.Subject}"
+    };
+}

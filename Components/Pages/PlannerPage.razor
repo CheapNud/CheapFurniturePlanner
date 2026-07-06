@@ -367,7 +367,7 @@ else
 
     /// <summary>
     /// Prices a placement against the current catalogue and caches the resulting unit price/variant code.
-    /// Minimal stub for Task 4 — refined with error surfacing/live re-pricing in Task 5.
+    /// Used by the add flow; <see cref="FurnitureConfigPanel"/> reprices independently while the side panel is open.
     /// </summary>
     private async Task RepriceAsync(FurniturePlannerViewModel placement)
     {
