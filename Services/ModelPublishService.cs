@@ -69,7 +69,10 @@ public sealed class ModelPublishService(IDbContextFactory<FurniturePlannerContex
         catch
         {
             row.State = from;
-            await db.SaveChangesAsync(ct);
+            // Use CancellationToken.None so this compensating write always lands, even if the
+            // caller's token is what caused RepublishAsync to fail; otherwise the state would be
+            // left transitioned-but-unpublished.
+            await db.SaveChangesAsync(CancellationToken.None);
             throw;
         }
     }

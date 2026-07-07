@@ -111,7 +111,6 @@ public class PlannerPagePanelTests : TestContext
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(LoadFjordSnapshot()));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
 
-        Services.AddSingleton<IDbContextFactory<FurniturePlannerContext>>(new TestDbContextFactory(options));
         Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 

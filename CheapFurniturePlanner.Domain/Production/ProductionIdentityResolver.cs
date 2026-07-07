@@ -47,7 +47,7 @@ public static class ProductionIdentityResolver
 
     // The single three-state rule: no suggestion => Composed; a suggestion under a Draft model =>
     // Provisional; a suggestion under Active/Discontinued => Released. Shared by Resolve() and by any
-    // caller (e.g. ModellenkamerPage) that needs to derive a row's status without a full re-resolve.
+    // caller that needs to derive a row's status without a full re-resolve.
     public static ProductionCodeStatus StatusFor(bool hasSuggestion, TradeItemState modelState) =>
         !hasSuggestion
             ? ProductionCodeStatus.Composed

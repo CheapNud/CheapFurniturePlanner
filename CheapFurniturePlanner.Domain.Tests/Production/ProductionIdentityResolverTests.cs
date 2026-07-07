@@ -48,7 +48,7 @@ public class ProductionIdentityResolverTests
         var snapshot = DemoWorld.Load();
         var configuration = FjchConfiguration("AQUA-BLUE");
         var variantCode = ProductionIdentityResolver.Resolve(snapshot, configuration, new Dictionary<string, string>(), TradeItemState.Draft)[0].VariantCode;
-        var suggestions = new Dictionary<string, string> { [variantCode] = "18E" };
+        var suggestions = new Dictionary<string, string> { [variantCode] = "STUDIO-A" };
 
         // Act
         var identities = ProductionIdentityResolver.Resolve(snapshot, configuration, suggestions, TradeItemState.Draft);
@@ -56,8 +56,8 @@ public class ProductionIdentityResolverTests
         // Assert
         var identity = Assert.Single(identities);
         Assert.Equal(ProductionCodeStatus.Provisional, identity.Status);
-        Assert.Equal("18E", identity.SuggestedCode);
-        Assert.Equal("18E", identity.EffectiveCode);
+        Assert.Equal("STUDIO-A", identity.SuggestedCode);
+        Assert.Equal("STUDIO-A", identity.EffectiveCode);
         Assert.False(identity.IsExportable);
     }
 
@@ -68,7 +68,7 @@ public class ProductionIdentityResolverTests
         var snapshot = DemoWorld.Load();
         var configuration = FjchConfiguration("AQUA-BLUE");
         var variantCode = ProductionIdentityResolver.Resolve(snapshot, configuration, new Dictionary<string, string>(), TradeItemState.Draft)[0].VariantCode;
-        var suggestions = new Dictionary<string, string> { [variantCode] = "18E" };
+        var suggestions = new Dictionary<string, string> { [variantCode] = "STUDIO-A" };
 
         // Act
         var identities = ProductionIdentityResolver.Resolve(snapshot, configuration, suggestions, TradeItemState.Active);
@@ -76,7 +76,7 @@ public class ProductionIdentityResolverTests
         // Assert
         var identity = Assert.Single(identities);
         Assert.Equal(ProductionCodeStatus.Released, identity.Status);
-        Assert.Equal("18E", identity.EffectiveCode);
+        Assert.Equal("STUDIO-A", identity.EffectiveCode);
         Assert.True(identity.IsExportable);
     }
 
@@ -87,7 +87,7 @@ public class ProductionIdentityResolverTests
         var snapshot = DemoWorld.Load();
         var configuration = FjchConfiguration("AQUA-BLUE");
         var variantCode = ProductionIdentityResolver.Resolve(snapshot, configuration, new Dictionary<string, string>(), TradeItemState.Draft)[0].VariantCode;
-        var suggestions = new Dictionary<string, string> { [variantCode] = "18E" };
+        var suggestions = new Dictionary<string, string> { [variantCode] = "STUDIO-A" };
 
         // Act
         var identities = ProductionIdentityResolver.Resolve(snapshot, configuration, suggestions, TradeItemState.Discontinued);
@@ -95,7 +95,7 @@ public class ProductionIdentityResolverTests
         // Assert
         var identity = Assert.Single(identities);
         Assert.Equal(ProductionCodeStatus.Released, identity.Status);
-        Assert.Equal("18E", identity.EffectiveCode);
+        Assert.Equal("STUDIO-A", identity.EffectiveCode);
         Assert.False(identity.IsExportable);
     }
 
