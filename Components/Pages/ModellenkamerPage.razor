@@ -1,0 +1,256 @@
+@page "/modellenkamer"
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Catalog
+@using CheapFurniturePlanner.Domain.Pricing
+@using CheapFurniturePlanner.Domain.Production
+
+@inject ICatalogueSource CatalogueSource
+@inject CodeAssignmentService CodeAssignmentService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Modellenkamer - Cheap Furniture Planner</PageTitle>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h5">Modellenkamer</MudText>
+
+        @if (_snapshot is null)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else
+        {
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <MudSelect T="string"
+                           Label="Model"
+                           Value="@_selectedModelCode"
+                           ValueChanged="@((string code) => OnModelSelectedAsync(code))">
+                    @foreach (var model in _snapshot.Models.OrderBy(m => m.Code))
+                    {
+                        <MudSelectItem T="string" Value="@model.Code">@model.Code - @model.Name</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (_selectedModelCode is not null)
+                {
+                    <MudChip T="bool" Size="Size.Small" Color="@StateColor(_state)">@_state</MudChip>
+
+                    <MudSpacer />
+
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               Disabled="@(_state != TradeItemState.Draft)"
+                               OnClick="@(() => ReleaseModelAsync())">
+                        Release
+                    </MudButton>
+
+                    @if (_state == TradeItemState.Active)
+                    {
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Error"
+                                   OnClick="@(() => DiscontinueModelAsync())">
+                            Discontinue
+                        </MudButton>
+                    }
+                }
+            </MudStack>
+
+            @if (_selectedModelCode is not null && _state != TradeItemState.Draft)
+            {
+                <MudAlert Severity="Severity.Info">frozen — model is @_state</MudAlert>
+            }
+        }
+    </MudStack>
+</MudPaper>
+
+@if (_selectedModelCode is not null)
+{
+    if (_templates.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary">No BOM-significant variants registered for this model yet.</MudText>
+    }
+    else
+    {
+        <MudTable Items="@_templates" Hover="true" Striped="true" Dense="true" Elevation="2">
+            <HeaderContent>
+                <MudTh>Variant code</MudTh>
+                <MudTh>Breakdown</MudTh>
+                <MudTh>Suggested code</MudTh>
+                <MudTh>Notes</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Variant code">@context.VariantCode</MudTd>
+                <MudTd DataLabel="Breakdown">@Decode(context.VariantCode)</MudTd>
+                <MudTd DataLabel="Suggested code">
+                    <MudTextField T="string"
+                                  Value="@context.SuggestedCode"
+                                  ValueChanged="@((string value) => context.SuggestedCode = value)"
+                                  Disabled="@(_state != TradeItemState.Draft)" />
+                </MudTd>
+                <MudTd DataLabel="Notes">
+                    <MudTextField T="string"
+                                  Value="@context.Notes"
+                                  ValueChanged="@((string value) => context.Notes = value)"
+                                  Disabled="@(_state != TradeItemState.Draft)" />
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="bool" Size="Size.Small" Color="@StatusColor(RowStatus(context))">@RowStatus(context)</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               Disabled="@(_state != TradeItemState.Draft)"
+                               OnClick="@(() => AssignAsync(context))">
+                        Assign
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+}
+
+@code {
+    private CatalogueSnapshot? _snapshot;
+    private string? _selectedModelCode;
+    private FurnitureModel? _selectedModel;
+    private TradeItemState _state;
+    private IReadOnlyList<VariantCodeTemplate> _templates = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _snapshot = await CatalogueSource.GetCurrentAsync();
+    }
+
+    private async Task OnModelSelectedAsync(string modelCode)
+    {
+        _selectedModelCode = modelCode;
+        _selectedModel = _snapshot?.Models.FirstOrDefault(m => m.Code == modelCode);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_selectedModelCode is null)
+        {
+            return;
+        }
+
+        _state = await CodeAssignmentService.GetModelStateAsync(_selectedModelCode);
+        _templates = await CodeAssignmentService.GetForModelAsync(_selectedModelCode);
+    }
+
+    private async Task AssignAsync(VariantCodeTemplate template)
+    {
+        try
+        {
+            await CodeAssignmentService.AssignAsync(template.Id, template.SuggestedCode, template.Notes);
+            Snackbar.Add($"Assigned code for '{template.VariantCode}'.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (TemplateFrozenException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ReleaseModelAsync()
+    {
+        if (_selectedModelCode is null)
+        {
+            return;
+        }
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Release model",
+            "This freezes all codes and makes them exportable. Continue?",
+            yesText: "Release",
+            cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await CodeAssignmentService.ReleaseModelAsync(_selectedModelCode);
+            Snackbar.Add($"Model '{_selectedModelCode}' released.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DiscontinueModelAsync()
+    {
+        if (_selectedModelCode is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await CodeAssignmentService.DiscontinueModelAsync(_selectedModelCode);
+            Snackbar.Add($"Model '{_selectedModelCode}' discontinued.", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    // Splits a variant code (ELEMENTCODE-DEF:CHOICE-...-__MATERIAL__:type) back into a readable line,
+    // resolving the element's display name from the current snapshot when it can still be found there.
+    private string Decode(string variantCode)
+    {
+        var segments = variantCode.Split('-');
+        if (segments.Length == 0)
+        {
+            return variantCode;
+        }
+
+        var elementCode = segments[0];
+        var element = _selectedModel?.Elements.FirstOrDefault(e => e.Code == elementCode);
+        var label = element is not null ? $"{element.Name} ({elementCode})" : elementCode;
+
+        var decodedSegments = segments.Skip(1).Select(DecodeSegment).ToList();
+        return decodedSegments.Count == 0 ? label : $"{label} · {string.Join(" · ", decodedSegments)}";
+    }
+
+    private static string DecodeSegment(string segment)
+    {
+        var separatorIndex = segment.IndexOf(':');
+        if (separatorIndex < 0)
+        {
+            return segment;
+        }
+
+        var definitionCode = segment[..separatorIndex];
+        var choiceCode = segment[(separatorIndex + 1)..];
+        return definitionCode == VariantCode.MaterialDefCode ? $"Material: {choiceCode}" : $"{definitionCode}: {choiceCode}";
+    }
+
+    private ProductionCodeStatus RowStatus(VariantCodeTemplate template) =>
+        string.IsNullOrEmpty(template.SuggestedCode)
+            ? ProductionCodeStatus.Composed
+            : _state == TradeItemState.Draft ? ProductionCodeStatus.Provisional : ProductionCodeStatus.Released;
+
+    private static Color StatusColor(ProductionCodeStatus status) => status switch
+    {
+        ProductionCodeStatus.Provisional => Color.Warning,
+        ProductionCodeStatus.Released => Color.Success,
+        _ => Color.Default
+    };
+
+    private static Color StateColor(TradeItemState state) => state switch
+    {
+        TradeItemState.Active => Color.Success,
+        TradeItemState.Discontinued => Color.Error,
+        _ => Color.Default
+    };
+}
