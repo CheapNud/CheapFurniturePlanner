@@ -1,12 +1,15 @@
 using Bunit;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Components.Shared;
+using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Domain.Production;
 using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Services;
 using CheapFurniturePlanner.ViewModels;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using MudBlazor.Services;
@@ -28,6 +31,28 @@ public class FurnitureConfigPanelTests : TestContext
         public void Invalidate() { }
     }
 
+    private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new(options);
+
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    // ProductionIdentityService now consults VariantNamingService, which needs a real (migrated) DB;
+    // none of these tests seed a VariantNaming row, so it always resolves an empty map and the
+    // Composed-status behavior these tests assert on is unchanged.
+    private static (IDbContextFactory<FurniturePlannerContext> Factory, SqliteConnection Connection) NewFactory()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(connection).Options;
+        using (var migrateContext = new FurniturePlannerContext(options))
+        {
+            migrateContext.Database.Migrate();
+        }
+        return (new TestDbContextFactory(options), connection);
+    }
+
     private static CatalogueSnapshot LoadFjordSnapshot()
     {
         var asm = typeof(CataloguePublishService).Assembly;
@@ -46,16 +71,17 @@ public class FurnitureConfigPanelTests : TestContext
         FabricColorCode = "AQUA-BLUE",
     };
 
-    // Registers every service FurnitureConfigPanel depends on. ProductionIdentityService is now
-    // resolve-only (ICatalogueSource only), so no DB wiring is needed here anymore.
-    private CatalogueSnapshot ConfigureServices()
+    // Registers every service FurnitureConfigPanel depends on.
+    private CatalogueSnapshot ConfigureServices(IDbContextFactory<FurniturePlannerContext> factory)
     {
         var snapshot = LoadFjordSnapshot();
 
         Services.AddMudServices();
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(snapshot));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
-        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>()));
+        Services.AddSingleton(sp => new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory)));
+        Services.AddSingleton(sp => new VariantNamingService(factory, sp.GetRequiredService<ModelPublishService>()));
+        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<VariantNamingService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // MudSelect renders its options into an overlay managed by MudBlazor's popover service, which
@@ -71,7 +97,9 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public void Render_ShowsOneSelectPerVisibleOption_AndHidesTriggerGatedOption()
     {
-        ConfigureServices();
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        ConfigureServices(factory);
         var placement = Fj3Placement();
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -87,7 +115,9 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task SelectingTrigger_RevealsGatedOption()
     {
-        ConfigureServices();
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        ConfigureServices(factory);
         var placement = Fj3Placement();
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -103,7 +133,9 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task SelectingFabricChip_UpdatesDisplayedPrice()
     {
-        ConfigureServices();
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        ConfigureServices(factory);
         var placement = Fj3Placement();
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -128,7 +160,9 @@ public class FurnitureConfigPanelTests : TestContext
         // selection-driven reprice in OnParametersSetAsync updates the display + cached price fields
         // but must not notify the parent, otherwise merely viewing an item would dirty the plan and
         // trigger a DB write (see PlannerPage.HandleConfigured).
-        ConfigureServices();
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        ConfigureServices(factory);
         var placement = Fj3Placement();
         var raisedCount = 0;
 
@@ -145,7 +179,9 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task ChangingOption_RaisesOnConfigured()
     {
-        ConfigureServices();
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        ConfigureServices(factory);
         var placement = Fj3Placement();
         var raisedCount = 0;
 
@@ -165,7 +201,9 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task SelectingFabricChip_RaisesOnConfigured()
     {
-        ConfigureServices();
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        ConfigureServices(factory);
         var placement = Fj3Placement();
         var raisedCount = 0;
 
@@ -185,7 +223,9 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public void DanglingElementCode_ShowsUnavailableRegion()
     {
-        ConfigureServices();
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        ConfigureServices(factory);
         var placement = new FurniturePlannerViewModel { ElementCode = "DOES-NOT-EXIST", Name = "Ghost Sofa" };
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -197,7 +237,9 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task BreakingConfigAfterValidPrice_ClearsCachedPersistedPrice()
     {
-        ConfigureServices();
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        ConfigureServices(factory);
         var placement = Fj3Placement();
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -224,7 +266,9 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public void Render_ShowsProductionCodeLine_ForConfiguredPlacement()
     {
-        var snapshot = ConfigureServices();
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var snapshot = ConfigureServices(factory);
         var placement = Fj3Placement();
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -236,5 +280,35 @@ public class FurnitureConfigPanelTests : TestContext
 
         Assert.Contains(cut.FindAll(".production-code-row"), _ => true);
         Assert.Contains(expected.EffectiveCode, cut.Markup);
+    }
+
+    [Fact]
+    public async Task Render_WithNamedVariant_ShowsAssignedCode()
+    {
+        // Task 3: once the modellenkamer names a variant on a released model, the panel's existing
+        // EffectiveCode rendering (Phase 3) must surface that assigned code, not the composed one.
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var snapshot = ConfigureServices(factory);
+        var placement = Fj3Placement();
+
+        var config = new ProductConfiguration("FJORD",
+            [new ElementSelection("FJ3", 1, placement.Selections, placement.FabricColorCode)]);
+        var composed = ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), Domain.Catalog.TradeItemState.Active)[0];
+
+        // Out-of-band naming, as a second operator/tab (the modellenkamer) would perform it, against
+        // the same DB the panel's own VariantNamingService reads from.
+        var namingPublish = new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory));
+        var naming = new VariantNamingService(factory, namingPublish);
+        await naming.AssignAsync("FJORD", composed.VariantCode, "STUDIO-A");
+
+        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
+
+        // The panel also displays the raw pricing-breakdown SKU (composed.VariantCode) elsewhere in
+        // its markup - unrelated to and unchanged by this task - so the assertion is scoped to the
+        // production-code-row that Phase 3 wired up to render ProductionIdentity.EffectiveCode.
+        var productionCodeRow = cut.Find(".production-code-row");
+        Assert.Contains("STUDIO-A", productionCodeRow.TextContent);
+        Assert.DoesNotContain(composed.VariantCode, productionCodeRow.TextContent);
     }
 }

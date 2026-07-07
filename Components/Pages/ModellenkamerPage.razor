@@ -4,6 +4,7 @@
 @inject ModelPublishService ModelPublishService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject NavigationManager Navigation
 
 <PageTitle>Modellenkamer - Cheap Furniture Planner</PageTitle>
 
@@ -35,6 +36,12 @@ else
             </MudTd>
             <MudTd DataLabel="Actions">
                 <MudStack Row="true" Spacing="2">
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               Color="Color.Info"
+                               OnClick="@(() => Navigation.NavigateTo($"/modellenkamer/{context.Code}"))">
+                        Name variants
+                    </MudButton>
                     <MudButton Size="Size.Small"
                                Variant="Variant.Filled"
                                Color="Color.Primary"

@@ -6,7 +6,7 @@ using CheapFurniturePlanner.ViewModels;
 
 namespace CheapFurniturePlanner.Services;
 
-public sealed class ProductionIdentityService(ICatalogueSource catalogue)
+public sealed class ProductionIdentityService(ICatalogueSource catalogue, VariantNamingService naming)
 {
     public async Task<ProductionIdentity?> ResolveForPlacementAsync(FurniturePlannerViewModel placement, CancellationToken ct = default)
     {
@@ -16,7 +16,9 @@ public sealed class ProductionIdentityService(ICatalogueSource catalogue)
         if (model is null) { return null; }
         var config = new ProductConfiguration(model.Code,
             [new ElementSelection(placement.ElementCode, 1, placement.Selections, placement.FabricColorCode)]);
-        // Placed models are always published (Active); no suggestions exist in this slice → status Composed.
-        return ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), TradeItemState.Active).FirstOrDefault();
+        // Placed models are always published (Active); a variant is Released if the modellenkamer
+        // named it, otherwise it falls back to the composed code.
+        var suggestions = await naming.NamesForModelAsync(model.Code, ct);
+        return ProductionIdentityResolver.Resolve(snapshot, config, suggestions, TradeItemState.Active).FirstOrDefault();
     }
 }

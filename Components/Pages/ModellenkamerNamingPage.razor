@@ -1,0 +1,151 @@
+@page "/modellenkamer/{ModelCode}"
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Catalog
+@using CheapFurniturePlanner.Domain.Pricing
+@using CheapFurniturePlanner.Domain.Production
+
+@inject VariantNamingService VariantNamingService
+@inject ModelPublishService ModelPublishService
+@inject ISnackbar Snackbar
+
+<PageTitle>Name variants - @ModelCode - Cheap Furniture Planner</PageTitle>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h5">Name variants — @ModelCode</MudText>
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       Href="/modellenkamer">
+                Back to models
+            </MudButton>
+        </MudStack>
+
+        @if (_model is not null)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">@_model.Name</MudText>
+
+            @if (_state != TradeItemState.Draft)
+            {
+                <MudAlert Severity="Severity.Warning">frozen — model is @_state</MudAlert>
+            }
+        }
+    </MudStack>
+</MudPaper>
+
+@if (_notFound)
+{
+    <MudAlert Severity="Severity.Error">Model '@ModelCode' not found.</MudAlert>
+}
+else if (_model is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    @foreach (var elementRows in _rowsByElement)
+    {
+        <MudPaper Elevation="1" Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6" Class="mb-2">@elementRows.Element.Name (@elementRows.Element.Code)</MudText>
+
+            @if (elementRows.Rows.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No BOM-significant variants for this element.</MudText>
+            }
+            else
+            {
+                <MudTable Items="@elementRows.Rows" Hover="true" Striped="true" Dense="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Breakdown</MudTh>
+                        <MudTh>Variant code</MudTh>
+                        <MudTh>Assigned code</MudTh>
+                        <MudTh>Status</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Breakdown">@Decode(context)</MudTd>
+                        <MudTd DataLabel="Variant code">@context.VariantCode</MudTd>
+                        <MudTd DataLabel="Assigned code">
+                            <MudTextField T="string"
+                                          Value="@AssignedCodeFor(context.VariantCode)"
+                                          ValueChanged="@((string code) => AssignAsync(context.VariantCode, code))"
+                                          Disabled="@(_state != TradeItemState.Draft)" />
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.VariantCode)">@StatusFor(context.VariantCode)</MudChip>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    }
+}
+
+@code {
+    [Parameter]
+    public string ModelCode { get; set; } = string.Empty;
+
+    private CatalogueSnapshot? _snapshot;
+    private FurnitureModel? _model;
+    private bool _notFound;
+    private TradeItemState _state;
+    private IReadOnlyDictionary<string, string> _names = new Dictionary<string, string>();
+    private List<(Element Element, IReadOnlyList<VariantDescriptor> Rows)> _rowsByElement = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        // The authoring seed, NOT ICatalogueSource.GetCurrentAsync() - the published snapshot only
+        // ever contains Active models, so a Draft model being named here would not resolve there.
+        _snapshot = SeedCatalogue.Load();
+        _model = _snapshot.Models.FirstOrDefault(m => m.Code == ModelCode);
+        if (_model is null)
+        {
+            _notFound = true;
+            return;
+        }
+
+        _rowsByElement = _model.Elements
+            .Select(element => (Element: element, Rows: VariantEnumerator.Enumerate(element, _snapshot)))
+            .ToList();
+
+        _state = await ModelPublishService.GetStateAsync(ModelCode);
+        _names = await VariantNamingService.NamesForModelAsync(ModelCode);
+    }
+
+    private string AssignedCodeFor(string variantCode) =>
+        _names.TryGetValue(variantCode, out var code) ? code : string.Empty;
+
+    private async Task AssignAsync(string variantCode, string code)
+    {
+        try
+        {
+            await VariantNamingService.AssignAsync(ModelCode, variantCode, code);
+            _names = await VariantNamingService.NamesForModelAsync(ModelCode);
+        }
+        catch (NamingFrozenException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private ProductionCodeStatus StatusFor(string variantCode) =>
+        ProductionIdentityResolver.StatusFor(_names.ContainsKey(variantCode), _state);
+
+    private Color StatusColor(string variantCode) => StatusFor(variantCode) switch
+    {
+        ProductionCodeStatus.Provisional => Color.Warning,
+        ProductionCodeStatus.Released => Color.Success,
+        _ => Color.Default
+    };
+
+    // Renders a variant's BOM-significant selections as a readable "DEF: choice" trail. Element.Options
+    // (ChoiceOption/ProductOptionValue) carry no separate display Name beyond their codes, so the option
+    // definition code and choice code ARE the display identifiers here - the same convention
+    // FurnitureConfigPanel uses when it labels selects directly by OptionDefinitionCode/OptionChoiceCode.
+    private static string Decode(VariantDescriptor row) =>
+        row.BomSignificantSelections.Count == 0
+            ? "(no BOM-significant choices)"
+            : string.Join(" · ", row.BomSignificantSelections
+                .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .Select(kv => kv.Key == VariantCode.MaterialDefCode ? $"Material: {kv.Value}" : $"{kv.Key}: {kv.Value}"));
+}
