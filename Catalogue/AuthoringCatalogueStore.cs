@@ -69,7 +69,9 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         var row = await db.AuthoringModels.AsNoTracking().FirstOrDefaultAsync(m => m.ModelCode == modelCode, ct);
-        return row is null ? null : CanonicalJson.Deserialize<FurnitureModel>(row.BundleJson);
+        if (row is null) return null;
+        return CanonicalJson.Deserialize<FurnitureModel>(row.BundleJson)
+            ?? throw new InvalidOperationException($"Corrupt authoring model document '{modelCode}'.");
     }
 
     public async Task SaveModelAsync(FurnitureModel model, CancellationToken ct = default)

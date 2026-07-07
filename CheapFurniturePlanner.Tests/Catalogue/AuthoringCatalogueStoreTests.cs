@@ -140,6 +140,30 @@ public class AuthoringCatalogueStoreTests
         }
     }
 
+    [Fact]
+    public async Task SaveModelAsync_OnNewCode_AppendsWithNextSortOrder()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var seed = SeedCatalogue.Load();
+            var store = new AuthoringCatalogueStore(factory);
+            await store.SeedFromAsync(seed);
+
+            await using var db = await factory.CreateDbContextAsync();
+            var priorMaxOrder = await db.AuthoringModels.MaxAsync(m => m.SortOrder);
+
+            var newModel = new FurnitureModel { Code = "ZZZ-NEW-TEST", Name = "Brand New Model" };
+            await store.SaveModelAsync(newModel);
+
+            var appendedRow = await db.AuthoringModels.AsNoTracking().SingleAsync(m => m.ModelCode == newModel.Code);
+            Assert.Equal(priorMaxOrder + 1, appendedRow.SortOrder);
+
+            var reloaded = await store.LoadAsync();
+            Assert.Equal(newModel.Code, reloaded.Models[^1].Code);
+        }
+    }
+
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
     {
         public FurniturePlannerContext CreateDbContext() => new(options);
