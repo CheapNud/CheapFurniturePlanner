@@ -2,6 +2,7 @@ using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Serialization;
+using CheapFurniturePlanner.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -161,6 +162,33 @@ public class AuthoringCatalogueStoreTests
 
             var reloaded = await store.LoadAsync();
             Assert.Equal(newModel.Code, reloaded.Models[^1].Code);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsync_AndLoadModelAsync_OnMalformedJson_ThrowInvalidOperationExceptionNamingTheModel()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            const string modelCode = "CORRUPT-MODEL";
+            await using (var db = await factory.CreateDbContextAsync())
+            {
+                db.AuthoringModels.Add(new AuthoringModelDocument
+                {
+                    ModelCode = modelCode,
+                    SortOrder = 0,
+                    BundleJson = "{ not valid json",
+                });
+                await db.SaveChangesAsync();
+            }
+            var store = new AuthoringCatalogueStore(factory);
+
+            var loadModelEx = await Assert.ThrowsAsync<InvalidOperationException>(() => store.LoadModelAsync(modelCode));
+            Assert.Contains(modelCode, loadModelEx.Message);
+
+            var loadEx = await Assert.ThrowsAsync<InvalidOperationException>(() => store.LoadAsync());
+            Assert.Contains(modelCode, loadEx.Message);
         }
     }
 

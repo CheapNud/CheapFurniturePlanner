@@ -4,6 +4,7 @@ using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace CheapFurniturePlanner.Catalogue;
 
@@ -59,8 +60,7 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
               ?? throw new InvalidOperationException("Corrupt authoring masters document.");
         var modelRows = await db.AuthoringModels.AsNoTracking().OrderBy(m => m.SortOrder).ToListAsync(ct);
         snapshot.Models = modelRows
-            .Select(r => CanonicalJson.Deserialize<FurnitureModel>(r.BundleJson)
-                ?? throw new InvalidOperationException($"Corrupt authoring model document '{r.ModelCode}'."))
+            .Select(r => DeserializeModel(r.ModelCode, r.BundleJson))
             .ToList();
         return snapshot;
     }
@@ -70,8 +70,23 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
         await using var db = await factory.CreateDbContextAsync(ct);
         var row = await db.AuthoringModels.AsNoTracking().FirstOrDefaultAsync(m => m.ModelCode == modelCode, ct);
         if (row is null) return null;
-        return CanonicalJson.Deserialize<FurnitureModel>(row.BundleJson)
-            ?? throw new InvalidOperationException($"Corrupt authoring model document '{modelCode}'.");
+        return DeserializeModel(modelCode, row.BundleJson);
+    }
+
+    // Wraps both the null-deserialize case and actually-malformed JSON (JsonException) in the same
+    // InvalidOperationException so callers get a consistent, model-identified corrupt-document error
+    // regardless of which way the document is broken.
+    private static FurnitureModel DeserializeModel(string modelCode, string json)
+    {
+        try
+        {
+            return CanonicalJson.Deserialize<FurnitureModel>(json)
+                ?? throw new InvalidOperationException($"Corrupt authoring model document '{modelCode}'.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"Corrupt authoring model document '{modelCode}'.", ex);
+        }
     }
 
     public async Task SaveModelAsync(FurnitureModel model, CancellationToken ct = default)
