@@ -57,6 +57,16 @@ public class ModellenkamerPageTests : TestContext
         return ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), TradeItemState.Draft)[0].VariantCode;
     }
 
+    // FJCH in HIDE-THICK-ESPRESSO resolves a MaterialTypeCode of "LEATHER-THICK" (see
+    // ProductionIdentityResolverTests), so its variant code carries a __MATERIAL__:LEATHER-THICK
+    // segment whose value itself contains a '-' - exactly the case Decode must not mis-split.
+    private static string FjchLeatherThickVariantCode(CatalogueSnapshot snapshot)
+    {
+        var selections = new Dictionary<string, string> { ["DEPTH"] = "STD", ["MECH"] = "NONE", ["HEAD"] = "HS1", ["STITCH"] = "PLAIN" };
+        var config = new ProductConfiguration("FJORD", [new ElementSelection("FJCH", 1, selections, "HIDE-THICK-ESPRESSO")]);
+        return ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), TradeItemState.Draft)[0].VariantCode;
+    }
+
     private (CatalogueSnapshot Snapshot, DbContextOptions<FurniturePlannerContext> DbOptions, SqliteConnection Connection) ConfigureServices()
     {
         var snapshot = LoadFjordSnapshot();
@@ -156,5 +166,22 @@ public class ModellenkamerPageTests : TestContext
         Assert.True(codeField.Instance.Disabled);
         Assert.Contains("Released", cut.Markup);
         Assert.Contains("frozen", cut.Markup);
+    }
+
+    [Fact]
+    public async Task VariantWithHyphenatedMaterialValue_DecodesAsSingleMaterialSegment()
+    {
+        var (snapshot, dbOptions, conn) = ConfigureServices();
+        using var _ = conn;
+        var variantCode = FjchLeatherThickVariantCode(snapshot);
+        var seedAssignments = new CodeAssignmentService(new TestDbContextFactory(dbOptions));
+        await seedAssignments.RegisterVariantAsync("FJORD", variantCode);
+
+        var cut = RenderComponent<ModellenkamerPage>();
+        await SelectModelAsync(cut, "FJORD");
+
+        // Split naively on '-', __MATERIAL__:LEATHER-THICK would mis-parse into a "Material: LEATHER"
+        // segment plus a stray "THICK" segment; Decode must re-join them into a single value.
+        Assert.Contains("Material: LEATHER-THICK", cut.Markup);
     }
 }

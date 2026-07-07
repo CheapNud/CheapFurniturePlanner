@@ -1,6 +1,5 @@
 using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
-using CheapFurniturePlanner.Domain.Fabrics;
 using CheapFurniturePlanner.Domain.Options;
 
 namespace CheapFurniturePlanner.Domain.Pricing.Engine;

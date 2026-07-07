@@ -17,7 +17,15 @@ public sealed class CodeAssignmentService(IDbContextFactory<FurniturePlannerCont
         if (exists) { return; }
         var now = DateTime.UtcNow;
         db.VariantCodeTemplates.Add(new VariantCodeTemplate { ModelCode = modelCode, VariantCode = variantCode, CreatedAt = now, UpdatedAt = now });
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Another writer inserted the same (ModelCode, VariantCode) row between our existence
+            // check and this insert; the unique index caught it, so treat this as an idempotent no-op.
+        }
     }
 
     public async Task<IReadOnlyList<VariantCodeTemplate>> GetForModelAsync(string modelCode, CancellationToken ct = default)

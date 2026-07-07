@@ -228,6 +228,11 @@ else
                 Placement.CatalogueVersion = _snapshot.Version;
             }
             _errors = [];
+
+            // Only a validly-priced config registers a production-identity template row - a
+            // degraded/invalid config (e.g. a stale fabric color) must not create a permanent junk
+            // row in the registry, so the badge is likewise only ever shown for a config that priced.
+            _identity = await ProductionIdentityService.ResolveForPlacementAsync(Placement);
         }
         else
         {
@@ -237,11 +242,8 @@ else
             _variantCode = null;
             Placement.CachedUnitPrice = null;
             Placement.CachedVariantCode = null;
+            _identity = null;
         }
-
-        // Read-only display; production identity is independent of whether pricing itself succeeded
-        // (e.g. a stale fabric color still resolves an element/model and thus a variant code).
-        _identity = await ProductionIdentityService.ResolveForPlacementAsync(Placement);
     }
 
     /// <summary>

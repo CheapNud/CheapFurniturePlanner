@@ -32,9 +32,7 @@ public static class ProductionIdentityResolver
             var variantCode = VariantCode.From(element, selection, materialTypeCode);
 
             var hasSuggestion = suggestionsByVariant.TryGetValue(variantCode, out var suggested) && !string.IsNullOrEmpty(suggested);
-            var status = !hasSuggestion
-                ? ProductionCodeStatus.Composed
-                : modelState == TradeItemState.Draft ? ProductionCodeStatus.Provisional : ProductionCodeStatus.Released;
+            var status = StatusFor(hasSuggestion, modelState);
             var effectiveCode = hasSuggestion ? suggested! : variantCode;
             var isExportable = modelState == TradeItemState.Active;
 
@@ -46,6 +44,14 @@ public static class ProductionIdentityResolver
         }
         return identities;
     }
+
+    // The single three-state rule: no suggestion => Composed; a suggestion under a Draft model =>
+    // Provisional; a suggestion under Active/Discontinued => Released. Shared by Resolve() and by any
+    // caller (e.g. ModellenkamerPage) that needs to derive a row's status without a full re-resolve.
+    public static ProductionCodeStatus StatusFor(bool hasSuggestion, TradeItemState modelState) =>
+        !hasSuggestion
+            ? ProductionCodeStatus.Composed
+            : modelState == TradeItemState.Draft ? ProductionCodeStatus.Provisional : ProductionCodeStatus.Released;
 
     // The BOM-significant subset that defines the variant: AffectsBom choice selections + the synthetic material type.
     private static IReadOnlyDictionary<string, string> BomSignificantSelections(

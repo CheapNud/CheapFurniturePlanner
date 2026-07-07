@@ -115,6 +115,40 @@ public class ProductionIdentityServiceTests
     }
 
     [Fact]
+    public async Task ResolveForPlacementAsync_RegisterFalse_ResolvesWithoutCreatingTemplateRow()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var snapshot = LoadFjordSnapshot();
+        var assignments = new CodeAssignmentService(factory);
+        var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot), assignments);
+        var placement = Fj2Placement();
+
+        var identity = await service.ResolveForPlacementAsync(placement, register: false);
+
+        Assert.NotNull(identity);
+        Assert.Equal(ProductionCodeStatus.Composed, identity!.Status);
+        Assert.Empty(await assignments.GetForModelAsync("FJORD"));
+    }
+
+    [Fact]
+    public async Task ResolveForPlacementAsync_RegisterTrue_CreatesTemplateRow()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var snapshot = LoadFjordSnapshot();
+        var assignments = new CodeAssignmentService(factory);
+        var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot), assignments);
+        var placement = Fj2Placement();
+
+        var identity = await service.ResolveForPlacementAsync(placement, register: true);
+
+        Assert.NotNull(identity);
+        var templates = await assignments.GetForModelAsync("FJORD");
+        Assert.Contains(templates, t => t.VariantCode == identity!.VariantCode);
+    }
+
+    [Fact]
     public async Task ResolveForPlacementAsync_MissingElementCode_ReturnsNull()
     {
         var (factory, conn) = NewFactory();

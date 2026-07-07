@@ -119,4 +119,33 @@ public class ProductionIdentityResolverTests
         Assert.Equal("Fabric", aquaBlueIdentity.MaterialTypeCode);
         Assert.Equal("LEATHER-THICK", leatherThickIdentity.MaterialTypeCode);
     }
+
+    [Fact]
+    public void Resolve_BomSignificantSelections_ExcludesNonBomStitch_IncludesBomChoicesAndMaterial()
+    {
+        // Arrange
+        var snapshot = DemoWorld.Load();
+        var configuration = FjchConfiguration("AQUA-BLUE");
+
+        // Act
+        var identity = Assert.Single(ProductionIdentityResolver.Resolve(snapshot, configuration, new Dictionary<string, string>(), TradeItemState.Draft));
+
+        // Assert
+        Assert.True(identity.BomSignificantSelections.ContainsKey("DEPTH"));
+        Assert.True(identity.BomSignificantSelections.ContainsKey("MECH"));
+        Assert.True(identity.BomSignificantSelections.ContainsKey(VariantCode.MaterialDefCode));
+        Assert.False(identity.BomSignificantSelections.ContainsKey("STITCH"));
+    }
+
+    [Theory]
+    [InlineData(false, TradeItemState.Draft, ProductionCodeStatus.Composed)]
+    [InlineData(false, TradeItemState.Active, ProductionCodeStatus.Composed)]
+    [InlineData(false, TradeItemState.Discontinued, ProductionCodeStatus.Composed)]
+    [InlineData(true, TradeItemState.Draft, ProductionCodeStatus.Provisional)]
+    [InlineData(true, TradeItemState.Active, ProductionCodeStatus.Released)]
+    [InlineData(true, TradeItemState.Discontinued, ProductionCodeStatus.Released)]
+    public void StatusFor_TruthTable(bool hasSuggestion, TradeItemState modelState, ProductionCodeStatus expected)
+    {
+        Assert.Equal(expected, ProductionIdentityResolver.StatusFor(hasSuggestion, modelState));
+    }
 }

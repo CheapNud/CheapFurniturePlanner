@@ -87,13 +87,13 @@
                 <MudTd DataLabel="Suggested code">
                     <MudTextField T="string"
                                   Value="@context.SuggestedCode"
-                                  ValueChanged="@((string value) => context.SuggestedCode = value)"
+                                  ValueChanged="@((string code) => context.SuggestedCode = code)"
                                   Disabled="@(_state != TradeItemState.Draft)" />
                 </MudTd>
                 <MudTd DataLabel="Notes">
                     <MudTextField T="string"
                                   Value="@context.Notes"
-                                  ValueChanged="@((string value) => context.Notes = value)"
+                                  ValueChanged="@((string notes) => context.Notes = notes)"
                                   Disabled="@(_state != TradeItemState.Draft)" />
                 </MudTd>
                 <MudTd DataLabel="Status">
@@ -192,6 +192,16 @@
             return;
         }
 
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Discontinue model",
+            "The model will be discontinued; codes remain frozen. Continue?",
+            yesText: "Discontinue",
+            cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
         try
         {
             await CodeAssignmentService.DiscontinueModelAsync(_selectedModelCode);
@@ -206,19 +216,31 @@
 
     // Splits a variant code (ELEMENTCODE-DEF:CHOICE-...-__MATERIAL__:type) back into a readable line,
     // resolving the element's display name from the current snapshot when it can still be found there.
+    // VariantCode.From joins KEY:VALUE segments with '-', so a value that itself contains a '-' (e.g.
+    // the demo material type LEATHER-THICK) would mis-split into two fragments; re-attach any fragment
+    // without a ':' to the previous segment's value to reconstruct it.
     private string Decode(string variantCode)
     {
-        var segments = variantCode.Split('-');
-        if (segments.Length == 0)
+        var fragments = variantCode.Split('-');
+        var elementCode = fragments[0];
+
+        List<string> segments = [];
+        foreach (var fragment in fragments.Skip(1))
         {
-            return variantCode;
+            if (fragment.Contains(':') || segments.Count == 0)
+            {
+                segments.Add(fragment);
+            }
+            else
+            {
+                segments[^1] = $"{segments[^1]}-{fragment}";
+            }
         }
 
-        var elementCode = segments[0];
         var element = _selectedModel?.Elements.FirstOrDefault(e => e.Code == elementCode);
         var label = element is not null ? $"{element.Name} ({elementCode})" : elementCode;
 
-        var decodedSegments = segments.Skip(1).Select(DecodeSegment).ToList();
+        var decodedSegments = segments.Select(DecodeSegment).ToList();
         return decodedSegments.Count == 0 ? label : $"{label} · {string.Join(" · ", decodedSegments)}";
     }
 
@@ -236,9 +258,7 @@
     }
 
     private ProductionCodeStatus RowStatus(VariantCodeTemplate template) =>
-        string.IsNullOrEmpty(template.SuggestedCode)
-            ? ProductionCodeStatus.Composed
-            : _state == TradeItemState.Draft ? ProductionCodeStatus.Provisional : ProductionCodeStatus.Released;
+        ProductionIdentityResolver.StatusFor(!string.IsNullOrEmpty(template.SuggestedCode), _state);
 
     private static Color StatusColor(ProductionCodeStatus status) => status switch
     {
