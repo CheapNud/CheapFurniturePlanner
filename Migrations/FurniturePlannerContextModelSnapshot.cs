@@ -523,40 +523,6 @@ namespace CheapFurniturePlanner.Migrations
                         });
                 });
 
-            modelBuilder.Entity("CheapFurniturePlanner.Models.VariantCodeTemplate", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelCode")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SuggestedCode")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("VariantCode")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ModelCode", "VariantCode")
-                        .IsUnique();
-
-                    b.ToTable("VariantCodeTemplates");
-                });
-
             modelBuilder.Entity("CheapHelpers.Models.Entities.UserNotificationPreference", b =>
                 {
                     b.Property<int>("Id")

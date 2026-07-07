@@ -1,44 +1,20 @@
 using CheapFurniturePlanner.Catalogue;
-using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Domain.Production;
 using CheapFurniturePlanner.Domain.Serialization;
-using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Services;
 using CheapFurniturePlanner.ViewModels;
-using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Services;
 
-// ProductionIdentityService is the thin app-side bridge between a placement and the Domain
-// ProductionIdentityResolver: it must resolve the owning model, register the variant idempotently
-// (so it shows up in the modellenkamer/assignment workflow), then resolve again with the current
-// suggestions + model state so the panel can display the effective code and its status.
+// ProductionIdentityService is now a thin resolve-only bridge between a placement and the Domain
+// ProductionIdentityResolver: it locates the owning model and resolves the composed variant code
+// against the always-published (Active) state - there is no registry to write to and no suggestion
+// set to apply, since the modellenkamer is now the sole gatekeeper for what reaches the catalogue.
 public class ProductionIdentityServiceTests
 {
-    // Mirrors CodeAssignmentServiceTests.NewFactory(): the connection is not owned by any single
-    // context handed out by the factory, so callers must dispose it themselves to keep the in-memory
-    // database alive for the test's duration. CodeAssignmentService now depends on IDbContextFactory
-    // (matching Program.cs's AddDbContextFactory registration) rather than a directly-injected context.
-    private static (IDbContextFactory<FurniturePlannerContext> Factory, Microsoft.Data.Sqlite.SqliteConnection Connection) NewFactory()
-    {
-        var conn = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
-        conn.Open();
-        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
-        using (var migrateContext = new FurniturePlannerContext(options))
-        {
-            migrateContext.Database.Migrate();
-        }
-        return (new TestDbContextFactory(options), conn);
-    }
-
-    private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
-    {
-        public FurniturePlannerContext CreateDbContext() => new(options);
-
-        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
-    }
-
     private sealed class FakeCatalogueSource(CatalogueSnapshot snapshot) : ICatalogueSource
     {
         public Task<CatalogueSnapshot> GetCurrentAsync() => Task.FromResult(snapshot);
@@ -65,13 +41,10 @@ public class ProductionIdentityServiceTests
     };
 
     [Fact]
-    public async Task ResolveForPlacementAsync_NoSuggestionYet_ReturnsComposedWithCorrectVariantCode_AndRegistersTemplateRow()
+    public async Task ResolveForPlacementAsync_ReturnsComposedIdentity_WithCorrectVariantCode()
     {
-        var (factory, conn) = NewFactory();
-        using var _ = conn;
         var snapshot = LoadFjordSnapshot();
-        var assignments = new CodeAssignmentService(factory);
-        var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot), assignments);
+        var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot));
         var placement = Fj2Placement();
 
         var identity = await service.ResolveForPlacementAsync(placement);
@@ -79,84 +52,32 @@ public class ProductionIdentityServiceTests
         Assert.NotNull(identity);
         Assert.Equal(ProductionCodeStatus.Composed, identity!.Status);
         Assert.Equal(identity.VariantCode, identity.EffectiveCode);
-        Assert.False(identity.IsExportable);
+        Assert.True(identity.IsExportable);
 
         var expectedConfig = new ProductConfiguration("FJORD",
             [new ElementSelection("FJ2", 1, placement.Selections, placement.FabricColorCode)]);
-        var expected = ProductionIdentityResolver.Resolve(snapshot, expectedConfig, new Dictionary<string, string>(), Domain.Catalog.TradeItemState.Draft)[0];
+        var expected = ProductionIdentityResolver.Resolve(snapshot, expectedConfig, new Dictionary<string, string>(), TradeItemState.Active)[0];
         Assert.Equal(expected.VariantCode, identity.VariantCode);
-
-        var templates = await assignments.GetForModelAsync("FJORD");
-        Assert.Contains(templates, t => t.VariantCode == identity.VariantCode);
-    }
-
-    [Fact]
-    public async Task ResolveForPlacementAsync_AfterAssignAndRelease_ReturnsReleasedWithAssignedCode()
-    {
-        var (factory, conn) = NewFactory();
-        using var _ = conn;
-        var snapshot = LoadFjordSnapshot();
-        var assignments = new CodeAssignmentService(factory);
-        var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot), assignments);
-        var placement = Fj2Placement();
-
-        var seed = await service.ResolveForPlacementAsync(placement);
-        Assert.NotNull(seed);
-        var template = (await assignments.GetForModelAsync("FJORD")).Single(t => t.VariantCode == seed!.VariantCode);
-        await assignments.AssignAsync(template.Id, "18E", null);
-        await assignments.ReleaseModelAsync("FJORD");
-
-        var identity = await service.ResolveForPlacementAsync(placement);
-
-        Assert.NotNull(identity);
-        Assert.Equal(ProductionCodeStatus.Released, identity!.Status);
-        Assert.Equal("18E", identity.EffectiveCode);
-        Assert.True(identity.IsExportable);
-    }
-
-    [Fact]
-    public async Task ResolveForPlacementAsync_RegisterFalse_ResolvesWithoutCreatingTemplateRow()
-    {
-        var (factory, conn) = NewFactory();
-        using var _ = conn;
-        var snapshot = LoadFjordSnapshot();
-        var assignments = new CodeAssignmentService(factory);
-        var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot), assignments);
-        var placement = Fj2Placement();
-
-        var identity = await service.ResolveForPlacementAsync(placement, register: false);
-
-        Assert.NotNull(identity);
-        Assert.Equal(ProductionCodeStatus.Composed, identity!.Status);
-        Assert.Empty(await assignments.GetForModelAsync("FJORD"));
-    }
-
-    [Fact]
-    public async Task ResolveForPlacementAsync_RegisterTrue_CreatesTemplateRow()
-    {
-        var (factory, conn) = NewFactory();
-        using var _ = conn;
-        var snapshot = LoadFjordSnapshot();
-        var assignments = new CodeAssignmentService(factory);
-        var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot), assignments);
-        var placement = Fj2Placement();
-
-        var identity = await service.ResolveForPlacementAsync(placement, register: true);
-
-        Assert.NotNull(identity);
-        var templates = await assignments.GetForModelAsync("FJORD");
-        Assert.Contains(templates, t => t.VariantCode == identity!.VariantCode);
     }
 
     [Fact]
     public async Task ResolveForPlacementAsync_MissingElementCode_ReturnsNull()
     {
-        var (factory, conn) = NewFactory();
-        using var _ = conn;
         var snapshot = LoadFjordSnapshot();
-        var assignments = new CodeAssignmentService(factory);
-        var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot), assignments);
+        var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot));
         var placement = new FurniturePlannerViewModel { ElementCode = null };
+
+        var identity = await service.ResolveForPlacementAsync(placement);
+
+        Assert.Null(identity);
+    }
+
+    [Fact]
+    public async Task ResolveForPlacementAsync_UnknownElementCode_ReturnsNull()
+    {
+        var snapshot = LoadFjordSnapshot();
+        var service = new ProductionIdentityService(new FakeCatalogueSource(snapshot));
+        var placement = new FurniturePlannerViewModel { ElementCode = "DOES-NOT-EXIST" };
 
         var identity = await service.ResolveForPlacementAsync(placement);
 

@@ -1,11 +1,7 @@
 @page "/modellenkamer"
-@using CheapFurniturePlanner.Catalogue
 @using CheapFurniturePlanner.Domain.Catalog
-@using CheapFurniturePlanner.Domain.Pricing
-@using CheapFurniturePlanner.Domain.Production
 
-@inject ICatalogueSource CatalogueSource
-@inject CodeAssignmentService CodeAssignmentService
+@inject ModelPublishService ModelPublishService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -14,158 +10,69 @@
 <MudPaper Elevation="2" Class="pa-4 mb-4">
     <MudStack Spacing="3">
         <MudText Typo="Typo.h5">Modellenkamer</MudText>
-
-        @if (_snapshot is null)
-        {
-            <MudProgressCircular Indeterminate="true" />
-        }
-        else
-        {
-            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
-                <MudSelect T="string"
-                           Label="Model"
-                           Value="@_selectedModelCode"
-                           ValueChanged="@((string code) => OnModelSelectedAsync(code))">
-                    @foreach (var model in _snapshot.Models.OrderBy(m => m.Code))
-                    {
-                        <MudSelectItem T="string" Value="@model.Code">@model.Code - @model.Name</MudSelectItem>
-                    }
-                </MudSelect>
-
-                @if (_selectedModelCode is not null)
-                {
-                    <MudChip T="bool" Size="Size.Small" Color="@StateColor(_state)">@_state</MudChip>
-
-                    <MudSpacer />
-
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Primary"
-                               Disabled="@(_state != TradeItemState.Draft)"
-                               OnClick="@(() => ReleaseModelAsync())">
-                        Release
-                    </MudButton>
-
-                    @if (_state == TradeItemState.Active)
-                    {
-                        <MudButton Variant="Variant.Outlined"
-                                   Color="Color.Error"
-                                   OnClick="@(() => DiscontinueModelAsync())">
-                            Discontinue
-                        </MudButton>
-                    }
-                }
-            </MudStack>
-
-            @if (_selectedModelCode is not null && _state != TradeItemState.Draft)
-            {
-                <MudAlert Severity="Severity.Info">frozen — model is @_state</MudAlert>
-            }
-        }
+        <MudAlert Severity="Severity.Info">Only released (Active) models appear in the catalogue and planner.</MudAlert>
     </MudStack>
 </MudPaper>
 
-@if (_selectedModelCode is not null)
+@if (_models is null)
 {
-    if (_templates.Count == 0)
-    {
-        <MudText Typo="Typo.body2" Color="Color.Secondary">No BOM-significant variants registered for this model yet.</MudText>
-    }
-    else
-    {
-        <MudTable Items="@_templates" Hover="true" Striped="true" Dense="true" Elevation="2">
-            <HeaderContent>
-                <MudTh>Variant code</MudTh>
-                <MudTh>Breakdown</MudTh>
-                <MudTh>Suggested code</MudTh>
-                <MudTh>Notes</MudTh>
-                <MudTh>Status</MudTh>
-                <MudTh>Actions</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Variant code">@context.VariantCode</MudTd>
-                <MudTd DataLabel="Breakdown">@Decode(context.VariantCode)</MudTd>
-                <MudTd DataLabel="Suggested code">
-                    <MudTextField T="string"
-                                  Value="@context.SuggestedCode"
-                                  ValueChanged="@((string code) => context.SuggestedCode = code)"
-                                  Disabled="@(_state != TradeItemState.Draft)" />
-                </MudTd>
-                <MudTd DataLabel="Notes">
-                    <MudTextField T="string"
-                                  Value="@context.Notes"
-                                  ValueChanged="@((string notes) => context.Notes = notes)"
-                                  Disabled="@(_state != TradeItemState.Draft)" />
-                </MudTd>
-                <MudTd DataLabel="Status">
-                    <MudChip T="bool" Size="Size.Small" Color="@StatusColor(RowStatus(context))">@RowStatus(context)</MudChip>
-                </MudTd>
-                <MudTd DataLabel="Actions">
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudTable Items="@_models" Hover="true" Striped="true" Dense="true" Elevation="2">
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>State</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Code">@context.Code</MudTd>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="State">
+                <MudChip T="bool" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               Disabled="@(context.State != TradeItemState.Draft)"
+                               OnClick="@(() => ReleaseAsync(context.Code))">
+                        Release
+                    </MudButton>
                     <MudButton Size="Size.Small"
                                Variant="Variant.Outlined"
-                               Disabled="@(_state != TradeItemState.Draft)"
-                               OnClick="@(() => AssignAsync(context))">
-                        Assign
+                               Color="Color.Error"
+                               Disabled="@(context.State != TradeItemState.Active)"
+                               OnClick="@(() => DiscontinueAsync(context.Code))">
+                        Discontinue
                     </MudButton>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-    }
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
 }
 
 @code {
-    private CatalogueSnapshot? _snapshot;
-    private string? _selectedModelCode;
-    private FurnitureModel? _selectedModel;
-    private TradeItemState _state;
-    private IReadOnlyList<VariantCodeTemplate> _templates = [];
+    private IReadOnlyList<AuthoringModel>? _models;
 
     protected override async Task OnInitializedAsync()
     {
-        _snapshot = await CatalogueSource.GetCurrentAsync();
-    }
-
-    private async Task OnModelSelectedAsync(string modelCode)
-    {
-        _selectedModelCode = modelCode;
-        _selectedModel = _snapshot?.Models.FirstOrDefault(m => m.Code == modelCode);
         await ReloadAsync();
     }
 
     private async Task ReloadAsync()
     {
-        if (_selectedModelCode is null)
-        {
-            return;
-        }
-
-        _state = await CodeAssignmentService.GetModelStateAsync(_selectedModelCode);
-        _templates = await CodeAssignmentService.GetForModelAsync(_selectedModelCode);
+        _models = await ModelPublishService.GetAuthoringModelsAsync();
     }
 
-    private async Task AssignAsync(VariantCodeTemplate template)
+    private async Task ReleaseAsync(string modelCode)
     {
-        try
-        {
-            await CodeAssignmentService.AssignAsync(template.Id, template.SuggestedCode, template.Notes);
-            Snackbar.Add($"Assigned code for '{template.VariantCode}'.", Severity.Success);
-            await ReloadAsync();
-        }
-        catch (TemplateFrozenException ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
-        }
-    }
-
-    private async Task ReleaseModelAsync()
-    {
-        if (_selectedModelCode is null)
-        {
-            return;
-        }
-
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Release model",
-            "This freezes all codes and makes them exportable. Continue?",
+            $"This publishes '{modelCode}' - it becomes visible in the catalogue and planner. Continue?",
             yesText: "Release",
             cancelText: "Cancel");
         if (confirmed != true)
@@ -175,8 +82,8 @@
 
         try
         {
-            await CodeAssignmentService.ReleaseModelAsync(_selectedModelCode);
-            Snackbar.Add($"Model '{_selectedModelCode}' released.", Severity.Success);
+            await ModelPublishService.ReleaseAsync(modelCode);
+            Snackbar.Add($"Model '{modelCode}' released.", Severity.Success);
             await ReloadAsync();
         }
         catch (InvalidOperationException ex)
@@ -185,16 +92,11 @@
         }
     }
 
-    private async Task DiscontinueModelAsync()
+    private async Task DiscontinueAsync(string modelCode)
     {
-        if (_selectedModelCode is null)
-        {
-            return;
-        }
-
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Discontinue model",
-            "The model will be discontinued; codes remain frozen. Continue?",
+            $"'{modelCode}' will be discontinued and removed from the catalogue and planner. Continue?",
             yesText: "Discontinue",
             cancelText: "Cancel");
         if (confirmed != true)
@@ -204,8 +106,8 @@
 
         try
         {
-            await CodeAssignmentService.DiscontinueModelAsync(_selectedModelCode);
-            Snackbar.Add($"Model '{_selectedModelCode}' discontinued.", Severity.Success);
+            await ModelPublishService.DiscontinueAsync(modelCode);
+            Snackbar.Add($"Model '{modelCode}' discontinued.", Severity.Success);
             await ReloadAsync();
         }
         catch (InvalidOperationException ex)
@@ -213,59 +115,6 @@
             Snackbar.Add(ex.Message, Severity.Error);
         }
     }
-
-    // Splits a variant code (ELEMENTCODE-DEF:CHOICE-...-__MATERIAL__:type) back into a readable line,
-    // resolving the element's display name from the current snapshot when it can still be found there.
-    // VariantCode.From joins KEY:VALUE segments with '-', so a value that itself contains a '-' (e.g.
-    // the demo material type LEATHER-THICK) would mis-split into two fragments; re-attach any fragment
-    // without a ':' to the previous segment's value to reconstruct it.
-    private string Decode(string variantCode)
-    {
-        var fragments = variantCode.Split('-');
-        var elementCode = fragments[0];
-
-        List<string> segments = [];
-        foreach (var fragment in fragments.Skip(1))
-        {
-            if (fragment.Contains(':') || segments.Count == 0)
-            {
-                segments.Add(fragment);
-            }
-            else
-            {
-                segments[^1] = $"{segments[^1]}-{fragment}";
-            }
-        }
-
-        var element = _selectedModel?.Elements.FirstOrDefault(e => e.Code == elementCode);
-        var label = element is not null ? $"{element.Name} ({elementCode})" : elementCode;
-
-        var decodedSegments = segments.Select(DecodeSegment).ToList();
-        return decodedSegments.Count == 0 ? label : $"{label} · {string.Join(" · ", decodedSegments)}";
-    }
-
-    private static string DecodeSegment(string segment)
-    {
-        var separatorIndex = segment.IndexOf(':');
-        if (separatorIndex < 0)
-        {
-            return segment;
-        }
-
-        var definitionCode = segment[..separatorIndex];
-        var choiceCode = segment[(separatorIndex + 1)..];
-        return definitionCode == VariantCode.MaterialDefCode ? $"Material: {choiceCode}" : $"{definitionCode}: {choiceCode}";
-    }
-
-    private ProductionCodeStatus RowStatus(VariantCodeTemplate template) =>
-        ProductionIdentityResolver.StatusFor(!string.IsNullOrEmpty(template.SuggestedCode), _state);
-
-    private static Color StatusColor(ProductionCodeStatus status) => status switch
-    {
-        ProductionCodeStatus.Provisional => Color.Warning,
-        ProductionCodeStatus.Released => Color.Success,
-        _ => Color.Default
-    };
 
     private static Color StateColor(TradeItemState state) => state switch
     {

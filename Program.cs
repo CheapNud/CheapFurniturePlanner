@@ -2,8 +2,6 @@
 using CheapAvaloniaBlazor.Extensions;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
-using CheapFurniturePlanner.Domain.Pricing;
-using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Mappings;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Repositories;
@@ -50,13 +48,7 @@ class Program
 
             if (!migrateContext.PublishedCatalogues.Any(c => c.IsCurrent))
             {
-                var asm = typeof(Program).Assembly;
-                using var stream = asm.GetManifestResourceStream("CheapFurniturePlanner.Seed.demo-catalogue.json")
-                    ?? throw new InvalidOperationException("Embedded Fjord seed catalogue resource not found.");
-                using var reader = new StreamReader(stream);
-                var json = reader.ReadToEnd();
-                var snapshot = CanonicalJson.Deserialize<CatalogueSnapshot>(json)
-                    ?? throw new InvalidOperationException("Failed to deserialize the embedded Fjord seed catalogue.");
+                var snapshot = SeedCatalogue.Load();
                 var publishService = scope.ServiceProvider.GetRequiredService<CataloguePublishService>();
                 var result = publishService.PublishAsync(snapshot).GetAwaiter().GetResult();
                 if (!result.Success)
@@ -80,7 +72,7 @@ class Program
         builder.Services.AddScoped<RoomPlanService>();
         builder.Services.AddScoped<PlannerService>();
         builder.Services.AddScoped<PricingService>();
-        builder.Services.AddScoped<CodeAssignmentService>();
+        builder.Services.AddScoped<ModelPublishService>();
         builder.Services.AddScoped<ProductionIdentityService>();
 
         // Run the app - all Avalonia complexity handled by the package

@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CheapFurniturePlanner.Migrations
 {
     [DbContext(typeof(FurniturePlannerContext))]
-    [Migration("20260706232430_Phase3ProductionIdentity")]
-    partial class Phase3ProductionIdentity
+    [Migration("20260707090605_Phase3ModelState")]
+    partial class Phase3ModelState
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -524,40 +524,6 @@ namespace CheapFurniturePlanner.Migrations
                             Unit = "cm",
                             Width = 500.0
                         });
-                });
-
-            modelBuilder.Entity("CheapFurniturePlanner.Models.VariantCodeTemplate", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ModelCode")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("SuggestedCode")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("VariantCode")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ModelCode", "VariantCode")
-                        .IsUnique();
-
-                    b.ToTable("VariantCodeTemplates");
                 });
 
             modelBuilder.Entity("CheapHelpers.Models.Entities.UserNotificationPreference", b =>

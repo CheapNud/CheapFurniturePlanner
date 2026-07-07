@@ -1,11 +1,8 @@
+using AngleSharp.Dom;
 using Bunit;
-using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Components.Pages;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
-using CheapFurniturePlanner.Domain.Pricing;
-using CheapFurniturePlanner.Domain.Production;
-using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -16,19 +13,12 @@ using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Components;
 
-// Exercises the modellenkamer authoring page end to end against the real embedded Fjord catalogue
-// and a real CodeAssignmentService over in-memory SQLite, mirroring FurnitureConfigPanelTests: the
-// page is the operator-facing surface for assigning/freezing 18E codes, so its gating (Draft vs.
-// Active/Discontinued) has to be proven against the actual service transitions, not a stub.
+// Exercises the modellenkamer as the model-list gatekeeper: it lists the authoring model set (the
+// embedded seed catalogue) with each model's release state, and its Release/Discontinue actions are
+// state-gated the same way ModelPublishService itself gates them. Runs against a real
+// ModelPublishService over in-memory SQLite, mirroring FurnitureConfigPanelTests/DbCatalogueSourceTests.
 public class ModellenkamerPageTests : TestContext
 {
-    private sealed class FakeCatalogueSource(CatalogueSnapshot snapshot) : ICatalogueSource
-    {
-        public Task<CatalogueSnapshot> GetCurrentAsync() => Task.FromResult(snapshot);
-
-        public void Invalidate() { }
-    }
-
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
     {
         public FurniturePlannerContext CreateDbContext() => new(options);
@@ -36,152 +26,129 @@ public class ModellenkamerPageTests : TestContext
         public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
     }
 
-    private static CatalogueSnapshot LoadFjordSnapshot()
+    private (IDbContextFactory<FurniturePlannerContext> Factory, SqliteConnection Connection) NewFactory()
     {
-        var asm = typeof(CataloguePublishService).Assembly;
-        using var stream = asm.GetManifestResourceStream("CheapFurniturePlanner.Seed.demo-catalogue.json")
-            ?? throw new InvalidOperationException("Embedded resource 'CheapFurniturePlanner.Seed.demo-catalogue.json' not found.");
-        using var reader = new StreamReader(stream);
-        var json = reader.ReadToEnd();
-        return CanonicalJson.Deserialize<CatalogueSnapshot>(json)
-            ?? throw new InvalidOperationException("Failed to deserialize embedded demo-catalogue.json.");
-    }
-
-    // Same FJ3 config FurnitureConfigPanelTests prices (DEPTH:STD, MECH:NONE - both AffectsBom;
-    // STITCH is not BOM-significant so it never reaches the variant code); derived via the real
-    // resolver rather than hardcoded so a change to the encoding can't silently desync the test.
-    private static string Fj3VariantCode(CatalogueSnapshot snapshot)
-    {
-        var selections = new Dictionary<string, string> { ["DEPTH"] = "STD", ["MECH"] = "NONE", ["STITCH"] = "PLAIN" };
-        var config = new ProductConfiguration("FJORD", [new ElementSelection("FJ3", 1, selections, "AQUA-BLUE")]);
-        return ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), TradeItemState.Draft)[0].VariantCode;
-    }
-
-    // FJCH in HIDE-THICK-ESPRESSO resolves a MaterialTypeCode of "LEATHER-THICK" (see
-    // ProductionIdentityResolverTests), so its variant code carries a __MATERIAL__:LEATHER-THICK
-    // segment whose value itself contains a '-' - exactly the case Decode must not mis-split.
-    private static string FjchLeatherThickVariantCode(CatalogueSnapshot snapshot)
-    {
-        var selections = new Dictionary<string, string> { ["DEPTH"] = "STD", ["MECH"] = "NONE", ["HEAD"] = "HS1", ["STITCH"] = "PLAIN" };
-        var config = new ProductConfiguration("FJORD", [new ElementSelection("FJCH", 1, selections, "HIDE-THICK-ESPRESSO")]);
-        return ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), TradeItemState.Draft)[0].VariantCode;
-    }
-
-    private (CatalogueSnapshot Snapshot, DbContextOptions<FurniturePlannerContext> DbOptions, SqliteConnection Connection) ConfigureServices()
-    {
-        var snapshot = LoadFjordSnapshot();
         var conn = new SqliteConnection("Data Source=:memory:");
         conn.Open();
-        var dbOptions = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
-        using (var migrateContext = new FurniturePlannerContext(dbOptions))
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
+        using (var migrateContext = new FurniturePlannerContext(options))
         {
             migrateContext.Database.Migrate();
         }
+        return (new TestDbContextFactory(options), conn);
+    }
 
+    // bUnit renders each RenderComponent<T>() call as its own root in the render tree, so the
+    // MudMessageBox that ShowMessageBoxAsync opens shows up as a descendant of the MudDialogProvider
+    // root, NOT of the page under test - callers must query the returned handle, not `cut`.
+    private IRenderedComponent<MudDialogProvider> ConfigureServices(IDbContextFactory<FurniturePlannerContext> factory)
+    {
         Services.AddMudServices();
-        Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(snapshot));
-        Services.AddSingleton<IDbContextFactory<FurniturePlannerContext>>(new TestDbContextFactory(dbOptions));
-        Services.AddSingleton(sp => new CodeAssignmentService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
+        Services.AddSingleton(factory);
+        Services.AddSingleton(sp => new ModelPublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        // MudSelect renders its options into an overlay managed by MudBlazor's popover service, which
-        // requires a MudPopoverProvider to be present somewhere in the render tree.
+        // MudTable's Release/Discontinue confirmations render via MudDialogProvider; MudSelect-style
+        // overlays elsewhere in the app rely on MudPopoverProvider - both need to be present.
+        var dialogProvider = RenderComponent<MudDialogProvider>();
         RenderComponent<MudPopoverProvider>();
-
-        return (snapshot, dbOptions, conn);
+        return dialogProvider;
     }
 
-    // The page wires the model MudSelect's ValueChanged straight to its selection handler, so
-    // invoking the callback directly (as FurnitureConfigPanelTests does for its option selects)
-    // drives the same code path a real click through the popover would.
-    private static async Task SelectModelAsync(IRenderedComponent<ModellenkamerPage> cut, string modelCode)
+    private static IElement FindActionButton(IRenderedComponent<ModellenkamerPage> cut, string text) =>
+        cut.FindAll("button").Single(b => b.TextContent.Trim() == text);
+
+    [Fact]
+    public void Render_ListsSeedModel_WithDraftStateAndReleaseEnabled()
     {
-        var select = cut.FindComponent<MudSelect<string>>();
-        await cut.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(modelCode));
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<ModellenkamerPage>();
+
+        Assert.Contains("FJORD", cut.Markup);
+        Assert.Contains("Fjord", cut.Markup);
+        Assert.Contains(TradeItemState.Draft.ToString(), cut.Markup);
+
+        var releaseButton = FindActionButton(cut, "Release");
+        var discontinueButton = FindActionButton(cut, "Discontinue");
+        Assert.False(releaseButton.HasAttribute("disabled"));
+        Assert.True(discontinueButton.HasAttribute("disabled"));
     }
 
     [Fact]
-    public async Task SelectingDraftModel_ListsVariantRow_WithEditableSuggestedCodeField()
+    public async Task Render_AfterOutOfBandRelease_ShowsActiveState_WithDiscontinueEnabled()
     {
-        var (snapshot, dbOptions, conn) = ConfigureServices();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        var variantCode = Fj3VariantCode(snapshot);
-        var seedAssignments = new CodeAssignmentService(new TestDbContextFactory(dbOptions));
-        await seedAssignments.RegisterVariantAsync("FJORD", variantCode);
+        // Released out-of-band (as a second operator/tab would) before the page ever loads, so this
+        // proves the initial load reflects persisted state rather than a page-local assumption.
+        await new ModelPublishService(factory).ReleaseAsync("FJORD");
+        ConfigureServices(factory);
 
         var cut = RenderComponent<ModellenkamerPage>();
-        await SelectModelAsync(cut, "FJORD");
 
-        Assert.Contains(variantCode, cut.Markup);
-        var codeField = cut.FindComponents<MudTextField<string>>()[0];
-        Assert.False(codeField.Instance.Disabled);
-        Assert.Contains("Composed", cut.Markup);
+        Assert.Contains(TradeItemState.Active.ToString(), cut.Markup);
+        var releaseButton = FindActionButton(cut, "Release");
+        var discontinueButton = FindActionButton(cut, "Discontinue");
+        Assert.True(releaseButton.HasAttribute("disabled"));
+        Assert.False(discontinueButton.HasAttribute("disabled"));
     }
 
     [Fact]
-    public async Task EnteringCodeAndAssigning_PersistsCodeViaCodeAssignmentService()
+    public async Task ClickingRelease_ThroughConfirm_TransitionsDraftToActive_AndRebadges()
     {
-        var (snapshot, dbOptions, conn) = ConfigureServices();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        var variantCode = Fj3VariantCode(snapshot);
-        var seedAssignments = new CodeAssignmentService(new TestDbContextFactory(dbOptions));
-        await seedAssignments.RegisterVariantAsync("FJORD", variantCode);
+        var dialogProvider = ConfigureServices(factory);
 
         var cut = RenderComponent<ModellenkamerPage>();
-        await SelectModelAsync(cut, "FJORD");
+        var releaseButton = FindActionButton(cut, "Release");
 
-        var codeField = cut.FindComponents<MudTextField<string>>()[0];
-        await cut.InvokeAsync(() => codeField.Instance.ValueChanged.InvokeAsync("18E"));
+        // ShowMessageBoxAsync suspends until the rendered MudMessageBox dialog is dismissed, so
+        // awaiting the click itself here would deadlock the test; fire it and drive the dialog instead.
+        var pendingClick = cut.InvokeAsync(() => releaseButton.Click());
 
-        var assignButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Assign");
-        await cut.InvokeAsync(() => assignButton.Click());
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<MudMessageBox>().Count > 0);
+        var messageBox = dialogProvider.FindComponent<MudMessageBox>();
+        Assert.Contains("FJORD", messageBox.Markup);
+        var confirmButton = messageBox.FindAll("button").Single(b => b.TextContent.Trim() == "Release");
+        await cut.InvokeAsync(() => confirmButton.Click());
+        await pendingClick;
 
-        var persisted = (await seedAssignments.GetForModelAsync("FJORD")).Single(t => t.VariantCode == variantCode);
-        Assert.Equal("18E", persisted.SuggestedCode);
-        Assert.Contains("Provisional", cut.Markup);
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(TradeItemState.Active.ToString(), cut.Markup);
+            Assert.True(FindActionButton(cut, "Release").HasAttribute("disabled"));
+            Assert.False(FindActionButton(cut, "Discontinue").HasAttribute("disabled"));
+        });
     }
 
     [Fact]
-    public async Task AfterReleaseModel_SuggestedCodeFieldIsDisabled_AndBadgeReadsReleased()
+    public async Task ClickingDiscontinue_ThroughConfirm_TransitionsActiveToDiscontinued()
     {
-        var (snapshot, dbOptions, conn) = ConfigureServices();
+        var (factory, conn) = NewFactory();
         using var _ = conn;
-        var variantCode = Fj3VariantCode(snapshot);
-        var seedAssignments = new CodeAssignmentService(new TestDbContextFactory(dbOptions));
-        await seedAssignments.RegisterVariantAsync("FJORD", variantCode);
-        var template = (await seedAssignments.GetForModelAsync("FJORD")).Single(t => t.VariantCode == variantCode);
-        await seedAssignments.AssignAsync(template.Id, "18E", null);
+        await new ModelPublishService(factory).ReleaseAsync("FJORD");
+        var dialogProvider = ConfigureServices(factory);
 
         var cut = RenderComponent<ModellenkamerPage>();
-        await SelectModelAsync(cut, "FJORD");
+        var discontinueButton = FindActionButton(cut, "Discontinue");
 
-        // Released out-of-band (as a second operator/tab would) rather than through the page's own
-        // Release button, so this test stays focused on the gating re-render rather than the
-        // MudMessageBox confirmation flow. Re-selecting the same model forces the page to reload
-        // state/templates from the service, the same way a fresh navigation to the page would.
-        await seedAssignments.ReleaseModelAsync("FJORD");
-        await SelectModelAsync(cut, "FJORD");
+        var pendingClick = cut.InvokeAsync(() => discontinueButton.Click());
 
-        var codeField = cut.FindComponents<MudTextField<string>>()[0];
-        Assert.True(codeField.Instance.Disabled);
-        Assert.Contains("Released", cut.Markup);
-        Assert.Contains("frozen", cut.Markup);
-    }
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<MudMessageBox>().Count > 0);
+        var messageBox = dialogProvider.FindComponent<MudMessageBox>();
+        var confirmButton = messageBox.FindAll("button").Single(b => b.TextContent.Trim() == "Discontinue");
+        await cut.InvokeAsync(() => confirmButton.Click());
+        await pendingClick;
 
-    [Fact]
-    public async Task VariantWithHyphenatedMaterialValue_DecodesAsSingleMaterialSegment()
-    {
-        var (snapshot, dbOptions, conn) = ConfigureServices();
-        using var _ = conn;
-        var variantCode = FjchLeatherThickVariantCode(snapshot);
-        var seedAssignments = new CodeAssignmentService(new TestDbContextFactory(dbOptions));
-        await seedAssignments.RegisterVariantAsync("FJORD", variantCode);
-
-        var cut = RenderComponent<ModellenkamerPage>();
-        await SelectModelAsync(cut, "FJORD");
-
-        // Split naively on '-', __MATERIAL__:LEATHER-THICK would mis-parse into a "Material: LEATHER"
-        // segment plus a stray "THICK" segment; Decode must re-join them into a single value.
-        Assert.Contains("Material: LEATHER-THICK", cut.Markup);
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(TradeItemState.Discontinued.ToString(), cut.Markup);
+            Assert.True(FindActionButton(cut, "Release").HasAttribute("disabled"));
+            Assert.True(FindActionButton(cut, "Discontinue").HasAttribute("disabled"));
+        });
     }
 }

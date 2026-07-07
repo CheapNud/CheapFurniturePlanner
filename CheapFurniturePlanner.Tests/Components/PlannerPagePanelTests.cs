@@ -111,11 +111,8 @@ public class PlannerPagePanelTests : TestContext
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(LoadFjordSnapshot()));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
 
-        // FurnitureConfigPanel also resolves/registers the production identity of the selected
-        // placement; wire the same DB the placements themselves live in.
         Services.AddSingleton<IDbContextFactory<FurniturePlannerContext>>(new TestDbContextFactory(options));
-        Services.AddSingleton(sp => new CodeAssignmentService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
-        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<CodeAssignmentService>()));
+        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // MudSelect (used by both the room-settings dialog and the config panel's option dropdowns)

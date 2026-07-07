@@ -1,15 +1,12 @@
 using Bunit;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Components.Shared;
-using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Domain.Production;
 using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Services;
 using CheapFurniturePlanner.ViewModels;
 using Microsoft.AspNetCore.Components;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
 using MudBlazor.Services;
@@ -49,50 +46,32 @@ public class FurnitureConfigPanelTests : TestContext
         FabricColorCode = "AQUA-BLUE",
     };
 
-    // Registers every service FurnitureConfigPanel depends on, including the production-identity
-    // bridge - it resolves/registers against a real (in-memory SQLite) DB, so callers must keep the
-    // returned connection alive (and dispose it) for the duration of the test, mirroring
-    // PlannerPagePanelTests/CodeAssignmentServiceTests.
-    private (CatalogueSnapshot Snapshot, DbContextOptions<FurniturePlannerContext> DbOptions, SqliteConnection Connection) ConfigureServices()
+    // Registers every service FurnitureConfigPanel depends on. ProductionIdentityService is now
+    // resolve-only (ICatalogueSource only), so no DB wiring is needed here anymore.
+    private CatalogueSnapshot ConfigureServices()
     {
         var snapshot = LoadFjordSnapshot();
-        var conn = new SqliteConnection("Data Source=:memory:");
-        conn.Open();
-        var dbOptions = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
-        using (var migrateContext = new FurniturePlannerContext(dbOptions))
-        {
-            migrateContext.Database.Migrate();
-        }
 
         Services.AddMudServices();
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(snapshot));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
-        Services.AddSingleton<IDbContextFactory<FurniturePlannerContext>>(new TestDbContextFactory(dbOptions));
-        Services.AddSingleton(sp => new CodeAssignmentService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
-        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<CodeAssignmentService>()));
+        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // MudSelect renders its options into an overlay managed by MudBlazor's popover service, which
         // requires a MudPopoverProvider to be present somewhere in the render tree.
         RenderComponent<MudPopoverProvider>();
 
-        return (snapshot, dbOptions, conn);
+        return snapshot;
     }
 
     private static IRenderedComponent<MudSelect<string>> FindSelect(IRenderedComponent<FurnitureConfigPanel> cut, string optionDefinitionCode) =>
         cut.FindComponents<MudSelect<string>>().Single(c => c.Instance.Label == optionDefinitionCode);
 
-    private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
-    {
-        public FurniturePlannerContext CreateDbContext() => new(options);
-
-        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
-    }
-
     [Fact]
     public void Render_ShowsOneSelectPerVisibleOption_AndHidesTriggerGatedOption()
     {
-        using var _ = ConfigureServices().Connection;
+        ConfigureServices();
         var placement = Fj3Placement();
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -108,7 +87,7 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task SelectingTrigger_RevealsGatedOption()
     {
-        using var _ = ConfigureServices().Connection;
+        ConfigureServices();
         var placement = Fj3Placement();
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -124,7 +103,7 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task SelectingFabricChip_UpdatesDisplayedPrice()
     {
-        using var _ = ConfigureServices().Connection;
+        ConfigureServices();
         var placement = Fj3Placement();
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -149,7 +128,7 @@ public class FurnitureConfigPanelTests : TestContext
         // selection-driven reprice in OnParametersSetAsync updates the display + cached price fields
         // but must not notify the parent, otherwise merely viewing an item would dirty the plan and
         // trigger a DB write (see PlannerPage.HandleConfigured).
-        using var _ = ConfigureServices().Connection;
+        ConfigureServices();
         var placement = Fj3Placement();
         var raisedCount = 0;
 
@@ -166,7 +145,7 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task ChangingOption_RaisesOnConfigured()
     {
-        using var _ = ConfigureServices().Connection;
+        ConfigureServices();
         var placement = Fj3Placement();
         var raisedCount = 0;
 
@@ -186,7 +165,7 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task SelectingFabricChip_RaisesOnConfigured()
     {
-        using var _ = ConfigureServices().Connection;
+        ConfigureServices();
         var placement = Fj3Placement();
         var raisedCount = 0;
 
@@ -206,7 +185,7 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public void DanglingElementCode_ShowsUnavailableRegion()
     {
-        using var _ = ConfigureServices().Connection;
+        ConfigureServices();
         var placement = new FurniturePlannerViewModel { ElementCode = "DOES-NOT-EXIST", Name = "Ghost Sofa" };
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -218,7 +197,7 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task BreakingConfigAfterValidPrice_ClearsCachedPersistedPrice()
     {
-        using var _ = ConfigureServices().Connection;
+        ConfigureServices();
         var placement = Fj3Placement();
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
@@ -245,41 +224,17 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public void Render_ShowsProductionCodeLine_ForConfiguredPlacement()
     {
-        var (snapshot, _, conn) = ConfigureServices();
-        using var _ = conn;
+        var snapshot = ConfigureServices();
         var placement = Fj3Placement();
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
 
         var config = new ProductConfiguration("FJORD",
             [new ElementSelection("FJ3", 1, placement.Selections, placement.FabricColorCode)]);
-        var expected = ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), Domain.Catalog.TradeItemState.Draft)[0];
+        // Placed models resolve as always-published (Active), matching ProductionIdentityService.
+        var expected = ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), Domain.Catalog.TradeItemState.Active)[0];
 
         Assert.Contains(cut.FindAll(".production-code-row"), _ => true);
         Assert.Contains(expected.EffectiveCode, cut.Markup);
-        Assert.Contains(cut.FindComponents<MudChip<bool>>(), c => c.Markup.Contains("composed"));
-    }
-
-    [Fact]
-    public async Task Render_ReleasedAssignment_ShowsReleasedBadgeAndAssignedCode()
-    {
-        var (snapshot, dbOptions, conn) = ConfigureServices();
-        using var _ = conn;
-        var placement = Fj3Placement();
-
-        var config = new ProductConfiguration("FJORD",
-            [new ElementSelection("FJ3", 1, placement.Selections, placement.FabricColorCode)]);
-        var variantCode = ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), Domain.Catalog.TradeItemState.Draft)[0].VariantCode;
-
-        var seedAssignments = new CodeAssignmentService(new TestDbContextFactory(dbOptions));
-        await seedAssignments.RegisterVariantAsync("FJORD", variantCode);
-        var template = (await seedAssignments.GetForModelAsync("FJORD")).Single(t => t.VariantCode == variantCode);
-        await seedAssignments.AssignAsync(template.Id, "18E", null);
-        await seedAssignments.ReleaseModelAsync("FJORD");
-
-        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
-
-        Assert.Contains("18E", cut.Markup);
-        Assert.Contains(cut.FindComponents<MudChip<bool>>(), c => c.Markup.Contains("released"));
     }
 }
