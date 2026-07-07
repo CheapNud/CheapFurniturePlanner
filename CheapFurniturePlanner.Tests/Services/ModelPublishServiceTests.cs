@@ -8,7 +8,7 @@ using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Services;
 
-// ModelPublishService is the modellenkamer's gatekeeper: it lists the authoring model set (the
+// ModelPublishService is the studio's gatekeeper: it lists the authoring model set (the
 // embedded seed catalogue, in this slice) alongside each model's release state, and owns the
 // Draft -> Active -> Discontinued state machine. Mirrors DbCatalogueSourceTests.NewFactory(): the
 // connection is not owned by any single context handed out by the factory, so callers must dispose

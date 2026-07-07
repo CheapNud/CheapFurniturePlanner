@@ -7,7 +7,7 @@ namespace CheapFurniturePlanner.Services;
 
 public sealed class NamingFrozenException(string modelCode) : Exception($"Model '{modelCode}' is not in Draft; variant names are frozen.");
 
-// The modellenkamer's sparse variant-naming registry: a row only ever exists for a variant that has
+// The studio's sparse variant-naming registry: a row only ever exists for a variant that has
 // actually been assigned a code (e.g. "STUDIO-A"), and edits are only permitted while the owning
 // model is still in Draft (Phase 3's ModelPublishService gate) so a released model's names cannot
 // drift.

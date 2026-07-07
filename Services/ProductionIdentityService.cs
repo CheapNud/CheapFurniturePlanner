@@ -16,7 +16,7 @@ public sealed class ProductionIdentityService(ICatalogueSource catalogue, Varian
         if (model is null) { return null; }
         var config = new ProductConfiguration(model.Code,
             [new ElementSelection(placement.ElementCode, 1, placement.Selections, placement.FabricColorCode)]);
-        // Placed models are always published (Active); a variant is Released if the modellenkamer
+        // Placed models are always published (Active); a variant is Released if the studio
         // named it, otherwise it falls back to the composed code.
         var suggestions = await naming.NamesForModelAsync(model.Code, ct);
         return ProductionIdentityResolver.Resolve(snapshot, config, suggestions, TradeItemState.Active).FirstOrDefault();

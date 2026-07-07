@@ -15,12 +15,12 @@ using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Components;
 
-// Exercises the modellenkamer's per-model naming drill-in: for a Draft model it lists the
+// Exercises the studio's per-model naming drill-in: for a Draft model it lists the
 // enumerator's BOM-significant variants per element with editable code fields whose commits persist
 // through the real VariantNamingService; for a released (Active) model, editing is frozen (Disabled
 // fields + the frozen alert). Runs against a real VariantNamingService + ModelPublishService over
-// in-memory SQLite, following the ModellenkamerPageTests/VariantNamingServiceTests harness pattern.
-public class ModellenkamerNamingPageTests : TestContext
+// in-memory SQLite, following the StudioPageTests/VariantNamingServiceTests harness pattern.
+public class StudioNamingPageTests : TestContext
 {
     private const string Studio = "FJORD-STUDIO";
     private const string Released = "FJORD";
@@ -83,7 +83,7 @@ public class ModellenkamerNamingPageTests : TestContext
         var snapshot = SeedCatalogue.Load();
         var expectedRowCount = model.Elements.Sum(e => VariantEnumerator.Enumerate(e, snapshot).Count);
 
-        var cut = RenderComponent<ModellenkamerNamingPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = RenderComponent<StudioNamingPage>(p => p.Add(x => x.ModelCode, Studio));
 
         Assert.Contains("Fjord Studio", cut.Markup);
         Assert.DoesNotContain("frozen", cut.Markup);
@@ -106,7 +106,7 @@ public class ModellenkamerNamingPageTests : TestContext
         var firstElement = model.Elements[0];
         var expectedVariantCode = VariantEnumerator.Enumerate(firstElement, snapshot)[0].VariantCode;
 
-        var cut = RenderComponent<ModellenkamerNamingPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = RenderComponent<StudioNamingPage>(p => p.Add(x => x.ModelCode, Studio));
 
         // MudTable preserves Items order (no sorting configured), so the first-rendered field belongs
         // to the first element's first enumerated row - matching expectedVariantCode above.
@@ -125,7 +125,7 @@ public class ModellenkamerNamingPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<ModellenkamerNamingPage>(p => p.Add(x => x.ModelCode, Released));
+        var cut = RenderComponent<StudioNamingPage>(p => p.Add(x => x.ModelCode, Released));
 
         Assert.Contains("frozen", cut.Markup);
         Assert.Contains(TradeItemState.Active.ToString(), cut.Markup);
@@ -142,7 +142,7 @@ public class ModellenkamerNamingPageTests : TestContext
         using var _ = conn;
         ConfigureServices(factory);
 
-        var cut = RenderComponent<ModellenkamerNamingPage>(p => p.Add(x => x.ModelCode, "NOPE"));
+        var cut = RenderComponent<StudioNamingPage>(p => p.Add(x => x.ModelCode, "NOPE"));
 
         Assert.Contains("not found", cut.Markup);
     }

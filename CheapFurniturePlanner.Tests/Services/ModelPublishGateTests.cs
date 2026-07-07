@@ -9,7 +9,7 @@ using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Services;
 
-// The publish-time gate: the modellenkamer's per-model state controls what the planner's published
+// The publish-time gate: the studio's per-model state controls what the planner's published
 // catalogue actually contains. Only Active (released) models are published; releasing a Draft makes
 // it appear, discontinuing an Active model removes it. Exercised end to end over in-memory SQLite
 // with the real ModelPublishService + CataloguePublishService + DbCatalogueSource.

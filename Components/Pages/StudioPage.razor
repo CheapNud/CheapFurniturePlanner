@@ -1,4 +1,4 @@
-@page "/modellenkamer"
+@page "/studio"
 @using CheapFurniturePlanner.Domain.Catalog
 
 @inject ModelPublishService ModelPublishService
@@ -6,11 +6,11 @@
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
 
-<PageTitle>Modellenkamer - Cheap Furniture Planner</PageTitle>
+<PageTitle>Catalog Studio - Cheap Furniture Planner</PageTitle>
 
 <MudPaper Elevation="2" Class="pa-4 mb-4">
     <MudStack Spacing="3">
-        <MudText Typo="Typo.h5">Modellenkamer</MudText>
+        <MudText Typo="Typo.h5">Catalog Studio</MudText>
         <MudAlert Severity="Severity.Info">Only released (Active) models appear in the catalogue and planner.</MudAlert>
     </MudStack>
 </MudPaper>
@@ -39,7 +39,7 @@ else
                     <MudButton Size="Size.Small"
                                Variant="Variant.Outlined"
                                Color="Color.Info"
-                               OnClick="@(() => Navigation.NavigateTo($"/modellenkamer/{context.Code}"))">
+                               OnClick="@(() => Navigation.NavigateTo($"/studio/{context.Code}"))">
                         Name variants
                     </MudButton>
                     <MudButton Size="Size.Small"
