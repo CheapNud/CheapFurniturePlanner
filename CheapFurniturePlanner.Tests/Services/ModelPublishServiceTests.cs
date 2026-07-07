@@ -1,3 +1,4 @@
+using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Services;
@@ -26,6 +27,14 @@ public class ModelPublishServiceTests
         return (new TestDbContextFactory(options), connection);
     }
 
+    // A fully-wired service: the state machine now republishes the Active-only snapshot on every
+    // transition, so it needs a real CataloguePublishService + ICatalogueSource over the same factory.
+    private static ModelPublishService NewService(IDbContextFactory<FurniturePlannerContext> factory)
+    {
+        var source = new DbCatalogueSource(factory);
+        return new ModelPublishService(factory, new CataloguePublishService(factory, source), source);
+    }
+
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
     {
         public FurniturePlannerContext CreateDbContext() => new(options);
@@ -38,7 +47,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = new ModelPublishService(factory);
+        var service = NewService(factory);
 
         var state = await service.GetStateAsync("FJORD");
 
@@ -50,7 +59,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = new ModelPublishService(factory);
+        var service = NewService(factory);
 
         await service.ReleaseAsync("FJORD");
 
@@ -63,7 +72,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = new ModelPublishService(factory);
+        var service = NewService(factory);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.DiscontinueAsync("FJORD"));
     }
@@ -73,7 +82,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = new ModelPublishService(factory);
+        var service = NewService(factory);
 
         await service.ReleaseAsync("FJORD");
         await service.DiscontinueAsync("FJORD");
@@ -86,7 +95,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = new ModelPublishService(factory);
+        var service = NewService(factory);
 
         var models = await service.GetAuthoringModelsAsync();
 
@@ -100,7 +109,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = new ModelPublishService(factory);
+        var service = NewService(factory);
 
         await service.ReleaseAsync("FJORD");
         var models = await service.GetAuthoringModelsAsync();

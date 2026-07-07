@@ -1,5 +1,6 @@
 using AngleSharp.Dom;
 using Bunit;
+using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Components.Pages;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
@@ -38,6 +39,14 @@ public class ModellenkamerPageTests : TestContext
         return (new TestDbContextFactory(options), conn);
     }
 
+    // The state machine now republishes the Active-only snapshot on every transition, so a service
+    // built for out-of-band setup needs a real CataloguePublishService + ICatalogueSource.
+    private static ModelPublishService NewPublishService(IDbContextFactory<FurniturePlannerContext> factory)
+    {
+        var source = new DbCatalogueSource(factory);
+        return new ModelPublishService(factory, new CataloguePublishService(factory, source), source);
+    }
+
     // bUnit renders each RenderComponent<T>() call as its own root in the render tree, so the
     // MudMessageBox that ShowMessageBoxAsync opens shows up as a descendant of the MudDialogProvider
     // root, NOT of the page under test - callers must query the returned handle, not `cut`.
@@ -45,7 +54,9 @@ public class ModellenkamerPageTests : TestContext
     {
         Services.AddMudServices();
         Services.AddSingleton(factory);
-        Services.AddSingleton(sp => new ModelPublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
+        Services.AddSingleton<ICatalogueSource, DbCatalogueSource>();
+        Services.AddSingleton(sp => new CataloguePublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<ICatalogueSource>()));
+        Services.AddSingleton(sp => new ModelPublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<CataloguePublishService>(), sp.GetRequiredService<ICatalogueSource>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // MudTable's Release/Discontinue confirmations render via MudDialogProvider; MudSelect-style
@@ -55,8 +66,13 @@ public class ModellenkamerPageTests : TestContext
         return dialogProvider;
     }
 
-    private static IElement FindActionButton(IRenderedComponent<ModellenkamerPage> cut, string text) =>
-        cut.FindAll("button").Single(b => b.TextContent.Trim() == text);
+    // The table now lists more than one authoring model, so buttons must be scoped to a model's own
+    // row (identified by its Code cell) rather than picked globally by their label.
+    private static IElement FindActionButton(IRenderedComponent<ModellenkamerPage> cut, string text, string modelCode = "FJORD")
+    {
+        var row = cut.FindAll("tbody tr").Single(tr => tr.QuerySelectorAll("td").Any(td => td.TextContent.Trim() == modelCode));
+        return row.QuerySelectorAll("button").Single(b => b.TextContent.Trim() == text);
+    }
 
     [Fact]
     public void Render_ListsSeedModel_WithDraftStateAndReleaseEnabled()
@@ -84,7 +100,7 @@ public class ModellenkamerPageTests : TestContext
         using var _ = conn;
         // Released out-of-band (as a second operator/tab would) before the page ever loads, so this
         // proves the initial load reflects persisted state rather than a page-local assumption.
-        await new ModelPublishService(factory).ReleaseAsync("FJORD");
+        await NewPublishService(factory).ReleaseAsync("FJORD");
         ConfigureServices(factory);
 
         var cut = RenderComponent<ModellenkamerPage>();
@@ -130,7 +146,7 @@ public class ModellenkamerPageTests : TestContext
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        await new ModelPublishService(factory).ReleaseAsync("FJORD");
+        await NewPublishService(factory).ReleaseAsync("FJORD");
         var dialogProvider = ConfigureServices(factory);
 
         var cut = RenderComponent<ModellenkamerPage>();

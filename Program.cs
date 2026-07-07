@@ -2,6 +2,7 @@
 using CheapAvaloniaBlazor.Extensions;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Mappings;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Repositories;
@@ -48,7 +49,30 @@ class Program
 
             if (!migrateContext.PublishedCatalogues.Any(c => c.IsCurrent))
             {
+                // Seed the model states first (the primary FJORD model released, the FJORD-STUDIO
+                // clone left as a Draft to demonstrate release from the modellenkamer), then publish
+                // only the Active subset so the planner's first published catalogue already honours
+                // the release gate instead of exposing every authoring model.
                 var snapshot = SeedCatalogue.Load();
+                foreach (var model in snapshot.Models)
+                {
+                    if (!migrateContext.ModelStates.Any(s => s.ModelCode == model.Code))
+                    {
+                        migrateContext.ModelStates.Add(new ModelStateRecord
+                        {
+                            ModelCode = model.Code,
+                            State = model.Code == "FJORD" ? TradeItemState.Active : TradeItemState.Draft,
+                        });
+                    }
+                }
+                migrateContext.SaveChanges();
+
+                var activeCodes = migrateContext.ModelStates
+                    .Where(s => s.State == TradeItemState.Active)
+                    .Select(s => s.ModelCode)
+                    .ToHashSet();
+                snapshot.Models = snapshot.Models.Where(m => activeCodes.Contains(m.Code)).ToList();
+
                 var publishService = scope.ServiceProvider.GetRequiredService<CataloguePublishService>();
                 var result = publishService.PublishAsync(snapshot).GetAwaiter().GetResult();
                 if (!result.Success)
