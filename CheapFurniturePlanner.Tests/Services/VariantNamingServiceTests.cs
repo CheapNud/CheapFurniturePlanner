@@ -63,10 +63,10 @@ public class VariantNamingServiceTests
         await SeedModelStatesAsync(factory);
         var harness = NewHarness(factory);
 
-        await harness.Naming.AssignAsync(Studio, Variant, "18X");
+        await harness.Naming.AssignAsync(Studio, Variant, "STUDIO-X");
 
         var names = await harness.Naming.NamesForModelAsync(Studio);
-        Assert.Equal("18X", names[Variant]);
+        Assert.Equal("STUDIO-X", names[Variant]);
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class VariantNamingServiceTests
         await SeedModelStatesAsync(factory);
         var harness = NewHarness(factory);
 
-        await harness.Naming.AssignAsync(Studio, Variant, "18X");
+        await harness.Naming.AssignAsync(Studio, Variant, "STUDIO-X");
         await harness.Naming.AssignAsync(Studio, Variant, "STUDIO-A");
 
         var names = await harness.Naming.NamesForModelAsync(Studio);
@@ -94,7 +94,7 @@ public class VariantNamingServiceTests
         await SeedModelStatesAsync(factory);
         var harness = NewHarness(factory);
 
-        await harness.Naming.AssignAsync(Studio, Variant, "18X");
+        await harness.Naming.AssignAsync(Studio, Variant, "STUDIO-X");
         await harness.Naming.AssignAsync(Studio, Variant, blank);
 
         var names = await harness.Naming.NamesForModelAsync(Studio);
@@ -111,7 +111,7 @@ public class VariantNamingServiceTests
 
         await harness.Publish.ReleaseAsync(Studio);
 
-        await Assert.ThrowsAsync<NamingFrozenException>(() => harness.Naming.AssignAsync(Studio, Variant, "18X"));
+        await Assert.ThrowsAsync<NamingFrozenException>(() => harness.Naming.AssignAsync(Studio, Variant, "STUDIO-X"));
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class VariantNamingServiceTests
         await SeedModelStatesAsync(factory);
         var harness = NewHarness(factory);
 
-        await harness.Naming.AssignAsync(Studio, Variant, "18X");
+        await harness.Naming.AssignAsync(Studio, Variant, "STUDIO-X");
 
         var fjordNames = await harness.Naming.NamesForModelAsync("FJORD");
         Assert.Empty(fjordNames);
