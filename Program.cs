@@ -97,6 +97,7 @@ class Program
         builder.Services.AddScoped<PlannerService>();
         builder.Services.AddScoped<PricingService>();
         builder.Services.AddScoped<ModelPublishService>();
+        builder.Services.AddScoped<VariantNamingService>();
         builder.Services.AddScoped<ProductionIdentityService>();
 
         // Run the app - all Avalonia complexity handled by the package
