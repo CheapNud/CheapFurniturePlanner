@@ -14,11 +14,11 @@ using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Components;
 
-// Exercises the modellenkamer as the model-list gatekeeper: it lists the authoring model set (the
+// Exercises the studio as the model-list gatekeeper: it lists the authoring model set (the
 // embedded seed catalogue) with each model's release state, and its Release/Discontinue actions are
 // state-gated the same way ModelPublishService itself gates them. Runs against a real
 // ModelPublishService over in-memory SQLite, mirroring FurnitureConfigPanelTests/DbCatalogueSourceTests.
-public class ModellenkamerPageTests : TestContext
+public class StudioPageTests : TestContext
 {
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
     {
@@ -68,7 +68,7 @@ public class ModellenkamerPageTests : TestContext
 
     // The table now lists more than one authoring model, so buttons must be scoped to a model's own
     // row (identified by its Code cell) rather than picked globally by their label.
-    private static IElement FindActionButton(IRenderedComponent<ModellenkamerPage> cut, string text, string modelCode = "FJORD")
+    private static IElement FindActionButton(IRenderedComponent<StudioPage> cut, string text, string modelCode = "FJORD")
     {
         var row = cut.FindAll("tbody tr").Single(tr => tr.QuerySelectorAll("td").Any(td => td.TextContent.Trim() == modelCode));
         return row.QuerySelectorAll("button").Single(b => b.TextContent.Trim() == text);
@@ -81,7 +81,7 @@ public class ModellenkamerPageTests : TestContext
         using var _ = conn;
         ConfigureServices(factory);
 
-        var cut = RenderComponent<ModellenkamerPage>();
+        var cut = RenderComponent<StudioPage>();
 
         Assert.Contains("FJORD", cut.Markup);
         Assert.Contains("Fjord", cut.Markup);
@@ -103,7 +103,7 @@ public class ModellenkamerPageTests : TestContext
         await NewPublishService(factory).ReleaseAsync("FJORD");
         ConfigureServices(factory);
 
-        var cut = RenderComponent<ModellenkamerPage>();
+        var cut = RenderComponent<StudioPage>();
 
         Assert.Contains(TradeItemState.Active.ToString(), cut.Markup);
         var releaseButton = FindActionButton(cut, "Release");
@@ -119,7 +119,7 @@ public class ModellenkamerPageTests : TestContext
         using var _ = conn;
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<ModellenkamerPage>();
+        var cut = RenderComponent<StudioPage>();
         var releaseButton = FindActionButton(cut, "Release");
 
         // ShowMessageBoxAsync suspends until the rendered MudMessageBox dialog is dismissed, so
@@ -149,7 +149,7 @@ public class ModellenkamerPageTests : TestContext
         await NewPublishService(factory).ReleaseAsync("FJORD");
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<ModellenkamerPage>();
+        var cut = RenderComponent<StudioPage>();
         var discontinueButton = FindActionButton(cut, "Discontinue");
 
         var pendingClick = cut.InvokeAsync(() => discontinueButton.Click());

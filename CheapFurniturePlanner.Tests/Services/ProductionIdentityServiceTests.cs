@@ -13,7 +13,7 @@ using Xunit;
 namespace CheapFurniturePlanner.Tests.Services;
 
 // ProductionIdentityService is a thin resolve-only bridge between a placement and the Domain
-// ProductionIdentityResolver: it locates the owning model, pulls the modellenkamer's released
+// ProductionIdentityResolver: it locates the owning model, pulls the studio's released
 // variant names (VariantNamingService), and resolves the variant code against the always-published
 // (Active) state - a placement is Released if its variant was named, else Composed.
 public class ProductionIdentityServiceTests
@@ -97,7 +97,7 @@ public class ProductionIdentityServiceTests
         Assert.Equal(expected.VariantCode, identity.VariantCode);
     }
 
-    // Task 3: once the modellenkamer has named a placement's variant, the released model's placements
+    // Task 3: once the studio has named a placement's variant, the released model's placements
     // must surface that assigned code as Released rather than the raw composed variant code.
     [Fact]
     public async Task ResolveForPlacementAsync_WithNamingRow_ReturnsReleasedIdentity_WithAssignedCode()

@@ -50,7 +50,7 @@ class Program
             if (!migrateContext.PublishedCatalogues.Any(c => c.IsCurrent))
             {
                 // Seed the model states first (the primary FJORD model released, the FJORD-STUDIO
-                // clone left as a Draft to demonstrate release from the modellenkamer), then publish
+                // clone left as a Draft to demonstrate release from the studio), then publish
                 // only the Active subset so the planner's first published catalogue already honours
                 // the release gate instead of exposing every authoring model.
                 var snapshot = SeedCatalogue.Load();

@@ -285,7 +285,7 @@ public class FurnitureConfigPanelTests : TestContext
     [Fact]
     public async Task Render_WithNamedVariant_ShowsAssignedCode()
     {
-        // Task 3: once the modellenkamer names a variant on a released model, the panel's existing
+        // Task 3: once the studio names a variant on a released model, the panel's existing
         // EffectiveCode rendering (Phase 3) must surface that assigned code, not the composed one.
         var (factory, conn) = NewFactory();
         using var _ = conn;
@@ -296,7 +296,7 @@ public class FurnitureConfigPanelTests : TestContext
             [new ElementSelection("FJ3", 1, placement.Selections, placement.FabricColorCode)]);
         var composed = ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), Domain.Catalog.TradeItemState.Active)[0];
 
-        // Out-of-band naming, as a second operator/tab (the modellenkamer) would perform it, against
+        // Out-of-band naming, as a second operator/tab (the studio) would perform it, against
         // the same DB the panel's own VariantNamingService reads from.
         var namingPublish = new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory));
         var naming = new VariantNamingService(factory, namingPublish);

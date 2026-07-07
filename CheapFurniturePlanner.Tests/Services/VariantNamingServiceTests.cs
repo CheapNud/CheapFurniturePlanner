@@ -9,7 +9,7 @@ using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Services;
 
-// The modellenkamer's naming registry: sparse (only named variants get a row) and gated by the
+// The studio's naming registry: sparse (only named variants get a row) and gated by the
 // model's publish state (Draft-only). Exercised over in-memory SQLite with the real
 // VariantNamingService + ModelPublishService, following the ModelPublishGateTests harness pattern.
 public class VariantNamingServiceTests

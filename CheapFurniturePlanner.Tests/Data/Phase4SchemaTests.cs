@@ -6,7 +6,7 @@ using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Data;
 
-// Phase 4: the sparse VariantNaming registry only ever holds rows for variants the modellenkamer
+// Phase 4: the sparse VariantNaming registry only ever holds rows for variants the studio
 // has actually named, keyed uniquely per (ModelCode, VariantCode).
 public class Phase4SchemaTests
 {

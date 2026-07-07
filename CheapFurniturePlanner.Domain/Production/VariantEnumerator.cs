@@ -7,7 +7,7 @@ namespace CheapFurniturePlanner.Domain.Production;
 
 // Computes an element's full BOM-significant variant space: every visibility-pruned choice combination
 // crossed with every distinct material type, de-duplicated by the composed VariantCode. Lets the
-// modellenkamer enumerate and name variants ahead of any actual configuration being placed.
+// studio enumerate and name variants ahead of any actual configuration being placed.
 public static class VariantEnumerator
 {
     public static IReadOnlyList<VariantDescriptor> Enumerate(Element element, CatalogueSnapshot snapshot)
