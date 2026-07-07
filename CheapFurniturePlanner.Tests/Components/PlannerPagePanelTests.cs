@@ -100,7 +100,8 @@ public class PlannerPagePanelTests : TestContext
         var mapsterConfig = new TypeAdapterConfig();
         FurniturePlannerMappingProfile.Configure(mapsterConfig);
         IMapper mapper = new Mapper(mapsterConfig);
-        var repository = new FurniturePlannerRepository(new TestDbContextFactory(options));
+        var factory = new TestDbContextFactory(options);
+        var repository = new FurniturePlannerRepository(factory);
 
         Services.AddMudServices();
         Services.AddSingleton(repository);
@@ -111,7 +112,13 @@ public class PlannerPagePanelTests : TestContext
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(LoadFjordSnapshot()));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
 
-        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>()));
+        // ProductionIdentityService now consults VariantNamingService, which needs a real (migrated)
+        // DB; it shares the same in-memory SQLite connection as the room-plan repository above. None
+        // of these tests seed a VariantNaming row, so it always resolves an empty map and the
+        // Composed-status behavior these tests assert on is unchanged.
+        Services.AddSingleton(sp => new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory)));
+        Services.AddSingleton(sp => new VariantNamingService(factory, sp.GetRequiredService<ModelPublishService>()));
+        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<VariantNamingService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // MudSelect (used by both the room-settings dialog and the config panel's option dropdowns)
