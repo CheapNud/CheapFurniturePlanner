@@ -79,7 +79,10 @@ public class FurnitureConfigPanelTests : TestContext
         Services.AddMudServices();
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(snapshot));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
-        Services.AddSingleton(sp => new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory)));
+        // ModelPublishService's ctor now takes an AuthoringCatalogueStore, but this panel only ever
+        // consults VariantNamingService.AssignAsync's GetStateAsync gate check (never
+        // RepublishAsync/GetAuthoringModelsAsync), so the store is wired but never needs seeding here.
+        Services.AddSingleton(sp => new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory), new AuthoringCatalogueStore(factory)));
         Services.AddSingleton(sp => new VariantNamingService(factory, sp.GetRequiredService<ModelPublishService>()));
         Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<VariantNamingService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
@@ -298,7 +301,7 @@ public class FurnitureConfigPanelTests : TestContext
 
         // Out-of-band naming, as a second operator/tab (the studio) would perform it, against
         // the same DB the panel's own VariantNamingService reads from.
-        var namingPublish = new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory));
+        var namingPublish = new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory), new AuthoringCatalogueStore(factory));
         var naming = new VariantNamingService(factory, namingPublish);
         await naming.AssignAsync("FJORD", composed.VariantCode, "STUDIO-A");
 

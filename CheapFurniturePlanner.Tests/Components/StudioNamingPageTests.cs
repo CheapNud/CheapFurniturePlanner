@@ -54,14 +54,20 @@ public class StudioNamingPageTests : TestContext
         await db.SaveChangesAsync();
     }
 
-    private VariantNamingService ConfigureServices(IDbContextFactory<FurniturePlannerContext> factory)
+    // The page now loads the model/elements from the authoring store rather than the embedded seed
+    // directly, so the store must be seeded from that same embedded seed for the page to find
+    // FJORD/FJORD-STUDIO.
+    private async Task<VariantNamingService> ConfigureServicesAsync(IDbContextFactory<FurniturePlannerContext> factory)
     {
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
         var source = new DbCatalogueSource(factory);
-        var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source);
+        var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
         var naming = new VariantNamingService(factory, publish);
 
         Services.AddMudServices();
         Services.AddSingleton(factory);
+        Services.AddSingleton(store);
         Services.AddSingleton<ICatalogueSource>(source);
         Services.AddSingleton(publish);
         Services.AddSingleton(naming);
@@ -77,7 +83,7 @@ public class StudioNamingPageTests : TestContext
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedModelStatesAsync(factory);
-        ConfigureServices(factory);
+        await ConfigureServicesAsync(factory);
 
         var model = SeedCatalogue.Load().Models.Single(m => m.Code == Studio);
         var snapshot = SeedCatalogue.Load();
@@ -99,7 +105,7 @@ public class StudioNamingPageTests : TestContext
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedModelStatesAsync(factory);
-        var naming = ConfigureServices(factory);
+        var naming = await ConfigureServicesAsync(factory);
 
         var model = SeedCatalogue.Load().Models.Single(m => m.Code == Studio);
         var snapshot = SeedCatalogue.Load();
@@ -123,7 +129,7 @@ public class StudioNamingPageTests : TestContext
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedModelStatesAsync(factory);
-        ConfigureServices(factory);
+        await ConfigureServicesAsync(factory);
 
         var cut = RenderComponent<StudioNamingPage>(p => p.Add(x => x.ModelCode, Released));
 
@@ -136,11 +142,11 @@ public class StudioNamingPageTests : TestContext
     }
 
     [Fact]
-    public void Render_UnknownModelCode_ShowsNotFound()
+    public async Task Render_UnknownModelCode_ShowsNotFound()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        ConfigureServices(factory);
+        await ConfigureServicesAsync(factory);
 
         var cut = RenderComponent<StudioNamingPage>(p => p.Add(x => x.ModelCode, "NOPE"));
 

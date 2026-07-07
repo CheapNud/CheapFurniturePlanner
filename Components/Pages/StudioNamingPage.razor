@@ -6,6 +6,7 @@
 
 @inject VariantNamingService VariantNamingService
 @inject ModelPublishService ModelPublishService
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
 @inject ISnackbar Snackbar
 
 <PageTitle>Name variants - @ModelCode - Cheap Furniture Planner</PageTitle>
@@ -94,9 +95,9 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        // The authoring seed, NOT ICatalogueSource.GetCurrentAsync() - the published snapshot only
+        // The authoring store, NOT ICatalogueSource.GetCurrentAsync() - the published snapshot only
         // ever contains Active models, so a Draft model being named here would not resolve there.
-        _snapshot = SeedCatalogue.Load();
+        _snapshot = await AuthoringCatalogueStore.LoadAsync();
         _model = _snapshot.Models.FirstOrDefault(m => m.Code == ModelCode);
         if (_model is null)
         {

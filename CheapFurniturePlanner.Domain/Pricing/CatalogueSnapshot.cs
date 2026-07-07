@@ -10,6 +10,10 @@ public class CatalogueSnapshot
     public required string Version { get; set; }
     public string ContentHash { get; set; } = "";
     public List<FurnitureModel> Models { get; set; } = [];
+
+    // Master lists (PriceGroups..Markets below): shared, non-model-specific reference data. Any new
+    // master list added here must also be copied in AuthoringCatalogueStore.SeedFromAsync's masters
+    // clone, or it will silently be dropped from the authoring store on seed/republish.
     public List<PriceGroup> PriceGroups { get; set; } = [];
     public List<FabricGroup> FabricGroups { get; set; } = [];
     public List<Operation> Operations { get; set; } = [];

@@ -3,6 +3,7 @@ using CheapAvaloniaBlazor.Extensions;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Mappings;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Repositories;
@@ -47,14 +48,29 @@ class Program
             using var migrateContext = factory.CreateDbContext();
             migrateContext.Database.Migrate();
 
+            // Seed the authoring store from the embedded demo catalogue if it hasn't been seeded
+            // already - the store is the sole authoring source from here on. This runs regardless
+            // of published-catalogue state (not just on first run) so a DB created by a pre-authoring-store
+            // build, which already has a current published catalogue, still gets its authoring store
+            // populated on upgrade instead of leaving the Studio empty forever; the IsSeededAsync
+            // check makes this a no-op on every subsequent startup.
+            CatalogueSnapshot? seedCatalogue = null;
+            var authoringStore = scope.ServiceProvider.GetRequiredService<AuthoringCatalogueStore>();
+            if (!authoringStore.IsSeededAsync().GetAwaiter().GetResult())
+            {
+                seedCatalogue = SeedCatalogue.Load();
+                authoringStore.SeedFromAsync(seedCatalogue).GetAwaiter().GetResult();
+            }
+
             if (!migrateContext.PublishedCatalogues.Any(c => c.IsCurrent))
             {
-                // Seed the model states first (the primary FJORD model released, the FJORD-STUDIO
-                // clone left as a Draft to demonstrate release from the studio), then publish
-                // only the Active subset so the planner's first published catalogue already honours
-                // the release gate instead of exposing every authoring model.
-                var snapshot = SeedCatalogue.Load();
-                foreach (var model in snapshot.Models)
+                // Seed the model states (the primary FJORD model released, the FJORD-STUDIO clone
+                // left as a Draft to demonstrate release from the studio), then republish so the
+                // planner's first published catalogue already honours the release gate instead of
+                // exposing every authoring model. This is the same store-sourced path every later
+                // republish takes.
+                seedCatalogue ??= SeedCatalogue.Load();
+                foreach (var model in seedCatalogue.Models)
                 {
                     if (!migrateContext.ModelStates.Any(s => s.ModelCode == model.Code))
                     {
@@ -67,18 +83,8 @@ class Program
                 }
                 migrateContext.SaveChanges();
 
-                var activeCodes = migrateContext.ModelStates
-                    .Where(s => s.State == TradeItemState.Active)
-                    .Select(s => s.ModelCode)
-                    .ToHashSet();
-                snapshot.Models = snapshot.Models.Where(m => activeCodes.Contains(m.Code)).ToList();
-
-                var publishService = scope.ServiceProvider.GetRequiredService<CataloguePublishService>();
-                var result = publishService.PublishAsync(snapshot).GetAwaiter().GetResult();
-                if (!result.Success)
-                {
-                    throw new InvalidOperationException("Seed catalogue failed validation: " + string.Join("; ", result.Errors));
-                }
+                var publishService = scope.ServiceProvider.GetRequiredService<ModelPublishService>();
+                publishService.RepublishAsync().GetAwaiter().GetResult();
             }
         });
 
@@ -99,6 +105,7 @@ class Program
         builder.Services.AddScoped<ModelPublishService>();
         builder.Services.AddScoped<VariantNamingService>();
         builder.Services.AddScoped<ProductionIdentityService>();
+        builder.Services.AddScoped<AuthoringCatalogueStore>();
 
         // Run the app - all Avalonia complexity handled by the package
         builder.RunApp(args);

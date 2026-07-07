@@ -41,6 +41,8 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<PublishedCatalogue> PublishedCatalogues { get; set; }
     public DbSet<ModelStateRecord> ModelStates => Set<ModelStateRecord>();
     public DbSet<VariantNaming> VariantNamings => Set<VariantNaming>();
+    public DbSet<AuthoringModelDocument> AuthoringModels => Set<AuthoringModelDocument>();
+    public DbSet<AuthoringMastersDocument> AuthoringMasters => Set<AuthoringMastersDocument>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -145,6 +147,8 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         modelBuilder.Entity<ModelStateRecord>().Property(s => s.State).HasConversion<string>();
 
         modelBuilder.Entity<VariantNaming>().HasIndex(n => new { n.ModelCode, n.VariantCode }).IsUnique();
+
+        modelBuilder.Entity<AuthoringModelDocument>().HasIndex(m => m.ModelCode).IsUnique();
     }
 
     private static void SeedDefaultData(ModelBuilder modelBuilder)
