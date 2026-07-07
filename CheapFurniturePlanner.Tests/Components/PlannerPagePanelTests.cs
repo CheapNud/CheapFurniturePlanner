@@ -110,6 +110,8 @@ public class PlannerPagePanelTests : TestContext
         Services.AddSingleton(sp => new FurnitureCatalogService(sp.GetRequiredService<FurniturePlannerRepository>(), sp.GetRequiredService<IMapper>(), NullLogger<FurnitureCatalogService>.Instance));
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(LoadFjordSnapshot()));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
+
+        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // MudSelect (used by both the room-settings dialog and the config panel's option dropdowns)

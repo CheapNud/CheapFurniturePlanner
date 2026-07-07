@@ -4,11 +4,13 @@
 @using CheapFurniturePlanner.Domain.Fabrics
 @using CheapFurniturePlanner.Domain.Options
 @using CheapFurniturePlanner.Domain.Pricing
+@using CheapFurniturePlanner.Domain.Production
 @using CheapFurniturePlanner.Services
 @using CheapFurniturePlanner.ViewModels
 
 @inject ICatalogueSource CatalogueSource
 @inject PricingService PricingService
+@inject ProductionIdentityService ProductionIdentityService
 
 @if (Placement is null)
 {
@@ -29,6 +31,12 @@ else
                         <MudText Typo="Typo.caption" Color="Color.Secondary">@_variantCode</MudText>
                     }
                 </MudStack>
+                @if (_identity is not null)
+                {
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="production-code-row">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">production code: @_identity.EffectiveCode</MudText>
+                    </MudStack>
+                }
             </MudStack>
 
             @if (_errors.Count > 0)
@@ -104,6 +112,7 @@ else
     private decimal? _unitPrice;
     private string? _variantCode;
     private List<PricingError> _errors = [];
+    private ProductionIdentity? _identity;
 
     // Perf guard: the panel sits next to the drag-sensitive canvas, which re-renders the whole
     // page frequently (e.g. auto-save ticks, unrelated selection churn). Track the placement
@@ -125,6 +134,7 @@ else
             _unitPrice = null;
             _variantCode = null;
             _errors = [];
+            _identity = null;
             return;
         }
 
@@ -217,6 +227,10 @@ else
                 Placement.CatalogueVersion = _snapshot.Version;
             }
             _errors = [];
+
+            // The production-code display only resolves for a validly-priced config - a
+            // degraded/invalid config (e.g. a stale fabric color) has no business showing one.
+            _identity = await ProductionIdentityService.ResolveForPlacementAsync(Placement);
         }
         else
         {
@@ -226,6 +240,7 @@ else
             _variantCode = null;
             Placement.CachedUnitPrice = null;
             Placement.CachedVariantCode = null;
+            _identity = null;
         }
     }
 

@@ -2,6 +2,7 @@ using Bunit;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Components.Shared;
 using CheapFurniturePlanner.Domain.Pricing;
+using CheapFurniturePlanner.Domain.Production;
 using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Services;
 using CheapFurniturePlanner.ViewModels;
@@ -45,12 +46,16 @@ public class FurnitureConfigPanelTests : TestContext
         FabricColorCode = "AQUA-BLUE",
     };
 
+    // Registers every service FurnitureConfigPanel depends on. ProductionIdentityService is now
+    // resolve-only (ICatalogueSource only), so no DB wiring is needed here anymore.
     private CatalogueSnapshot ConfigureServices()
     {
         var snapshot = LoadFjordSnapshot();
+
         Services.AddMudServices();
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(snapshot));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
+        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // MudSelect renders its options into an overlay managed by MudBlazor's popover service, which
@@ -214,5 +219,22 @@ public class FurnitureConfigPanelTests : TestContext
         Assert.Null(placement.CachedUnitPrice);
         Assert.Null(placement.CachedVariantCode);
         Assert.Contains(cut.FindAll(".mud-alert"), _ => true);
+    }
+
+    [Fact]
+    public void Render_ShowsProductionCodeLine_ForConfiguredPlacement()
+    {
+        var snapshot = ConfigureServices();
+        var placement = Fj3Placement();
+
+        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
+
+        var config = new ProductConfiguration("FJORD",
+            [new ElementSelection("FJ3", 1, placement.Selections, placement.FabricColorCode)]);
+        // Placed models resolve as always-published (Active), matching ProductionIdentityService.
+        var expected = ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), Domain.Catalog.TradeItemState.Active)[0];
+
+        Assert.Contains(cut.FindAll(".production-code-row"), _ => true);
+        Assert.Contains(expected.EffectiveCode, cut.Markup);
     }
 }

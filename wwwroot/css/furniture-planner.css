@@ -303,6 +303,10 @@
     flex-wrap: wrap;
 }
 
+.production-code-row {
+    margin-top: 2px;
+}
+
 .fabric-swatch {
     width: 32px;
     height: 32px;
