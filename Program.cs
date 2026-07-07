@@ -49,12 +49,20 @@ class Program
 
             if (!migrateContext.PublishedCatalogues.Any(c => c.IsCurrent))
             {
-                // Seed the model states first (the primary FJORD model released, the FJORD-STUDIO
-                // clone left as a Draft to demonstrate release from the studio), then publish
-                // only the Active subset so the planner's first published catalogue already honours
-                // the release gate instead of exposing every authoring model.
-                var snapshot = SeedCatalogue.Load();
-                foreach (var model in snapshot.Models)
+                // Seed the authoring store from the embedded demo catalogue on first run, if it
+                // hasn't been seeded already - the store is the sole authoring source from here on.
+                var authoringStore = scope.ServiceProvider.GetRequiredService<AuthoringCatalogueStore>();
+                if (!authoringStore.IsSeededAsync().GetAwaiter().GetResult())
+                {
+                    authoringStore.SeedFromAsync(SeedCatalogue.Load()).GetAwaiter().GetResult();
+                }
+
+                // Seed the model states (the primary FJORD model released, the FJORD-STUDIO clone
+                // left as a Draft to demonstrate release from the studio), then republish so the
+                // planner's first published catalogue already honours the release gate instead of
+                // exposing every authoring model. This is the same store-sourced path every later
+                // republish takes.
+                foreach (var model in SeedCatalogue.Load().Models)
                 {
                     if (!migrateContext.ModelStates.Any(s => s.ModelCode == model.Code))
                     {
@@ -67,18 +75,8 @@ class Program
                 }
                 migrateContext.SaveChanges();
 
-                var activeCodes = migrateContext.ModelStates
-                    .Where(s => s.State == TradeItemState.Active)
-                    .Select(s => s.ModelCode)
-                    .ToHashSet();
-                snapshot.Models = snapshot.Models.Where(m => activeCodes.Contains(m.Code)).ToList();
-
-                var publishService = scope.ServiceProvider.GetRequiredService<CataloguePublishService>();
-                var result = publishService.PublishAsync(snapshot).GetAwaiter().GetResult();
-                if (!result.Success)
-                {
-                    throw new InvalidOperationException("Seed catalogue failed validation: " + string.Join("; ", result.Errors));
-                }
+                var publishService = scope.ServiceProvider.GetRequiredService<ModelPublishService>();
+                publishService.RepublishAsync().GetAwaiter().GetResult();
             }
         });
 

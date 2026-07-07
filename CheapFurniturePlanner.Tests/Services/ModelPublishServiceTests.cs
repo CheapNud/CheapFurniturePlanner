@@ -29,10 +29,14 @@ public class ModelPublishServiceTests
 
     // A fully-wired service: the state machine now republishes the Active-only snapshot on every
     // transition, so it needs a real CataloguePublishService + ICatalogueSource over the same factory.
-    private static ModelPublishService NewService(IDbContextFactory<FurniturePlannerContext> factory)
+    // RepublishAsync/GetAuthoringModelsAsync now read the authoring store rather than the embedded
+    // seed directly, so the store must be seeded from that same embedded seed first.
+    private static async Task<ModelPublishService> NewServiceAsync(IDbContextFactory<FurniturePlannerContext> factory)
     {
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
         var source = new DbCatalogueSource(factory);
-        return new ModelPublishService(factory, new CataloguePublishService(factory, source), source);
+        return new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
@@ -47,7 +51,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = NewService(factory);
+        var service = await NewServiceAsync(factory);
 
         var state = await service.GetStateAsync("FJORD");
 
@@ -59,7 +63,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = NewService(factory);
+        var service = await NewServiceAsync(factory);
 
         await service.ReleaseAsync("FJORD");
 
@@ -72,7 +76,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = NewService(factory);
+        var service = await NewServiceAsync(factory);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.DiscontinueAsync("FJORD"));
     }
@@ -82,7 +86,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = NewService(factory);
+        var service = await NewServiceAsync(factory);
 
         await service.ReleaseAsync("FJORD");
         await service.DiscontinueAsync("FJORD");
@@ -95,7 +99,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = NewService(factory);
+        var service = await NewServiceAsync(factory);
 
         var models = await service.GetAuthoringModelsAsync();
 
@@ -109,7 +113,7 @@ public class ModelPublishServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = NewService(factory);
+        var service = await NewServiceAsync(factory);
 
         await service.ReleaseAsync("FJORD");
         var models = await service.GetAuthoringModelsAsync();

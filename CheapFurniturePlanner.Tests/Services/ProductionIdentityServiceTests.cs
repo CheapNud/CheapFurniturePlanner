@@ -50,10 +50,14 @@ public class ProductionIdentityServiceTests
     // to Draft - which is exactly what VariantNamingService.AssignAsync requires to accept a naming.
     // That default-Draft gate is unrelated to the Active state ProductionIdentityService itself passes
     // to the resolver, so seeding a name this way does not contradict FJORD being released.
+    // ModelPublishService's ctor now takes an AuthoringCatalogueStore, but this suite only ever
+    // exercises VariantNamingService.AssignAsync's GetStateAsync gate check (never
+    // RepublishAsync/GetAuthoringModelsAsync), so the store is wired but never needs seeding here.
     private static VariantNamingService NewNaming(IDbContextFactory<FurniturePlannerContext> factory)
     {
         var source = new DbCatalogueSource(factory);
-        var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source);
+        var store = new AuthoringCatalogueStore(factory);
+        var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
         return new VariantNamingService(factory, publish);
     }
 

@@ -39,10 +39,14 @@ public class ModelPublishGateTests
 
     private sealed record Harness(ModelPublishService Publish, DbCatalogueSource Source);
 
-    private static Harness NewHarness(IDbContextFactory<FurniturePlannerContext> factory)
+    // RepublishAsync now reads the authoring store rather than the embedded seed directly, so the
+    // store must be seeded from that same embedded seed for the harness to have any models to publish.
+    private static async Task<Harness> NewHarnessAsync(IDbContextFactory<FurniturePlannerContext> factory)
     {
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
         var source = new DbCatalogueSource(factory);
-        return new Harness(new ModelPublishService(factory, new CataloguePublishService(factory, source), source), source);
+        return new Harness(new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store), source);
     }
 
     // Seeds the two demo model states (FJORD Active, FJORD-STUDIO Draft) exactly as Program.cs does
@@ -69,7 +73,7 @@ public class ModelPublishGateTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var harness = NewHarness(factory);
+        var harness = await NewHarnessAsync(factory);
 
         await SeedActiveFjordAsync(factory, harness);
 
@@ -83,7 +87,7 @@ public class ModelPublishGateTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var harness = NewHarness(factory);
+        var harness = await NewHarnessAsync(factory);
 
         await SeedActiveFjordAsync(factory, harness);
         Assert.DoesNotContain(Studio, await CurrentModelCodesAsync(harness.Source));
@@ -100,7 +104,7 @@ public class ModelPublishGateTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var harness = NewHarness(factory);
+        var harness = await NewHarnessAsync(factory);
 
         await SeedActiveFjordAsync(factory, harness);
         Assert.Contains(Fjord, await CurrentModelCodesAsync(harness.Source));
@@ -115,7 +119,7 @@ public class ModelPublishGateTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var harness = NewHarness(factory);
+        var harness = await NewHarnessAsync(factory);
 
         // No Active state rows at all -> the Active-only snapshot is empty, which is a valid publish.
         await harness.Publish.RepublishAsync();

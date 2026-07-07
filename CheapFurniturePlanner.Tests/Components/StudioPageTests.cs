@@ -39,12 +39,21 @@ public class StudioPageTests : TestContext
         return (new TestDbContextFactory(options), conn);
     }
 
+    // RepublishAsync/GetAuthoringModelsAsync now read the authoring store rather than the embedded
+    // seed directly, so the store must be seeded from that same embedded seed before either
+    // NewPublishService or ConfigureServices below construct a ModelPublishService against it. Seeded
+    // once per test, up front, so the two helpers below can freely share the same underlying DB
+    // without seeding it twice.
+    private static async Task SeedAuthoringStoreAsync(IDbContextFactory<FurniturePlannerContext> factory) =>
+        await new AuthoringCatalogueStore(factory).SeedFromAsync(SeedCatalogue.Load());
+
     // The state machine now republishes the Active-only snapshot on every transition, so a service
     // built for out-of-band setup needs a real CataloguePublishService + ICatalogueSource.
     private static ModelPublishService NewPublishService(IDbContextFactory<FurniturePlannerContext> factory)
     {
+        var store = new AuthoringCatalogueStore(factory);
         var source = new DbCatalogueSource(factory);
-        return new ModelPublishService(factory, new CataloguePublishService(factory, source), source);
+        return new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
     }
 
     // bUnit renders each RenderComponent<T>() call as its own root in the render tree, so the
@@ -54,9 +63,10 @@ public class StudioPageTests : TestContext
     {
         Services.AddMudServices();
         Services.AddSingleton(factory);
+        Services.AddSingleton(sp => new AuthoringCatalogueStore(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton<ICatalogueSource, DbCatalogueSource>();
         Services.AddSingleton(sp => new CataloguePublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<ICatalogueSource>()));
-        Services.AddSingleton(sp => new ModelPublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<CataloguePublishService>(), sp.GetRequiredService<ICatalogueSource>()));
+        Services.AddSingleton(sp => new ModelPublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<CataloguePublishService>(), sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<AuthoringCatalogueStore>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // MudTable's Release/Discontinue confirmations render via MudDialogProvider; MudSelect-style
@@ -75,10 +85,11 @@ public class StudioPageTests : TestContext
     }
 
     [Fact]
-    public void Render_ListsSeedModel_WithDraftStateAndReleaseEnabled()
+    public async Task Render_ListsSeedModel_WithDraftStateAndReleaseEnabled()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
         ConfigureServices(factory);
 
         var cut = RenderComponent<StudioPage>();
@@ -98,6 +109,7 @@ public class StudioPageTests : TestContext
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
         // Released out-of-band (as a second operator/tab would) before the page ever loads, so this
         // proves the initial load reflects persisted state rather than a page-local assumption.
         await NewPublishService(factory).ReleaseAsync("FJORD");
@@ -117,6 +129,7 @@ public class StudioPageTests : TestContext
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
         var cut = RenderComponent<StudioPage>();
@@ -146,6 +159,7 @@ public class StudioPageTests : TestContext
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
         await NewPublishService(factory).ReleaseAsync("FJORD");
         var dialogProvider = ConfigureServices(factory);
 

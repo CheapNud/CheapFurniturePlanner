@@ -38,10 +38,14 @@ public class VariantNamingServiceTests
 
     private sealed record Harness(VariantNamingService Naming, ModelPublishService Publish);
 
-    private static Harness NewHarness(IDbContextFactory<FurniturePlannerContext> factory)
+    // ReleaseAsync (exercised below) republishes through the store, so the store must be seeded
+    // from the embedded seed first even though these tests are about naming, not publishing.
+    private static async Task<Harness> NewHarnessAsync(IDbContextFactory<FurniturePlannerContext> factory)
     {
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
         var source = new DbCatalogueSource(factory);
-        var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source);
+        var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
         return new Harness(new VariantNamingService(factory, publish), publish);
     }
 
@@ -61,7 +65,7 @@ public class VariantNamingServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedModelStatesAsync(factory);
-        var harness = NewHarness(factory);
+        var harness = await NewHarnessAsync(factory);
 
         await harness.Naming.AssignAsync(Studio, Variant, "STUDIO-X");
 
@@ -75,7 +79,7 @@ public class VariantNamingServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedModelStatesAsync(factory);
-        var harness = NewHarness(factory);
+        var harness = await NewHarnessAsync(factory);
 
         await harness.Naming.AssignAsync(Studio, Variant, "STUDIO-X");
         await harness.Naming.AssignAsync(Studio, Variant, "STUDIO-A");
@@ -92,7 +96,7 @@ public class VariantNamingServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedModelStatesAsync(factory);
-        var harness = NewHarness(factory);
+        var harness = await NewHarnessAsync(factory);
 
         await harness.Naming.AssignAsync(Studio, Variant, "STUDIO-X");
         await harness.Naming.AssignAsync(Studio, Variant, blank);
@@ -107,7 +111,7 @@ public class VariantNamingServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedModelStatesAsync(factory);
-        var harness = NewHarness(factory);
+        var harness = await NewHarnessAsync(factory);
 
         await harness.Publish.ReleaseAsync(Studio);
 
@@ -120,7 +124,7 @@ public class VariantNamingServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedModelStatesAsync(factory);
-        var harness = NewHarness(factory);
+        var harness = await NewHarnessAsync(factory);
 
         await harness.Naming.AssignAsync(Studio, Variant, "STUDIO-X");
 
