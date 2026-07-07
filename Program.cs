@@ -99,6 +99,7 @@ class Program
         builder.Services.AddScoped<ModelPublishService>();
         builder.Services.AddScoped<VariantNamingService>();
         builder.Services.AddScoped<ProductionIdentityService>();
+        builder.Services.AddScoped<AuthoringCatalogueStore>();
 
         // Run the app - all Avalonia complexity handled by the package
         builder.RunApp(args);
