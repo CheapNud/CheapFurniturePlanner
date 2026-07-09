@@ -182,6 +182,31 @@ public class StudioPageTests : TestContext
     }
 
     [Fact]
+    public async Task ChangingStatePicker_RevertsToDraft_WhenPublishFailsForNoElements()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        var authoring = new ModelAuthoringService(factory, new AuthoringCatalogueStore(factory), NewPublishService(factory));
+        await authoring.CreateBlankAsync("NOEL", "No Elements", null);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioPage>();
+        var stateSelect = FindStateSelect(cut, "NOEL");
+
+        // NOEL has no elements, so CataloguePublishService rejects the republish, SetStateAsync
+        // reverts the state row and rethrows, and ChangeStateAsync's catch reloads regardless - the
+        // row should snap back to Draft rather than sticking on Active.
+        await cut.InvokeAsync(() => stateSelect.Instance.ValueChanged.InvokeAsync(TradeItemState.Active));
+
+        Assert.Equal(TradeItemState.Draft, await NewPublishService(factory).GetStateAsync("NOEL"));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(TradeItemState.Draft, FindStateSelect(cut, "NOEL").Instance.Value);
+        });
+    }
+
+    [Fact]
     public async Task NewModel_Blank_CreatesModel()
     {
         var (factory, conn) = NewFactory();
