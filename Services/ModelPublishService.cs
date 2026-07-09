@@ -26,8 +26,31 @@ public sealed class ModelPublishService(IDbContextFactory<FurniturePlannerContex
             .ToList();
     }
 
-    public Task ReleaseAsync(string modelCode, CancellationToken ct = default) => TransitionAsync(modelCode, TradeItemState.Draft, TradeItemState.Active, ct);
-    public Task DiscontinueAsync(string modelCode, CancellationToken ct = default) => TransitionAsync(modelCode, TradeItemState.Active, TradeItemState.Discontinued, ct);
+    // Free-flow: set a model to any state at any time. Republishes the Active-only snapshot and, if that
+    // fails validation (e.g. releasing a model that has no elements), reverts the state row and rethrows.
+    public async Task SetStateAsync(string modelCode, TradeItemState state, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var row = await db.ModelStates.FirstOrDefaultAsync(s => s.ModelCode == modelCode, ct);
+        var prior = row?.State ?? TradeItemState.Draft;
+        if (row is null)
+        {
+            row = new ModelStateRecord { ModelCode = modelCode, State = state };
+            db.ModelStates.Add(row);
+        }
+        else { row.State = state; }
+        await db.SaveChangesAsync(ct);
+        try
+        {
+            await RepublishAsync(ct);
+        }
+        catch
+        {
+            row.State = prior;
+            await db.SaveChangesAsync(CancellationToken.None);
+            throw;
+        }
+    }
 
     // Loads the persisted authoring catalogue, keeps only the models whose state row is Active, and
     // publishes that Active-only snapshot. PublishAsync validates, persists, flips IsCurrent and
@@ -43,37 +66,6 @@ public sealed class ModelPublishService(IDbContextFactory<FurniturePlannerContex
         if (!result.Success)
         {
             throw new InvalidOperationException("Republish failed validation: " + string.Join("; ", result.Errors));
-        }
-    }
-
-    private async Task TransitionAsync(string modelCode, TradeItemState from, TradeItemState to, CancellationToken ct)
-    {
-        await using var db = await factory.CreateDbContextAsync(ct);
-        var row = await db.ModelStates.FirstOrDefaultAsync(s => s.ModelCode == modelCode, ct);
-        if (row is null)
-        {
-            row = new ModelStateRecord { ModelCode = modelCode, State = TradeItemState.Draft };
-            db.ModelStates.Add(row);
-        }
-        if (row.State != from) { throw new InvalidOperationException($"Model '{modelCode}' is {row.State}; cannot transition to {to}."); }
-        row.State = to;
-        await db.SaveChangesAsync(ct);
-
-        // Keep the transition atomic with a valid publish: a model that would break the Active-only
-        // snapshot must not be releasable. If the republish fails, revert the state row to its prior
-        // value and rethrow so the transition does not stand.
-        try
-        {
-            await RepublishAsync(ct);
-        }
-        catch
-        {
-            row.State = from;
-            // Use CancellationToken.None so this compensating write always lands, even if the
-            // caller's token is what caused RepublishAsync to fail; otherwise the state would be
-            // left transitioned-but-unpublished.
-            await db.SaveChangesAsync(CancellationToken.None);
-            throw;
         }
     }
 }

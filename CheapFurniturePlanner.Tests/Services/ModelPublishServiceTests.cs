@@ -1,6 +1,7 @@
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -9,9 +10,10 @@ using Xunit;
 namespace CheapFurniturePlanner.Tests.Services;
 
 // ModelPublishService is the studio's gatekeeper: it lists the authoring model set (the
-// embedded seed catalogue, in this slice) alongside each model's release state, and owns the
-// Draft -> Active -> Discontinued state machine. Mirrors DbCatalogueSourceTests.NewFactory(): the
-// connection is not owned by any single context handed out by the factory, so callers must dispose
+// embedded seed catalogue, in this slice) alongside each model's release state. State transitions
+// are free-flow - SetStateAsync can move a model to any state at any time - with one hard rule: a
+// model with zero elements can't be published (set Active). Mirrors DbCatalogueSourceTests.NewFactory():
+// the connection is not owned by any single context handed out by the factory, so callers must dispose
 // it themselves to keep the in-memory database alive for the test's duration.
 public class ModelPublishServiceTests
 {
@@ -59,39 +61,82 @@ public class ModelPublishServiceTests
     }
 
     [Fact]
-    public async Task ReleaseAsync_TransitionsDraftToActive_SecondReleaseThrows()
+    public async Task SetStateAsync_ToActive_TransitionsDraftToActive_AndIsIdempotent()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var service = await NewServiceAsync(factory);
 
-        await service.ReleaseAsync("FJORD");
+        await service.SetStateAsync("FJORD", TradeItemState.Active);
 
         Assert.Equal(TradeItemState.Active, await service.GetStateAsync("FJORD"));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReleaseAsync("FJORD"));
+
+        // Free-flow: setting a model to the state it is already in is not an error.
+        await service.SetStateAsync("FJORD", TradeItemState.Active);
+        Assert.Equal(TradeItemState.Active, await service.GetStateAsync("FJORD"));
     }
 
     [Fact]
-    public async Task DiscontinueAsync_RequiresActive_ThrowsWhileDraft()
+    public async Task SetStateAsync_ToDiscontinued_FromDraft_Succeeds()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var service = await NewServiceAsync(factory);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DiscontinueAsync("FJORD"));
-    }
-
-    [Fact]
-    public async Task DiscontinueAsync_AfterRelease_TransitionsActiveToDiscontinued()
-    {
-        var (factory, conn) = NewFactory();
-        using var _ = conn;
-        var service = await NewServiceAsync(factory);
-
-        await service.ReleaseAsync("FJORD");
-        await service.DiscontinueAsync("FJORD");
+        // Free-flow: there is no from-state gate, so a Draft model can move straight to Discontinued.
+        await service.SetStateAsync("FJORD", TradeItemState.Discontinued);
 
         Assert.Equal(TradeItemState.Discontinued, await service.GetStateAsync("FJORD"));
+    }
+
+    [Fact]
+    public async Task SetStateAsync_ToDiscontinued_AfterActive_TransitionsActiveToDiscontinued()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var service = await NewServiceAsync(factory);
+
+        await service.SetStateAsync("FJORD", TradeItemState.Active);
+        await service.SetStateAsync("FJORD", TradeItemState.Discontinued);
+
+        Assert.Equal(TradeItemState.Discontinued, await service.GetStateAsync("FJORD"));
+    }
+
+    [Theory]
+    [InlineData(TradeItemState.Draft)]
+    [InlineData(TradeItemState.Active)]
+    [InlineData(TradeItemState.Discontinued)]
+    [InlineData(TradeItemState.PhasingOut)]
+    public async Task SetStateAsync_AnyState_PersistsAndIsReadableBack(TradeItemState state)
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var service = await NewServiceAsync(factory);
+
+        await service.SetStateAsync("FJORD", state);
+
+        Assert.Equal(state, await service.GetStateAsync("FJORD"));
+    }
+
+    [Fact]
+    public async Task SetStateAsync_ToActive_NoElementModel_ThrowsAndLeavesPriorState()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
+        await store.SaveModelAsync(new FurnitureModel { Code = "EMPTY", Name = "Empty", Elements = [] });
+        var source = new DbCatalogueSource(factory);
+        var service = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
+        await using (var db = factory.CreateDbContext())
+        {
+            db.ModelStates.Add(new ModelStateRecord { ModelCode = "EMPTY", State = TradeItemState.Draft });
+            await db.SaveChangesAsync();
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SetStateAsync("EMPTY", TradeItemState.Active));
+
+        Assert.Equal(TradeItemState.Draft, await service.GetStateAsync("EMPTY"));
     }
 
     [Fact]
@@ -115,7 +160,7 @@ public class ModelPublishServiceTests
         using var _ = conn;
         var service = await NewServiceAsync(factory);
 
-        await service.ReleaseAsync("FJORD");
+        await service.SetStateAsync("FJORD", TradeItemState.Active);
         var models = await service.GetAuthoringModelsAsync();
 
         var fjord = Assert.Single(models, m => m.Code == "FJORD");

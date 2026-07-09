@@ -68,6 +68,10 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
         }
         foreach (var model in snapshot.Models)
         {
+            if (model.Elements.Count == 0)
+            {
+                errors.Add($"Model '{model.Code}' has no elements and cannot be published.");
+            }
             foreach (var element in model.Elements)
             {
                 foreach (var option in element.Options)

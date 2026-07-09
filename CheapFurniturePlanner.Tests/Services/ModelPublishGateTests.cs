@@ -92,7 +92,7 @@ public class ModelPublishGateTests
         await SeedActiveFjordAsync(factory, harness);
         Assert.DoesNotContain(Studio, await CurrentModelCodesAsync(harness.Source));
 
-        await harness.Publish.ReleaseAsync(Studio);
+        await harness.Publish.SetStateAsync(Studio, TradeItemState.Active);
 
         var codes = await CurrentModelCodesAsync(harness.Source);
         Assert.Contains(Studio, codes);
@@ -109,7 +109,7 @@ public class ModelPublishGateTests
         await SeedActiveFjordAsync(factory, harness);
         Assert.Contains(Fjord, await CurrentModelCodesAsync(harness.Source));
 
-        await harness.Publish.DiscontinueAsync(Fjord);
+        await harness.Publish.SetStateAsync(Fjord, TradeItemState.Discontinued);
 
         Assert.DoesNotContain(Fjord, await CurrentModelCodesAsync(harness.Source));
     }
