@@ -1,7 +1,10 @@
 @page "/studio"
+@using CheapFurniturePlanner.Catalogue
 @using CheapFurniturePlanner.Domain.Catalog
 
 @inject ModelPublishService ModelPublishService
+@inject ModelAuthoringService ModelAuthoringService
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
@@ -10,7 +13,15 @@
 
 <MudPaper Elevation="2" Class="pa-4 mb-4">
     <MudStack Spacing="3">
-        <MudText Typo="Typo.h5">Catalog Studio</MudText>
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h5">Catalog Studio</MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => OpenNewModelDialogAsync())">
+                New model
+            </MudButton>
+        </MudStack>
         <MudAlert Severity="Severity.Info">Only released (Active) models appear in the catalogue and planner.</MudAlert>
     </MudStack>
 </MudPaper>
@@ -35,26 +46,36 @@ else
                 <MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>
             </MudTd>
             <MudTd DataLabel="Actions">
-                <MudStack Row="true" Spacing="2">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                     <MudButton Size="Size.Small"
                                Variant="Variant.Outlined"
                                Color="Color.Info"
                                OnClick="@(() => Navigation.NavigateTo($"/studio/{context.Code}"))">
                         Name variants
                     </MudButton>
+                    <MudSelect T="TradeItemState"
+                               Label="State"
+                               Dense="true"
+                               Margin="Margin.Dense"
+                               Value="@context.State"
+                               ValueChanged="@((TradeItemState newState) => ChangeStateAsync(context.Code, newState))">
+                        @foreach (var state in Enum.GetValues<TradeItemState>())
+                        {
+                            <MudSelectItem T="TradeItemState" Value="@state">@state</MudSelectItem>
+                        }
+                    </MudSelect>
                     <MudButton Size="Size.Small"
-                               Variant="Variant.Filled"
-                               Color="Color.Primary"
-                               Disabled="@(context.State != TradeItemState.Draft)"
-                               OnClick="@(() => ReleaseAsync(context.Code))">
-                        Release
+                               Variant="Variant.Outlined"
+                               Color="Color.Default"
+                               OnClick="@(() => OpenEditModelDialogAsync(context.Code))">
+                        Edit
                     </MudButton>
                     <MudButton Size="Size.Small"
                                Variant="Variant.Outlined"
                                Color="Color.Error"
-                               Disabled="@(context.State != TradeItemState.Active)"
-                               OnClick="@(() => DiscontinueAsync(context.Code))">
-                        Discontinue
+                               Disabled="@(context.State == TradeItemState.Active)"
+                               OnClick="@(() => DeleteModelAsync(context.Code))">
+                        Delete
                     </MudButton>
                 </MudStack>
             </MudTd>
@@ -75,36 +96,66 @@ else
         _models = await ModelPublishService.GetAuthoringModelsAsync();
     }
 
-    private async Task ReleaseAsync(string modelCode)
+    // Free-flow state change: always reload afterwards, whether SetStateAsync succeeded or reverted -
+    // that's how the row ends up showing the model's ACTUAL persisted state either way.
+    private async Task ChangeStateAsync(string modelCode, TradeItemState newState)
     {
-        var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Release model",
-            $"This publishes '{modelCode}' - it becomes visible in the catalogue and planner. Continue?",
-            yesText: "Release",
-            cancelText: "Cancel");
-        if (confirmed != true)
-        {
-            return;
-        }
-
         try
         {
-            await ModelPublishService.SetStateAsync(modelCode, TradeItemState.Active);
-            Snackbar.Add($"Model '{modelCode}' released.", Severity.Success);
-            await ReloadAsync();
+            await ModelPublishService.SetStateAsync(modelCode, newState);
+            Snackbar.Add($"Model '{modelCode}' set to {newState}.", Severity.Success);
         }
         catch (InvalidOperationException ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
+        await ReloadAsync();
     }
 
-    private async Task DiscontinueAsync(string modelCode)
+    private async Task OpenNewModelDialogAsync()
+    {
+        var existingCodes = (_models ?? []).Select(model => model.Code).ToList();
+        var parameters = new DialogParameters<NewModelDialog>
+        {
+            { dialog => dialog.ExistingCodes, existingCodes }
+        };
+        var dialogRef = await DialogService.ShowAsync<NewModelDialog>("New model", parameters);
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is { Canceled: false })
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private async Task OpenEditModelDialogAsync(string modelCode)
+    {
+        var model = await AuthoringCatalogueStore.LoadModelAsync(modelCode);
+        if (model is null)
+        {
+            Snackbar.Add($"Model '{modelCode}' not found.", Severity.Error);
+            return;
+        }
+
+        var parameters = new DialogParameters<EditModelDialog>
+        {
+            { dialog => dialog.Code, model.Code },
+            { dialog => dialog.Name, model.Name },
+            { dialog => dialog.Collection, model.CollectionCode }
+        };
+        var dialogRef = await DialogService.ShowAsync<EditModelDialog>("Edit model", parameters);
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is { Canceled: false })
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private async Task DeleteModelAsync(string modelCode)
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Discontinue model",
-            $"'{modelCode}' will be discontinued and removed from the catalogue and planner. Continue?",
-            yesText: "Discontinue",
+            "Delete model",
+            $"'{modelCode}' will be permanently deleted. Continue?",
+            yesText: "Delete",
             cancelText: "Cancel");
         if (confirmed != true)
         {
@@ -113,11 +164,11 @@ else
 
         try
         {
-            await ModelPublishService.SetStateAsync(modelCode, TradeItemState.Discontinued);
-            Snackbar.Add($"Model '{modelCode}' discontinued.", Severity.Success);
+            await ModelAuthoringService.DeleteAsync(modelCode);
+            Snackbar.Add($"Model '{modelCode}' deleted.", Severity.Success);
             await ReloadAsync();
         }
-        catch (InvalidOperationException ex)
+        catch (ModelActiveException ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
@@ -127,6 +178,7 @@ else
     {
         TradeItemState.Active => Color.Success,
         TradeItemState.Discontinued => Color.Error,
+        TradeItemState.PhasingOut => Color.Warning,
         _ => Color.Default
     };
 }

@@ -2,6 +2,7 @@ using AngleSharp.Dom;
 using Bunit;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Components.Pages;
+using CheapFurniturePlanner.Components.Studio;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Services;
@@ -14,10 +15,11 @@ using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Components;
 
-// Exercises the studio as the model-list gatekeeper: it lists the authoring model set (the
-// embedded seed catalogue) with each model's release state, and its Release/Discontinue actions are
-// state-gated the same way ModelPublishService itself gates them. Runs against a real
-// ModelPublishService over in-memory SQLite, mirroring FurnitureConfigPanelTests/DbCatalogueSourceTests.
+// Exercises the studio as the model MANAGER: it lists the authoring model set (the embedded seed
+// catalogue) with each model's release state in a free-flow state picker, and offers create
+// (blank/duplicate), rename and guarded delete. Runs against real ModelPublishService/
+// ModelAuthoringService instances over in-memory SQLite, mirroring FurnitureConfigPanelTests/
+// DbCatalogueSourceTests.
 public class StudioPageTests : TestContext
 {
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
@@ -56,9 +58,10 @@ public class StudioPageTests : TestContext
         return new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
     }
 
-    // bUnit renders each RenderComponent<T>() call as its own root in the render tree, so the
-    // MudMessageBox that ShowMessageBoxAsync opens shows up as a descendant of the MudDialogProvider
-    // root, NOT of the page under test - callers must query the returned handle, not `cut`.
+    // bUnit renders each RenderComponent<T>() call as its own root in the render tree, so any dialog
+    // that DialogService.ShowAsync opens (MudMessageBox, NewModelDialog, EditModelDialog) shows up as
+    // a descendant of the MudDialogProvider root, NOT of the page under test - callers must query the
+    // returned handle, not `cut`.
     private IRenderedComponent<MudDialogProvider> ConfigureServices(IDbContextFactory<FurniturePlannerContext> factory)
     {
         Services.AddMudServices();
@@ -67,25 +70,39 @@ public class StudioPageTests : TestContext
         Services.AddSingleton<ICatalogueSource, DbCatalogueSource>();
         Services.AddSingleton(sp => new CataloguePublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<ICatalogueSource>()));
         Services.AddSingleton(sp => new ModelPublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<CataloguePublishService>(), sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<AuthoringCatalogueStore>()));
+        Services.AddSingleton<ModelAuthoringService>();
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        // MudTable's Release/Discontinue confirmations render via MudDialogProvider; MudSelect-style
-        // overlays elsewhere in the app rely on MudPopoverProvider - both need to be present.
+        // MudMessageBox confirmations and the New/Edit model dialogs render via MudDialogProvider;
+        // MudSelect-style overlays elsewhere in the app rely on MudPopoverProvider - both need to be
+        // present.
         var dialogProvider = RenderComponent<MudDialogProvider>();
         RenderComponent<MudPopoverProvider>();
         return dialogProvider;
     }
 
-    // The table now lists more than one authoring model, so buttons must be scoped to a model's own
-    // row (identified by its Code cell) rather than picked globally by their label.
-    private static IElement FindActionButton(IRenderedComponent<StudioPage> cut, string text, string modelCode = "FJORD")
+    // The table lists more than one authoring model, so buttons/pickers must be scoped to a model's
+    // own row (identified by its Code cell) rather than picked globally.
+    private static IElement FindRow(IRenderedComponent<StudioPage> cut, string modelCode) =>
+        cut.FindAll("tbody tr").Single(tr => tr.QuerySelectorAll("td").Any(td => td.TextContent.Trim() == modelCode));
+
+    private static IElement FindActionButton(IRenderedComponent<StudioPage> cut, string text, string modelCode = "FJORD") =>
+        FindRow(cut, modelCode).QuerySelectorAll("button").Single(b => b.TextContent.Trim() == text);
+
+    // The state MudSelect isn't a <button>, so it can't be located by text the way action buttons are.
+    // Rows render in the same order as _models (Code-sorted), which matches the render order of the
+    // MudSelect<TradeItemState> components 1:1 - so the row's index among <tr> elements is also its
+    // index among the state selects.
+    private static IRenderedComponent<MudSelect<TradeItemState>> FindStateSelect(IRenderedComponent<StudioPage> cut, string modelCode)
     {
-        var row = cut.FindAll("tbody tr").Single(tr => tr.QuerySelectorAll("td").Any(td => td.TextContent.Trim() == modelCode));
-        return row.QuerySelectorAll("button").Single(b => b.TextContent.Trim() == text);
+        var rows = cut.FindAll("tbody tr").ToList();
+        var rowIndex = rows.FindIndex(tr => tr.QuerySelectorAll("td").Any(td => td.TextContent.Trim() == modelCode));
+        Assert.True(rowIndex >= 0, $"Row for '{modelCode}' not found.");
+        return cut.FindComponents<MudSelect<TradeItemState>>()[rowIndex];
     }
 
     [Fact]
-    public async Task Render_ListsSeedModel_WithDraftStateAndReleaseEnabled()
+    public async Task Render_ListsSeedModel_WithDraftState_AndNameVariantsLink()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
@@ -98,14 +115,12 @@ public class StudioPageTests : TestContext
         Assert.Contains("Fjord", cut.Markup);
         Assert.Contains(TradeItemState.Draft.ToString(), cut.Markup);
 
-        var releaseButton = FindActionButton(cut, "Release");
-        var discontinueButton = FindActionButton(cut, "Discontinue");
-        Assert.False(releaseButton.HasAttribute("disabled"));
-        Assert.True(discontinueButton.HasAttribute("disabled"));
+        Assert.Equal(TradeItemState.Draft, FindStateSelect(cut, "FJORD").Instance.Value);
+        Assert.NotNull(FindActionButton(cut, "Name variants"));
     }
 
     [Fact]
-    public async Task Render_AfterOutOfBandRelease_ShowsActiveState_WithDiscontinueEnabled()
+    public async Task Render_AfterOutOfBandRelease_ShowsActiveState()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
@@ -118,67 +133,198 @@ public class StudioPageTests : TestContext
         var cut = RenderComponent<StudioPage>();
 
         Assert.Contains(TradeItemState.Active.ToString(), cut.Markup);
-        var releaseButton = FindActionButton(cut, "Release");
-        var discontinueButton = FindActionButton(cut, "Discontinue");
-        Assert.True(releaseButton.HasAttribute("disabled"));
-        Assert.False(discontinueButton.HasAttribute("disabled"));
+        Assert.Equal(TradeItemState.Active, FindStateSelect(cut, "FJORD").Instance.Value);
     }
 
     [Fact]
-    public async Task ClickingRelease_ThroughConfirm_TransitionsDraftToActive_AndRebadges()
+    public async Task ChangingStatePicker_TransitionsDraftToActive_AndPersists()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedAuthoringStoreAsync(factory);
-        var dialogProvider = ConfigureServices(factory);
+        ConfigureServices(factory);
 
         var cut = RenderComponent<StudioPage>();
-        var releaseButton = FindActionButton(cut, "Release");
+        var stateSelect = FindStateSelect(cut, "FJORD");
 
-        // ShowMessageBoxAsync suspends until the rendered MudMessageBox dialog is dismissed, so
-        // awaiting the click itself here would deadlock the test; fire it and drive the dialog instead.
-        var pendingClick = cut.InvokeAsync(() => releaseButton.Click());
+        // Free-flow state change, no confirm dialog involved - driving the picker through the
+        // component instance mirrors how StudioNamingPageTests drives MudTextField.ValueChanged.
+        await cut.InvokeAsync(() => stateSelect.Instance.ValueChanged.InvokeAsync(TradeItemState.Active));
 
-        dialogProvider.WaitForState(() => dialogProvider.FindComponents<MudMessageBox>().Count > 0);
-        var messageBox = dialogProvider.FindComponent<MudMessageBox>();
-        Assert.Contains("FJORD", messageBox.Markup);
-        var confirmButton = messageBox.FindAll("button").Single(b => b.TextContent.Trim() == "Release");
-        await cut.InvokeAsync(() => confirmButton.Click());
-        await pendingClick;
-
+        Assert.Equal(TradeItemState.Active, await NewPublishService(factory).GetStateAsync("FJORD"));
         cut.WaitForAssertion(() =>
         {
             Assert.Contains(TradeItemState.Active.ToString(), cut.Markup);
-            Assert.True(FindActionButton(cut, "Release").HasAttribute("disabled"));
-            Assert.False(FindActionButton(cut, "Discontinue").HasAttribute("disabled"));
+            Assert.Equal(TradeItemState.Active, FindStateSelect(cut, "FJORD").Instance.Value);
         });
     }
 
     [Fact]
-    public async Task ClickingDiscontinue_ThroughConfirm_TransitionsActiveToDiscontinued()
+    public async Task ChangingStatePicker_TransitionsActiveToDiscontinued_AndPersists()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedAuthoringStoreAsync(factory);
         await NewPublishService(factory).SetStateAsync("FJORD", TradeItemState.Active);
-        var dialogProvider = ConfigureServices(factory);
+        ConfigureServices(factory);
 
         var cut = RenderComponent<StudioPage>();
-        var discontinueButton = FindActionButton(cut, "Discontinue");
+        var stateSelect = FindStateSelect(cut, "FJORD");
 
-        var pendingClick = cut.InvokeAsync(() => discontinueButton.Click());
+        await cut.InvokeAsync(() => stateSelect.Instance.ValueChanged.InvokeAsync(TradeItemState.Discontinued));
 
-        dialogProvider.WaitForState(() => dialogProvider.FindComponents<MudMessageBox>().Count > 0);
-        var messageBox = dialogProvider.FindComponent<MudMessageBox>();
-        var confirmButton = messageBox.FindAll("button").Single(b => b.TextContent.Trim() == "Discontinue");
-        await cut.InvokeAsync(() => confirmButton.Click());
-        await pendingClick;
-
+        Assert.Equal(TradeItemState.Discontinued, await NewPublishService(factory).GetStateAsync("FJORD"));
         cut.WaitForAssertion(() =>
         {
             Assert.Contains(TradeItemState.Discontinued.ToString(), cut.Markup);
-            Assert.True(FindActionButton(cut, "Release").HasAttribute("disabled"));
-            Assert.True(FindActionButton(cut, "Discontinue").HasAttribute("disabled"));
+            Assert.Equal(TradeItemState.Discontinued, FindStateSelect(cut, "FJORD").Instance.Value);
         });
+    }
+
+    [Fact]
+    public async Task NewModel_Blank_CreatesModel()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioPage>();
+        var newModelButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "New model");
+
+        // OpenNewModelDialogAsync awaits dialogRef.Result, which only resolves once the dialog closes -
+        // awaiting the click itself here would deadlock the test; fire it and drive the dialog instead.
+        var pendingClick = cut.InvokeAsync(() => newModelButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<NewModelDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<NewModelDialog>();
+
+        // Blank is the default mode: Code, Name, Collection text fields render in that order.
+        var fields = dialog.FindComponents<MudTextField<string>>();
+        await dialog.InvokeAsync(() => fields[0].Instance.ValueChanged.InvokeAsync("NEWM"));
+        await dialog.InvokeAsync(() => fields[1].Instance.ValueChanged.InvokeAsync("New Model"));
+
+        var createButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Create");
+        await cut.InvokeAsync(() => createButton.Click());
+        await pendingClick;
+
+        var models = await NewPublishService(factory).GetAuthoringModelsAsync();
+        var created = Assert.Single(models, m => m.Code == "NEWM");
+        Assert.Equal("New Model", created.Name);
+        cut.WaitForAssertion(() => Assert.Contains("NEWM", cut.Markup));
+    }
+
+    [Fact]
+    public async Task NewModel_Duplicate_ClonesSourceModel()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+        var store = new AuthoringCatalogueStore(factory);
+        var sourceModel = await store.LoadModelAsync("FJORD");
+        Assert.NotNull(sourceModel);
+
+        var cut = RenderComponent<StudioPage>();
+        var newModelButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "New model");
+
+        var pendingClick = cut.InvokeAsync(() => newModelButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<NewModelDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<NewModelDialog>();
+
+        var modeRadioGroup = dialog.FindComponent<MudRadioGroup<NewModelDialog.NewModelMode>>();
+        await dialog.InvokeAsync(() => modeRadioGroup.Instance.ValueChanged.InvokeAsync(NewModelDialog.NewModelMode.Duplicate));
+
+        var sourceSelect = dialog.FindComponent<MudSelect<string>>();
+        await dialog.InvokeAsync(() => sourceSelect.Instance.ValueChanged.InvokeAsync("FJORD"));
+
+        // In Duplicate mode the Collection field is hidden: only Code, Name remain.
+        var fields = dialog.FindComponents<MudTextField<string>>();
+        await dialog.InvokeAsync(() => fields[0].Instance.ValueChanged.InvokeAsync("FJORD-COPY"));
+        await dialog.InvokeAsync(() => fields[1].Instance.ValueChanged.InvokeAsync("Fjord Copy"));
+
+        var createButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Create");
+        await cut.InvokeAsync(() => createButton.Click());
+        await pendingClick;
+
+        var clone = await store.LoadModelAsync("FJORD-COPY");
+        Assert.NotNull(clone);
+        Assert.Equal("Fjord Copy", clone!.Name);
+        Assert.Equal(sourceModel!.Elements.Count, clone.Elements.Count);
+    }
+
+    [Fact]
+    public async Task EditModel_ChangesName()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioPage>();
+        var editButton = FindActionButton(cut, "Edit");
+
+        var pendingClick = cut.InvokeAsync(() => editButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<EditModelDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<EditModelDialog>();
+
+        // Code (index 0) is Disabled/read-only; Name is index 1.
+        var nameField = dialog.FindComponents<MudTextField<string>>()[1];
+        await dialog.InvokeAsync(() => nameField.Instance.ValueChanged.InvokeAsync("Fjord Renamed"));
+
+        var saveButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Save");
+        await cut.InvokeAsync(() => saveButton.Click());
+        await pendingClick;
+
+        var store = new AuthoringCatalogueStore(factory);
+        var renamed = await store.LoadModelAsync("FJORD");
+        Assert.Equal("Fjord Renamed", renamed!.Name);
+        cut.WaitForAssertion(() => Assert.Contains("Fjord Renamed", cut.Markup));
+    }
+
+    [Fact]
+    public async Task DeleteButton_DisabledForActiveModel()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await NewPublishService(factory).SetStateAsync("FJORD", TradeItemState.Active);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioPage>();
+
+        Assert.True(FindActionButton(cut, "Delete").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public async Task DeleteButton_ThroughConfirm_RemovesNonActiveModel()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioPage>();
+        var deleteButton = FindActionButton(cut, "Delete");
+        Assert.False(deleteButton.HasAttribute("disabled"));
+
+        var pendingClick = cut.InvokeAsync(() => deleteButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<MudMessageBox>().Count > 0);
+        var messageBox = dialogProvider.FindComponent<MudMessageBox>();
+        Assert.Contains("FJORD", messageBox.Markup);
+        var confirmButton = messageBox.FindAll("button").Single(b => b.TextContent.Trim() == "Delete");
+        await cut.InvokeAsync(() => confirmButton.Click());
+        await pendingClick;
+
+        var models = await NewPublishService(factory).GetAuthoringModelsAsync();
+        Assert.DoesNotContain(models, m => m.Code == "FJORD");
+        // "FJORD" is a substring of the seeded "FJORD-STUDIO" model, so assert on an exact-code row
+        // match rather than a raw substring search of the whole table markup.
+        cut.WaitForAssertion(() => Assert.DoesNotContain(
+            cut.FindAll("tbody tr"),
+            tr => tr.QuerySelectorAll("td").Any(td => td.TextContent.Trim() == "FJORD")));
     }
 }

@@ -1,0 +1,94 @@
+@using CheapFurniturePlanner.Services
+
+@inject ModelAuthoringService ModelAuthoringService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">New model</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudRadioGroup T="NewModelMode" Value="_mode" ValueChanged="@((NewModelMode mode) => _mode = mode)">
+                <MudRadio T="NewModelMode" Value="NewModelMode.Blank">Blank</MudRadio>
+                <MudRadio T="NewModelMode" Value="NewModelMode.Duplicate">Duplicate</MudRadio>
+            </MudRadioGroup>
+
+            @if (_mode == NewModelMode.Duplicate)
+            {
+                <MudSelect T="string"
+                           Label="Source model"
+                           Value="@_sourceCode"
+                           ValueChanged="@((string sourceCode) => _sourceCode = sourceCode)">
+                    @foreach (var sourceCandidate in ExistingCodes)
+                    {
+                        <MudSelectItem T="string" Value="@sourceCandidate">@sourceCandidate</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" />
+            <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" />
+
+            @if (_mode == NewModelMode.Blank)
+            {
+                <MudTextField T="string" Label="Collection (optional)" @bind-Value="_collection" />
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAsync">Create</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    // Public so bUnit can drive MudRadioGroup<NewModelMode> through the component instance the same
+    // way it drives every other Value/ValueChanged control in this dialog and in StudioPage.
+    public enum NewModelMode { Blank, Duplicate }
+
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public IReadOnlyList<string> ExistingCodes { get; set; } = [];
+
+    private NewModelMode _mode = NewModelMode.Blank;
+    private string _code = string.Empty;
+    private string _name = string.Empty;
+    private string? _collection;
+    private string? _sourceCode;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SubmitAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_code) || string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Code and Name are required.", Severity.Warning);
+            return;
+        }
+
+        try
+        {
+            if (_mode == NewModelMode.Blank)
+            {
+                await ModelAuthoringService.CreateBlankAsync(_code, _name, _collection);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(_sourceCode))
+                {
+                    Snackbar.Add("Select a source model to duplicate.", Severity.Warning);
+                    return;
+                }
+                await ModelAuthoringService.CreateFromCloneAsync(_sourceCode, _code, _name);
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}
