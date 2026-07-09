@@ -113,7 +113,7 @@ public class VariantNamingServiceTests
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
 
-        await harness.Publish.ReleaseAsync(Studio);
+        await harness.Publish.SetStateAsync(Studio, TradeItemState.Active);
 
         await Assert.ThrowsAsync<NamingFrozenException>(() => harness.Naming.AssignAsync(Studio, Variant, "STUDIO-X"));
     }

@@ -89,7 +89,7 @@ else
 
         try
         {
-            await ModelPublishService.ReleaseAsync(modelCode);
+            await ModelPublishService.SetStateAsync(modelCode, TradeItemState.Active);
             Snackbar.Add($"Model '{modelCode}' released.", Severity.Success);
             await ReloadAsync();
         }
@@ -113,7 +113,7 @@ else
 
         try
         {
-            await ModelPublishService.DiscontinueAsync(modelCode);
+            await ModelPublishService.SetStateAsync(modelCode, TradeItemState.Discontinued);
             Snackbar.Add($"Model '{modelCode}' discontinued.", Severity.Success);
             await ReloadAsync();
         }

@@ -112,7 +112,7 @@ public class StudioPageTests : TestContext
         await SeedAuthoringStoreAsync(factory);
         // Released out-of-band (as a second operator/tab would) before the page ever loads, so this
         // proves the initial load reflects persisted state rather than a page-local assumption.
-        await NewPublishService(factory).ReleaseAsync("FJORD");
+        await NewPublishService(factory).SetStateAsync("FJORD", TradeItemState.Active);
         ConfigureServices(factory);
 
         var cut = RenderComponent<StudioPage>();
@@ -160,7 +160,7 @@ public class StudioPageTests : TestContext
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedAuthoringStoreAsync(factory);
-        await NewPublishService(factory).ReleaseAsync("FJORD");
+        await NewPublishService(factory).SetStateAsync("FJORD", TradeItemState.Active);
         var dialogProvider = ConfigureServices(factory);
 
         var cut = RenderComponent<StudioPage>();

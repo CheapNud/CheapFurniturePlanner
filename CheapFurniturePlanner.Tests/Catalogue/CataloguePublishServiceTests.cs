@@ -341,6 +341,35 @@ public class CataloguePublishServiceTests
     }
 
     [Fact]
+    public async Task PublishAsync_ModelWithNoElements_FailsAndWritesNoRow()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Models =
+                [
+                    new FurnitureModel { Code = "EMPTY", Name = "Empty Model", Elements = [] },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains("no elements"));
+            Assert.Null(result.Version);
+            Assert.False(source.Invalidated);
+
+            using var verifyContext = factory.CreateDbContext();
+            Assert.Empty(verifyContext.PublishedCatalogues);
+        }
+    }
+
+    [Fact]
     public async Task PublishAsync_EmbeddedFjordSeed_PublishesSuccessfully()
     {
         var (factory, connection) = NewFactory();
