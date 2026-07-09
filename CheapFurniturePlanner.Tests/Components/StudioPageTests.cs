@@ -240,6 +240,41 @@ public class StudioPageTests : TestContext
     }
 
     [Fact]
+    public async Task NewModel_Blank_TrailingWhitespaceCode_RejectedAsDuplicate()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        var authoring = new ModelAuthoringService(factory, new AuthoringCatalogueStore(factory), NewPublishService(factory));
+        await authoring.CreateBlankAsync("NEWM", "Existing", null);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioPage>();
+        var newModelButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "New model");
+
+        var pendingClick = cut.InvokeAsync(() => newModelButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<NewModelDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<NewModelDialog>();
+
+        // Trailing whitespace must not bypass the duplicate-code guard: "NEWM " has to be treated as
+        // "NEWM", which already exists.
+        var fields = dialog.FindComponents<MudTextField<string>>();
+        await dialog.InvokeAsync(() => fields[0].Instance.ValueChanged.InvokeAsync("NEWM "));
+        await dialog.InvokeAsync(() => fields[1].Instance.ValueChanged.InvokeAsync("Another New Model"));
+
+        var createButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Create");
+        await cut.InvokeAsync(() => createButton.Click());
+        await pendingClick;
+
+        // The service call throws, the dialog's catch reports it via Snackbar and does NOT close, so
+        // the dialog is still open and no duplicate model got created.
+        Assert.True(dialogProvider.FindComponents<NewModelDialog>().Count > 0);
+        var models = await NewPublishService(factory).GetAuthoringModelsAsync();
+        Assert.Single(models, m => m.Code == "NEWM");
+    }
+
+    [Fact]
     public async Task NewModel_Duplicate_ClonesSourceModel()
     {
         var (factory, conn) = NewFactory();

@@ -69,11 +69,15 @@
             return;
         }
 
+        var trimmedCode = _code.Trim();
+        var trimmedName = _name.Trim();
+        var trimmedCollection = string.IsNullOrWhiteSpace(_collection) ? null : _collection.Trim();
+
         try
         {
             if (_mode == NewModelMode.Blank)
             {
-                await ModelAuthoringService.CreateBlankAsync(_code, _name, _collection);
+                await ModelAuthoringService.CreateBlankAsync(trimmedCode, trimmedName, trimmedCollection);
             }
             else
             {
@@ -82,7 +86,7 @@
                     Snackbar.Add("Select a source model to duplicate.", Severity.Warning);
                     return;
                 }
-                await ModelAuthoringService.CreateFromCloneAsync(_sourceCode, _code, _name);
+                await ModelAuthoringService.CreateFromCloneAsync(_sourceCode, trimmedCode, trimmedName);
             }
             MudDialog.Close(DialogResult.Ok(true));
         }

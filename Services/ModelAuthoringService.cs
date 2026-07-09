@@ -60,10 +60,14 @@ public sealed class ModelAuthoringService(IDbContextFactory<FurniturePlannerCont
         {
             throw new ModelActiveException(code);
         }
-        await store.DeleteModelAsync(code, ct);
+        // The doc row is deleted here (not via store.DeleteModelAsync) so it can share the same
+        // context/transaction as the dependent-row deletes below, keeping all three atomic.
         await using var db = await factory.CreateDbContextAsync(ct);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.ModelStates.Where(s => s.ModelCode == code).ExecuteDeleteAsync(ct);
         await db.VariantNamings.Where(n => n.ModelCode == code).ExecuteDeleteAsync(ct);
+        await db.AuthoringModels.Where(m => m.ModelCode == code).ExecuteDeleteAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     private async Task EnsureCodeAvailableAsync(string code, CancellationToken ct)

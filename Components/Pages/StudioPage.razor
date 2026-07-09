@@ -172,6 +172,10 @@ else
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private static Color StateColor(TradeItemState state) => state switch
