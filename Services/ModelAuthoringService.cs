@@ -1,0 +1,64 @@
+using CheapFurniturePlanner.Catalogue;
+using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Serialization;
+using Microsoft.EntityFrameworkCore;
+
+namespace CheapFurniturePlanner.Services;
+
+public sealed class ModelActiveException(string modelCode)
+    : Exception($"Model '{modelCode}' is Active; set it out of Active before deleting.");
+
+public sealed class ModelAuthoringService(IDbContextFactory<FurniturePlannerContext> factory, AuthoringCatalogueStore store, ModelPublishService publish)
+{
+    public async Task CreateBlankAsync(string code, string name, string? collectionCode, CancellationToken ct = default)
+    {
+        await EnsureCodeAvailableAsync(code, ct);
+        await store.SaveModelAsync(new FurnitureModel { Code = code, Name = name, CollectionCode = collectionCode }, ct);
+    }
+
+    public async Task CreateFromCloneAsync(string sourceCode, string newCode, string newName, CancellationToken ct = default)
+    {
+        await EnsureCodeAvailableAsync(newCode, ct);
+        var src = await store.LoadModelAsync(sourceCode, ct)
+            ?? throw new InvalidOperationException($"Source model '{sourceCode}' not found.");
+        var clone = CanonicalJson.Deserialize<FurnitureModel>(CanonicalJson.Serialize(src))
+            ?? throw new InvalidOperationException("Failed to clone model.");
+        clone.Code = newCode;
+        clone.Name = newName;
+        await store.SaveModelAsync(clone, ct);
+    }
+
+    public async Task RenameAsync(string code, string name, string? collectionCode, CancellationToken ct = default)
+    {
+        var model = await store.LoadModelAsync(code, ct)
+            ?? throw new InvalidOperationException($"Model '{code}' not found.");
+        model.Name = name;
+        model.CollectionCode = collectionCode;
+        await store.SaveModelAsync(model, ct);
+        if (await publish.GetStateAsync(code, ct) == TradeItemState.Active)
+        {
+            await publish.RepublishAsync(ct);
+        }
+    }
+
+    public async Task DeleteAsync(string code, CancellationToken ct = default)
+    {
+        if (await publish.GetStateAsync(code, ct) == TradeItemState.Active)
+        {
+            throw new ModelActiveException(code);
+        }
+        await store.DeleteModelAsync(code, ct);
+        await using var db = await factory.CreateDbContextAsync(ct);
+        await db.ModelStates.Where(s => s.ModelCode == code).ExecuteDeleteAsync(ct);
+        await db.VariantNamings.Where(n => n.ModelCode == code).ExecuteDeleteAsync(ct);
+    }
+
+    private async Task EnsureCodeAvailableAsync(string code, CancellationToken ct)
+    {
+        if ((await store.ModelCodesAsync(ct)).Contains(code))
+        {
+            throw new InvalidOperationException($"Model code '{code}' already exists.");
+        }
+    }
+}
