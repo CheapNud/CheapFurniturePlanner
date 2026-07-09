@@ -10,9 +10,10 @@ using Xunit;
 namespace CheapFurniturePlanner.Tests.Services;
 
 // ModelPublishService is the studio's gatekeeper: it lists the authoring model set (the
-// embedded seed catalogue, in this slice) alongside each model's release state, and owns the
-// Draft -> Active -> Discontinued state machine. Mirrors DbCatalogueSourceTests.NewFactory(): the
-// connection is not owned by any single context handed out by the factory, so callers must dispose
+// embedded seed catalogue, in this slice) alongside each model's release state. State transitions
+// are free-flow - SetStateAsync can move a model to any state at any time - with one hard rule: a
+// model with zero elements can't be published (set Active). Mirrors DbCatalogueSourceTests.NewFactory():
+// the connection is not owned by any single context handed out by the factory, so callers must dispose
 // it themselves to keep the in-memory database alive for the test's duration.
 public class ModelPublishServiceTests
 {

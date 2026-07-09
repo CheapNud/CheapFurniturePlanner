@@ -33,12 +33,24 @@ public sealed class ModelAuthoringService(IDbContextFactory<FurniturePlannerCont
     {
         var model = await store.LoadModelAsync(code, ct)
             ?? throw new InvalidOperationException($"Model '{code}' not found.");
+        var priorName = model.Name;
+        var priorCollectionCode = model.CollectionCode;
         model.Name = name;
         model.CollectionCode = collectionCode;
         await store.SaveModelAsync(model, ct);
         if (await publish.GetStateAsync(code, ct) == TradeItemState.Active)
         {
-            await publish.RepublishAsync(ct);
+            try
+            {
+                await publish.RepublishAsync(ct);
+            }
+            catch
+            {
+                model.Name = priorName;
+                model.CollectionCode = priorCollectionCode;
+                await store.SaveModelAsync(model, ct);
+                throw;
+            }
         }
     }
 

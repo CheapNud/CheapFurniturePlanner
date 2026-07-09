@@ -138,6 +138,27 @@ public class ModelAuthoringServiceTests
     }
 
     [Fact]
+    public async Task RenameAsync_ActiveModelRepublishFails_RevertsNameInStore()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewHarnessAsync(factory);
+        await harness.Publish.SetStateAsync(Fjord, TradeItemState.Active);
+        var original = await harness.Store.LoadModelAsync(Fjord);
+        var originalName = original!.Name;
+
+        // Strip the elements out from under the still-Active model so the rename's republish fails
+        // validation (a zero-element model can't be published), forcing the compensating revert.
+        original.Elements.Clear();
+        await harness.Store.SaveModelAsync(original);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Authoring.RenameAsync(Fjord, "Fjord Renamed", null));
+
+        var reverted = await harness.Store.LoadModelAsync(Fjord);
+        Assert.Equal(originalName, reverted!.Name);
+    }
+
+    [Fact]
     public async Task DeleteAsync_ActiveModel_ThrowsModelActiveException()
     {
         var (factory, conn) = NewFactory();

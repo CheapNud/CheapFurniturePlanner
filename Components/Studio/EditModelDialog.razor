@@ -36,7 +36,7 @@
     private string _name = string.Empty;
     private string? _collection;
 
-    protected override void OnParametersSet()
+    protected override void OnInitialized()
     {
         _name = Name;
         _collection = Collection;
