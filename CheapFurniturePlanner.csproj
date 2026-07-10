@@ -36,7 +36,7 @@
     </PackageReference>
 
     <!-- MudBlazor for UI components -->
-    <PackageReference Include="MudBlazor" Version="9.6.0" />
+    <PackageReference Include="MudBlazor" Version="9.7.0" />
 
     <!-- Mapster for object mapping -->
     <PackageReference Include="Mapster" Version="10.0.10" />
