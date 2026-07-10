@@ -53,6 +53,12 @@ else
                                OnClick="@(() => Navigation.NavigateTo($"/studio/{context.Code}"))">
                         Name variants
                     </MudButton>
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               Color="Color.Info"
+                               OnClick="@(() => Navigation.NavigateTo($"/studio/{context.Code}/elements"))">
+                        Elements
+                    </MudButton>
                     <MudSelect T="TradeItemState"
                                Label="State"
                                Dense="true"

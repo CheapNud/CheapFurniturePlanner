@@ -1,0 +1,63 @@
+@using CheapFurniturePlanner.Domain.Catalog
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" />
+            <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" />
+            <MudNumericField T="double" Label="Width" @bind-Value="_width" />
+            <MudNumericField T="double" Label="Depth" @bind-Value="_depth" />
+            <MudNumericField T="double" Label="Height" @bind-Value="_height" />
+            <MudNumericField T="int" Label="Transport units" @bind-Value="_transportUnits" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Element? Source { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _code = string.Empty;
+    private string _name = string.Empty;
+    private double _width;
+    private double _depth;
+    private double _height;
+    private int _transportUnits;
+
+    protected override void OnInitialized()
+    {
+        if (Source is not null)
+        {
+            _code = Source.Code;
+            _name = Source.Name;
+            _width = Source.Width;
+            _depth = Source.Depth;
+            _height = Source.Height;
+            _transportUnits = Source.TransportUnits;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    // Scalars only; Options/Bom/Substitutions/DisplayIndex are left default here - the service
+    // preserves the target's existing structure on update and initializes them empty on add.
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new Element
+    {
+        Code = _code.Trim(),
+        Name = _name.Trim(),
+        Width = _width,
+        Depth = _depth,
+        Height = _height,
+        TransportUnits = _transportUnits
+    }));
+}

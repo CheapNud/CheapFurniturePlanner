@@ -6,6 +6,7 @@ using CheapFurniturePlanner.Components.Studio;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Services;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -117,6 +118,22 @@ public class StudioPageTests : TestContext
 
         Assert.Equal(TradeItemState.Draft, FindStateSelect(cut, "FJORD").Instance.Value);
         Assert.NotNull(FindActionButton(cut, "Name variants"));
+    }
+
+    [Fact]
+    public async Task Render_ModelRow_HasElementsLink()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioPage>();
+        var elementsButton = FindActionButton(cut, "Elements");
+        await cut.InvokeAsync(() => elementsButton.Click());
+
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        Assert.EndsWith("/studio/FJORD/elements", navigation.Uri);
     }
 
     [Fact]
