@@ -1,0 +1,110 @@
+@using CheapFurniturePlanner.Domain.Options
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Option code" @bind-Value="_defCode" Required="true" />
+            <MudSwitch T="bool" @bind-Value="_required" Label="Required" Color="Color.Primary" />
+            <MudSwitch T="bool" @bind-Value="_affectsBom" Label="Affects BOM" Color="Color.Primary" />
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Values</MudText>
+            @foreach (var choiceValue in _values)
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <MudTextField T="string" Label="Choice code" @bind-Value="choiceValue.OptionChoiceCode" />
+                    <MudCheckBox T="bool" Label="Default" Value="@choiceValue.IsDefault" ValueChanged="@((bool _) => SetDefault(choiceValue))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                   Size="Size.Small"
+                                   Title="Move up"
+                                   Disabled="@(_values.IndexOf(choiceValue) == 0)"
+                                   OnClick="@(() => Move(choiceValue, -1))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                   Size="Size.Small"
+                                   Title="Move down"
+                                   Disabled="@(_values.IndexOf(choiceValue) == _values.Count - 1)"
+                                   OnClick="@(() => Move(choiceValue, 1))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                   Size="Size.Small"
+                                   Title="Remove value"
+                                   OnClick="@(() => _values.Remove(choiceValue))" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@AddValue">Add value</MudButton>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public ChoiceOption? Option { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _defCode = string.Empty;
+    private bool _required = true;
+    private bool _affectsBom;
+    private readonly List<ProductOptionValue> _values = [];
+
+    protected override void OnInitialized()
+    {
+        if (Option is not null)
+        {
+            _defCode = Option.OptionDefinitionCode;
+            _required = Option.Required;
+            _affectsBom = Option.AffectsBom;
+            _values.AddRange(Option.Values.Select(existingValue => new ProductOptionValue
+            {
+                OptionChoiceCode = existingValue.OptionChoiceCode,
+                DisplayIndex = existingValue.DisplayIndex,
+                IsDefault = existingValue.IsDefault
+            }));
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void AddValue() => _values.Add(new ProductOptionValue { OptionChoiceCode = string.Empty });
+
+    // Radio-like default: checking one clears the others; unchecking the current default just clears it.
+    private void SetDefault(ProductOptionValue target)
+    {
+        var makeDefault = !target.IsDefault;
+        foreach (var choiceValue in _values)
+        {
+            choiceValue.IsDefault = choiceValue == target && makeDefault;
+        }
+    }
+
+    private void Move(ProductOptionValue target, int delta)
+    {
+        var index = _values.IndexOf(target);
+        var next = index + delta;
+        if (next < 0 || next >= _values.Count)
+        {
+            return;
+        }
+        (_values[index], _values[next]) = (_values[next], _values[index]);
+    }
+
+    private void Submit()
+    {
+        for (var index = 0; index < _values.Count; index++)
+        {
+            _values[index].DisplayIndex = index;
+        }
+        MudDialog.Close(DialogResult.Ok<ProductOption>(new ChoiceOption
+        {
+            OptionDefinitionCode = _defCode.Trim(),
+            Required = _required,
+            AffectsBom = _affectsBom,
+            Values = _values
+        }));
+    }
+}

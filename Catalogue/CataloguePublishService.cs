@@ -90,6 +90,16 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
                             }
                         }
                     }
+                    foreach (var rule in option.VisibilityRules)
+                    {
+                        var trigger = element.Options.FirstOrDefault(o => o.OptionDefinitionCode == rule.TriggerOptionDefinitionCode);
+                        var triggerHasChoice = trigger is ChoiceOption triggerChoice
+                            && triggerChoice.Values.Any(v => v.OptionChoiceCode == rule.TriggerChoiceCode);
+                        if (!triggerHasChoice)
+                        {
+                            errors.Add($"Element '{element.Code}' option '{option.OptionDefinitionCode}' has a visibility rule referencing unknown trigger '{rule.TriggerOptionDefinitionCode}:{rule.TriggerChoiceCode}'.");
+                        }
+                    }
                 }
                 foreach (var section in element.Bom.Sections)
                 {

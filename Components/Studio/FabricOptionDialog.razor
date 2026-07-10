@@ -1,0 +1,61 @@
+@using CheapFurniturePlanner.Domain.Options
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Option code" @bind-Value="_defCode" Required="true" />
+            <MudSwitch T="bool" @bind-Value="_required" Label="Required" Color="Color.Primary" />
+            <MudSwitch T="bool" @bind-Value="_priceDetermining" Label="Price determining" Color="Color.Primary" />
+            <MudSelect T="string" Label="Fabric groups" MultiSelection="true" @bind-SelectedValues="_selectedGroups">
+                @foreach (var groupCode in FabricGroupCodes)
+                {
+                    <MudSelectItem T="string" Value="@groupCode">@groupCode</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public FabricOption? Option { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<string> FabricGroupCodes { get; set; } = [];
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _defCode = string.Empty;
+    private bool _required = true;
+    private bool _priceDetermining = true;
+    private IReadOnlyCollection<string> _selectedGroups = new HashSet<string>();
+
+    protected override void OnInitialized()
+    {
+        if (Option is not null)
+        {
+            _defCode = Option.OptionDefinitionCode;
+            _required = Option.Required;
+            _priceDetermining = Option.IsPriceDetermining;
+            _selectedGroups = new HashSet<string>(Option.FabricGroupCodes);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok<ProductOption>(new FabricOption
+    {
+        OptionDefinitionCode = _defCode.Trim(),
+        Required = _required,
+        IsPriceDetermining = _priceDetermining,
+        FabricGroupCodes = _selectedGroups.ToList()
+    }));
+}

@@ -341,6 +341,107 @@ public class CataloguePublishServiceTests
     }
 
     [Fact]
+    public async Task PublishAsync_DanglingVisibilityRuleTrigger_FailsAndWritesNoRow()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Options =
+                                [
+                                    new ChoiceOption
+                                    {
+                                        OptionDefinitionCode = "HEAD",
+                                        Values = [new ProductOptionValue { OptionChoiceCode = "HS1", IsDefault = true }],
+                                        VisibilityRules = [new VisibilityRule("MECH", "REC", "HEAD")],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains("MECH:REC"));
+            Assert.Null(result.Version);
+            Assert.False(source.Invalidated);
+
+            using var verifyContext = factory.CreateDbContext();
+            Assert.Empty(verifyContext.PublishedCatalogues);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_ValidVisibilityRuleTrigger_PublishesSuccessfully()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Options =
+                                [
+                                    new ChoiceOption
+                                    {
+                                        OptionDefinitionCode = "MECH",
+                                        Values = [new ProductOptionValue { OptionChoiceCode = "REC", IsDefault = true }],
+                                    },
+                                    new ChoiceOption
+                                    {
+                                        OptionDefinitionCode = "HEAD",
+                                        Values = [new ProductOptionValue { OptionChoiceCode = "HS1", IsDefault = true }],
+                                        VisibilityRules = [new VisibilityRule("MECH", "REC", "HEAD")],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.True(result.Success);
+            Assert.Empty(result.Errors);
+            Assert.NotNull(result.Version);
+        }
+    }
+
+    [Fact]
     public async Task PublishAsync_ModelWithNoElements_FailsAndWritesNoRow()
     {
         var (factory, connection) = NewFactory();

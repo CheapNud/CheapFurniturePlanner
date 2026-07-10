@@ -1,0 +1,269 @@
+@page "/studio/{ModelCode}/elements/{ElementCode}/options"
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Components.Studio
+@using CheapFurniturePlanner.Domain.Catalog
+@using CheapFurniturePlanner.Domain.Options
+@using CheapFurniturePlanner.Services
+
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject ModelPublishService ModelPublishService
+@inject OptionAuthoringService OptionAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Options - @ElementCode - Cheap Furniture Planner</PageTitle>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h5">Options — @ModelCode / @ElementCode</MudText>
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       Href="@($"/studio/{ModelCode}/elements")">
+                Back to elements
+            </MudButton>
+        </MudStack>
+
+        @if (_element is not null)
+        {
+            @if (_state != TradeItemState.Draft)
+            {
+                <MudAlert Severity="Severity.Warning">frozen — model is @_state</MudAlert>
+            }
+            else
+            {
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="@(() => AddChoiceAsync())">
+                        Add choice option
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="@(() => AddFabricAsync())">
+                        Add fabric option
+                    </MudButton>
+                </MudStack>
+            }
+        }
+    </MudStack>
+</MudPaper>
+
+@if (_notFound)
+{
+    <MudAlert Severity="Severity.Error">Model '@ModelCode' / element '@ElementCode' not found.</MudAlert>
+}
+else if (_element is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudTable Items="@_element.Options" Hover="true" Striped="true" Dense="true" Elevation="2">
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Kind</MudTh>
+            <MudTh>BOM / price</MudTh>
+            <MudTh>Required</MudTh>
+            <MudTh>Detail</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Code">@context.OptionDefinitionCode</MudTd>
+            <MudTd DataLabel="Kind">@(context is ChoiceOption ? "Choice" : "Fabric")</MudTd>
+            <MudTd DataLabel="BOM / price">@FlagLabel(context)</MudTd>
+            <MudTd DataLabel="Required">@context.Required</MudTd>
+            <MudTd DataLabel="Detail">@DetailLabel(context)</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                   Size="Size.Small"
+                                   Title="Move up"
+                                   Disabled="@(_state != TradeItemState.Draft || IsFirst(context))"
+                                   OnClick="@(() => MoveAsync(context.OptionDefinitionCode, -1))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                   Size="Size.Small"
+                                   Title="Move down"
+                                   Disabled="@(_state != TradeItemState.Draft || IsLast(context))"
+                                   OnClick="@(() => MoveAsync(context.OptionDefinitionCode, 1))" />
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               Color="Color.Default"
+                               Disabled="@(_state != TradeItemState.Draft)"
+                               OnClick="@(() => EditAsync(context))">
+                        Edit
+                    </MudButton>
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               Color="Color.Error"
+                               Disabled="@(_state != TradeItemState.Draft)"
+                               OnClick="@(() => DeleteAsync(context))">
+                        Delete
+                    </MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [Parameter]
+    public string ModelCode { get; set; } = string.Empty;
+
+    [Parameter]
+    public string ElementCode { get; set; } = string.Empty;
+
+    private Element? _element;
+    private bool _notFound;
+    private TradeItemState _state;
+    private IReadOnlyList<string> _fabricGroupCodes = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _notFound = false;
+        var model = await AuthoringCatalogueStore.LoadModelAsync(ModelCode);
+        _element = model?.Elements.FirstOrDefault(e => e.Code == ElementCode);
+        if (_element is null)
+        {
+            _notFound = true;
+            return;
+        }
+        _state = await ModelPublishService.GetStateAsync(ModelCode);
+        _fabricGroupCodes = (await AuthoringCatalogueStore.LoadAsync()).FabricGroups.Select(g => g.Code).ToList();
+    }
+
+    private bool IsFirst(ProductOption option) => _element is not null && _element.Options.IndexOf(option) == 0;
+
+    private bool IsLast(ProductOption option) => _element is not null && _element.Options.IndexOf(option) == _element.Options.Count - 1;
+
+    private static string FlagLabel(ProductOption option) => option switch
+    {
+        ChoiceOption choice => choice.AffectsBom ? "BOM" : "-",
+        FabricOption fabric => fabric.IsPriceDetermining ? "price" : "-",
+        _ => "-"
+    };
+
+    private static string DetailLabel(ProductOption option) => option switch
+    {
+        ChoiceOption choice => $"{choice.Values.Count} values",
+        FabricOption fabric => $"{fabric.FabricGroupCodes.Count} groups",
+        _ => string.Empty
+    };
+
+    private async Task AddChoiceAsync()
+    {
+        var parameters = new DialogParameters<ChoiceOptionDialog>
+        {
+            { dialog => dialog.SubmitLabel, "Add" }
+        };
+        var dialogRef = await DialogService.ShowAsync<ChoiceOptionDialog>("Add choice option", parameters);
+        await ApplyDialogAsync(dialogRef, option => OptionAuthoringService.AddOptionAsync(ModelCode, ElementCode, option));
+    }
+
+    private async Task AddFabricAsync()
+    {
+        var parameters = new DialogParameters<FabricOptionDialog>
+        {
+            { dialog => dialog.SubmitLabel, "Add" },
+            { dialog => dialog.FabricGroupCodes, _fabricGroupCodes }
+        };
+        var dialogRef = await DialogService.ShowAsync<FabricOptionDialog>("Add fabric option", parameters);
+        await ApplyDialogAsync(dialogRef, option => OptionAuthoringService.AddOptionAsync(ModelCode, ElementCode, option));
+    }
+
+    private async Task EditAsync(ProductOption existing)
+    {
+        var originalDefCode = existing.OptionDefinitionCode;
+        IDialogReference dialogRef;
+        if (existing is ChoiceOption choice)
+        {
+            var parameters = new DialogParameters<ChoiceOptionDialog>
+            {
+                { dialog => dialog.Option, choice },
+                { dialog => dialog.SubmitLabel, "Save" }
+            };
+            dialogRef = await DialogService.ShowAsync<ChoiceOptionDialog>("Edit option", parameters);
+        }
+        else
+        {
+            var parameters = new DialogParameters<FabricOptionDialog>
+            {
+                { dialog => dialog.Option, (FabricOption)existing },
+                { dialog => dialog.FabricGroupCodes, _fabricGroupCodes },
+                { dialog => dialog.SubmitLabel, "Save" }
+            };
+            dialogRef = await DialogService.ShowAsync<FabricOptionDialog>("Edit option", parameters);
+        }
+        await ApplyDialogAsync(dialogRef, option => OptionAuthoringService.UpdateOptionAsync(ModelCode, ElementCode, originalDefCode, option));
+    }
+
+    private async Task DeleteAsync(ProductOption existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete option",
+            $"Delete '{existing.OptionDefinitionCode}'? If it affects the BOM, this also removes any named variants for this element.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+        try
+        {
+            await OptionAuthoringService.RemoveOptionAsync(ModelCode, ElementCode, existing.OptionDefinitionCode);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task MoveAsync(string defCode, int delta)
+    {
+        if (_element is null)
+        {
+            return;
+        }
+        var codes = _element.Options.Select(o => o.OptionDefinitionCode).ToList();
+        var index = codes.IndexOf(defCode);
+        var target = index + delta;
+        if (index < 0 || target < 0 || target >= codes.Count)
+        {
+            return;
+        }
+        (codes[index], codes[target]) = (codes[target], codes[index]);
+        try
+        {
+            await OptionAuthoringService.ReorderOptionsAsync(ModelCode, ElementCode, codes);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyDialogAsync(IDialogReference dialogRef, Func<ProductOption, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not ProductOption option)
+        {
+            return;
+        }
+        try
+        {
+            await apply(option);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+}
