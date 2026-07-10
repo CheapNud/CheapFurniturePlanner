@@ -76,10 +76,12 @@ else
                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                     <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
                                    Size="Size.Small"
+                                   Title="Move up"
                                    Disabled="@(_state != TradeItemState.Draft || IsFirst(context))"
                                    OnClick="@(() => MoveAsync(context.Code, -1))" />
                     <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
                                    Size="Size.Small"
+                                   Title="Move down"
                                    Disabled="@(_state != TradeItemState.Draft || IsLast(context))"
                                    OnClick="@(() => MoveAsync(context.Code, 1))" />
                     <MudButton Size="Size.Small"
@@ -142,11 +144,14 @@ else
         try
         {
             await ElementAuthoringService.AddElementAsync(ModelCode, element);
-            await ReloadAsync();
         }
         catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            await ReloadAsync();
         }
     }
 
@@ -166,11 +171,14 @@ else
         try
         {
             await ElementAuthoringService.UpdateElementAsync(ModelCode, existing.Code, element);
-            await ReloadAsync();
         }
         catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            await ReloadAsync();
         }
     }
 
@@ -188,11 +196,14 @@ else
         try
         {
             await ElementAuthoringService.RemoveElementAsync(ModelCode, existing.Code);
-            await ReloadAsync();
         }
         catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            await ReloadAsync();
         }
     }
 
@@ -213,11 +224,14 @@ else
         try
         {
             await ElementAuthoringService.ReorderElementsAsync(ModelCode, codes);
-            await ReloadAsync();
         }
         catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            await ReloadAsync();
         }
     }
 }

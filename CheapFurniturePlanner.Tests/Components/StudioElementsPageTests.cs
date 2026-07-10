@@ -93,6 +93,13 @@ public class StudioElementsPageTests : TestContext
     private static IElement FindRowButton(IRenderedComponent<StudioElementsPage> cut, string elementCode, string text) =>
         FindRow(cut, elementCode).QuerySelectorAll("button").Single(b => b.TextContent.Trim() == text);
 
+    // The reorder arrows carry no text, only a Title="Move up"/"Move down" parameter. MudIconButton
+    // has no dedicated Title parameter, so it falls through to captured unmatched attributes and
+    // renders as a native lowercase title attribute on the <button> - locate by that instead of by
+    // fixed button position, which breaks as soon as the row markup gains or drops a button.
+    private static IElement FindRowButtonByTitle(IRenderedComponent<StudioElementsPage> cut, string elementCode, string title) =>
+        FindRow(cut, elementCode).QuerySelectorAll("button").Single(b => b.GetAttribute("title") == title);
+
     private static (IElement Up, IElement Down, IElement Edit, IElement Delete) RowButtons(IRenderedComponent<StudioElementsPage> cut, string elementCode)
     {
         var buttons = FindRow(cut, elementCode).QuerySelectorAll("button").ToList();
@@ -208,7 +215,7 @@ public class StudioElementsPageTests : TestContext
         var before = (await store.LoadModelAsync(Studio))!.Elements.Select(e => e.Code).ToList();
         Assert.Equal(["FS2", "FS3", "FSCH"], before);
 
-        var (_, down, _, _) = RowButtons(cut, "FS2");
+        var down = FindRowButtonByTitle(cut, "FS2", "Move down");
         await cut.InvokeAsync(() => down.Click());
 
         var after = (await store.LoadModelAsync(Studio))!.Elements.Select(e => e.Code).ToList();
