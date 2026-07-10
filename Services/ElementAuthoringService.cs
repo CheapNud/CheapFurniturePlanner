@@ -114,5 +114,6 @@ public sealed class ElementAuthoringService(IDbContextFactory<FurniturePlannerCo
     {
         if (string.IsNullOrEmpty(elementCode)) { throw new InvalidOperationException("Element code is required."); }
         if (string.IsNullOrEmpty(elementName)) { throw new InvalidOperationException("Element name is required."); }
+        if (elementCode.Contains('-')) { throw new InvalidOperationException("Element code cannot contain '-'."); }
     }
 }

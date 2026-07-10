@@ -159,7 +159,7 @@ else
     {
         var parameters = new DialogParameters<ElementDialog>
         {
-            { dialog => dialog.Element, existing },
+            { dialog => dialog.Source, existing },
             { dialog => dialog.SubmitLabel, "Save" }
         };
         var dialogRef = await DialogService.ShowAsync<ElementDialog>("Edit element", parameters);

@@ -97,6 +97,18 @@ public class ElementAuthoringServiceTests
     }
 
     [Fact]
+    public async Task AddElementAsync_CodeWithHyphen_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Elements.AddElementAsync(Studio, new Element { Code = "BAD-CODE", Name = "Bad" }));
+    }
+
+    [Fact]
     public async Task UpdateElementAsync_ChangesScalars_PreservesOptionsAndBom()
     {
         var (factory, conn) = NewFactory();
@@ -155,6 +167,25 @@ public class ElementAuthoringServiceTests
         Assert.Empty(await harness.Naming.NamesForModelAsync(Studio));
         // DisplayIndex renumbered to contiguous 0..n-1
         Assert.Equal(Enumerable.Range(0, model.Elements.Count), model.Elements.Select(e => e.DisplayIndex));
+    }
+
+    [Fact]
+    public async Task RemoveElementAsync_PrunesOnlyTargetElementNamingRows()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        // Name a real variant of FS2 and a real variant of FS3 while the model is Draft.
+        await harness.Naming.AssignAsync(Studio, "FS2-__MATERIAL__:Fabric", "STUDIO-A");
+        await harness.Naming.AssignAsync(Studio, "FS3-__MATERIAL__:Fabric", "STUDIO-B");
+        Assert.Equal(2, (await harness.Naming.NamesForModelAsync(Studio)).Count);
+
+        await harness.Elements.RemoveElementAsync(Studio, "FS2");
+
+        var remaining = await harness.Naming.NamesForModelAsync(Studio);
+        Assert.False(remaining.ContainsKey("FS2-__MATERIAL__:Fabric"));
+        Assert.True(remaining.ContainsKey("FS3-__MATERIAL__:Fabric")); // sibling survives the prune
     }
 
     [Fact]
