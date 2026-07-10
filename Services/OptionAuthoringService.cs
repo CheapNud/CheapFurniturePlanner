@@ -2,6 +2,7 @@ using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Options;
+using CheapFurniturePlanner.Domain.Pricing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CheapFurniturePlanner.Services;
@@ -86,6 +87,10 @@ public sealed class OptionAuthoringService(IDbContextFactory<FurniturePlannerCon
     {
         var defCode = option.OptionDefinitionCode?.Trim() ?? string.Empty;
         RequireCode(defCode, "Option definition code");
+        if (defCode == VariantCode.MaterialDefCode)
+        {
+            throw new InvalidOperationException($"Option definition code '{defCode}' is reserved.");
+        }
         if (element.Options.Any(o => o.OptionDefinitionCode == defCode && o.OptionDefinitionCode != originalDefCode))
         {
             throw new InvalidOperationException($"Option definition code '{defCode}' already exists on this element.");

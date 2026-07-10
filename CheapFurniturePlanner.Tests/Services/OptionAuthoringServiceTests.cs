@@ -154,6 +154,16 @@ public class OptionAuthoringServiceTests
     }
 
     [Fact]
+    public async Task AddOption_ReservedMaterialDefCode_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Options.AddOptionAsync(Studio, Element, Choice("__MATERIAL__", true, "X")));
+    }
+
+    [Fact]
     public async Task AddFabricOption_UnknownFabricGroup_Throws()
     {
         var (factory, conn) = NewFactory(); using var _ = conn;
@@ -288,6 +298,32 @@ public class OptionAuthoringServiceTests
         await harness.Options.ReorderOptionsAsync(Studio, Element, Enumerable.Reverse(codes).ToList());
 
         Assert.Single(await harness.Naming.NamesForModelAsync(Studio));   // untouched
+    }
+
+    [Fact]
+    public async Task UpdateOption_DefCodeRenameOfBomOption_PrunesNamingRows()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await NameAVariantAsync(harness);
+
+        await harness.Options.UpdateOptionAsync(Studio, Element, "DEPTH", Choice("DEPTH2", affectsBom: true, "STD", "DEEP"));
+
+        Assert.Empty(await harness.Naming.NamesForModelAsync(Studio));
+    }
+
+    [Fact]
+    public async Task UpdateOption_ValueCodeSetChangeOfBomOption_PrunesNamingRows()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await NameAVariantAsync(harness);
+
+        await harness.Options.UpdateOptionAsync(Studio, Element, "DEPTH", Choice("DEPTH", affectsBom: true, "STD", "XDEEP"));
+
+        Assert.Empty(await harness.Naming.NamesForModelAsync(Studio));
     }
 
     [Fact]
