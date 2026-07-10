@@ -103,7 +103,11 @@ public class ElementAuthoringServiceTests
         using var _ = conn;
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
-        var originalOptionCount = (await harness.Store.LoadModelAsync(Studio))!.Elements.Single(e => e.Code == "FS2").Options.Count;
+        var original = (await harness.Store.LoadModelAsync(Studio))!.Elements.Single(e => e.Code == "FS2");
+        var originalOptionCount = original.Options.Count;
+        var originalBomSectionCount = original.Bom.Sections.Count;
+        var originalSubstitutionCount = original.Substitutions.Count;
+        var originalDisplayIndex = original.DisplayIndex;
 
         await harness.Elements.UpdateElementAsync(Studio, "FS2", new Element { Code = "FS2", Name = "Renamed", Width = 111, Depth = 1, Height = 1, TransportUnits = 2 });
 
@@ -111,6 +115,9 @@ public class ElementAuthoringServiceTests
         Assert.Equal("Renamed", updated.Name);
         Assert.Equal(111, updated.Width);
         Assert.Equal(originalOptionCount, updated.Options.Count); // options/BOM untouched
+        Assert.Equal(originalBomSectionCount, updated.Bom.Sections.Count);
+        Assert.Equal(originalSubstitutionCount, updated.Substitutions.Count);
+        Assert.Equal(originalDisplayIndex, updated.DisplayIndex);
     }
 
     [Fact]
@@ -176,8 +183,16 @@ public class ElementAuthoringServiceTests
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
 
+        // Count-mismatch branch.
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             harness.Elements.ReorderElementsAsync(Studio, ["FS2", "FS2"]));
+
+        // Same-count-but-duplicate branch (trips HashSet.SetEquals, not the count check).
+        var realCodes = (await harness.Store.LoadModelAsync(Studio))!.Elements.Select(e => e.Code).ToList();
+        var duplicatedCodes = realCodes.ToList();
+        duplicatedCodes[^1] = duplicatedCodes[0];
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Elements.ReorderElementsAsync(Studio, duplicatedCodes));
     }
 
     [Fact]
