@@ -9,6 +9,7 @@
 @inject ElementAuthoringService ElementAuthoringService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 
 <PageTitle>Elements - @ModelCode - Cheap Furniture Planner</PageTitle>
 
@@ -97,6 +98,12 @@ else
                                Disabled="@(_state != TradeItemState.Draft)"
                                OnClick="@(() => DeleteElementAsync(context))">
                         Delete
+                    </MudButton>
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               Color="Color.Info"
+                               OnClick="@(() => Navigation.NavigateTo($"/studio/{ModelCode}/elements/{context.Code}/options"))">
+                        Options
                     </MudButton>
                 </MudStack>
             </MudTd>

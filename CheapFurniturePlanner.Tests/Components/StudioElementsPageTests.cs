@@ -7,6 +7,7 @@ using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -100,10 +101,11 @@ public class StudioElementsPageTests : TestContext
     private static IElement FindRowButtonByTitle(IRenderedComponent<StudioElementsPage> cut, string elementCode, string title) =>
         FindRow(cut, elementCode).QuerySelectorAll("button").Single(b => b.GetAttribute("title") == title);
 
+    // Row action cell now renders five buttons: up-arrow, down-arrow, Edit, Delete, Options.
     private static (IElement Up, IElement Down, IElement Edit, IElement Delete) RowButtons(IRenderedComponent<StudioElementsPage> cut, string elementCode)
     {
         var buttons = FindRow(cut, elementCode).QuerySelectorAll("button").ToList();
-        Assert.Equal(4, buttons.Count);
+        Assert.Equal(5, buttons.Count);
         return (buttons[0], buttons[1], buttons[2], buttons[3]);
     }
 
@@ -271,5 +273,23 @@ public class StudioElementsPageTests : TestContext
         Assert.True(down.HasAttribute("disabled"));
         Assert.True(edit.HasAttribute("disabled"));
         Assert.True(delete.HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public async Task ElementRow_OptionsButton_NavigatesToOptionsPage()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
+        var optionsButton = FindRowButton(cut, "FS2", "Options");
+
+        await cut.InvokeAsync(() => optionsButton.Click());
+
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        Assert.EndsWith("/studio/FJORD-STUDIO/elements/FS2/options", navigation.Uri);
     }
 }
