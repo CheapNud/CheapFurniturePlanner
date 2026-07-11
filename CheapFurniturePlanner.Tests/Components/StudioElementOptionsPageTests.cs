@@ -273,6 +273,33 @@ public class StudioElementOptionsPageTests : TestContext
         await pendingClick;
     }
 
+    // MECH is FS2's seeded visibility trigger for HEAD (WHEN MECH=REC) and also the seeded
+    // substitution's trigger (WHEN MECH=REC, replace FM-STD with FM-FIRM) - deleting it must
+    // surface both kinds of impact in the confirm message.
+    [Fact]
+    public async Task DeleteMechOption_ConfirmShowsVisibilityAndSubstitutionImpact()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var deleteButton = FindRowButton(cut, "MECH", "Delete");
+
+        var pendingClick = cut.InvokeAsync(() => deleteButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<MudMessageBox>().Count > 0);
+        var messageBox = dialogProvider.FindComponent<MudMessageBox>();
+        Assert.Contains("visibility rule(s)", messageBox.Markup);
+        Assert.Contains("substitution(s)", messageBox.Markup);
+
+        var cancelButton = messageBox.FindAll("button").Single(b => b.TextContent.Trim() == "Cancel");
+        await cut.InvokeAsync(() => cancelButton.Click());
+        await pendingClick;
+    }
+
     [Fact]
     public async Task Reorder_MovesOptionDown()
     {

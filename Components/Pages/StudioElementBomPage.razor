@@ -115,6 +115,57 @@ else
             }
         </MudPaper>
     }
+
+    <MudPaper Elevation="1" Class="pa-4 mb-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h6">Substitutions</MudText>
+            <MudButton Size="Size.Small"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Disabled="@(_state != TradeItemState.Draft)"
+                       OnClick="@AddSubstitutionAsync">
+                Add substitution
+            </MudButton>
+        </MudStack>
+        @if (_element.Substitutions.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">No substitutions.</MudText>
+        }
+        else
+        {
+            <MudTable Items="@_indexedSubstitutions" Hover="true" Dense="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Swap</MudTh>
+                    <MudTh>When</MudTh>
+                    <MudTh>Qty</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Swap">@context.Rule.ReplaceMaterialCode → @context.Rule.WithMaterialCode</MudTd>
+                    <MudTd DataLabel="When">@WhenLabel(context.Rule.When)</MudTd>
+                    <MudTd DataLabel="Qty">@(context.Rule.QuantityOverride?.ToString() ?? "-")</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true" Spacing="1">
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Outlined"
+                                       Disabled="@(_state != TradeItemState.Draft)"
+                                       OnClick="@(() => EditSubstitutionAsync(context.Index))">
+                                Edit
+                            </MudButton>
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Outlined"
+                                       Color="Color.Error"
+                                       Disabled="@(_state != TradeItemState.Draft)"
+                                       OnClick="@(() => DeleteSubstitutionAsync(context.Index))">
+                                Delete
+                            </MudButton>
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudPaper>
 }
 
 @code {
@@ -133,6 +184,7 @@ else
     private IReadOnlyList<string> _materialCodes = [];
     private IReadOnlyList<string> _operationCodes = [];
     private IReadOnlyList<string> _fabricGroupCodes = [];
+    private IReadOnlyList<(int Index, SubstitutionRule Rule)> _indexedSubstitutions = [];
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
@@ -152,6 +204,7 @@ else
         _materialCodes = snapshot.Materials.Select(m => m.Code).ToList();
         _operationCodes = snapshot.Operations.Select(o => o.Code).ToList();
         _fabricGroupCodes = snapshot.FabricGroups.Select(g => g.Code).ToList();
+        _indexedSubstitutions = _element.Substitutions.Select((rule, index) => (index, rule)).ToList();
     }
 
     private IReadOnlyList<BomLine> LinesFor(BomSectionKind kind)
@@ -173,9 +226,16 @@ else
     };
 
     private static string ConditionLabel(BomLine line)
-        => line.Condition is null ? string.Empty
-            : "when " + string.Join(", ", line.Condition.RequiredSelections.Select(k =>
+        => line.Condition is null ? string.Empty : WhenLabel(line.Condition);
+
+    private static string WhenLabel(ApplicabilityCondition when)
+        => when.RequiredSelections.Count == 0 ? "always"
+            : "when " + string.Join(", ", when.RequiredSelections.Select(k =>
                 k.OptionDefinitionCode == VariantCode.MaterialDefCode ? $"material={k.ChoiceCode}" : $"{k.OptionDefinitionCode}={k.ChoiceCode}"));
+
+    private IReadOnlyList<(string DefCode, IReadOnlyList<string> ChoiceCodes)> ConditionOptionsForElement()
+        => _element!.Options.OfType<ChoiceOption>()
+            .Select(c => (c.OptionDefinitionCode, (IReadOnlyList<string>)c.Values.Select(v => v.OptionChoiceCode).ToList())).ToList();
 
     private DialogParameters<BomLineDialog> BuildParams(BomSectionKind kind, BomLine? line, string submitLabel) => new()
     {
@@ -186,9 +246,77 @@ else
         { dialog => dialog.MaterialCodes, _materialCodes },
         { dialog => dialog.OperationCodes, _operationCodes },
         { dialog => dialog.FabricGroupCodes, _fabricGroupCodes },
-        { dialog => dialog.ConditionOptions, _element!.Options.OfType<ChoiceOption>()
-            .Select(c => (c.OptionDefinitionCode, (IReadOnlyList<string>)c.Values.Select(v => v.OptionChoiceCode).ToList())).ToList() }
+        { dialog => dialog.ConditionOptions, ConditionOptionsForElement() }
     };
+
+    private DialogParameters<SubstitutionDialog> SubstitutionParams(SubstitutionRule? rule, string submitLabel) => new()
+    {
+        { dialog => dialog.MaterialCodes, _materialCodes },
+        { dialog => dialog.ConditionOptions, ConditionOptionsForElement() },
+        { dialog => dialog.Substitution, rule },
+        { dialog => dialog.SubmitLabel, submitLabel }
+    };
+
+    private async Task AddSubstitutionAsync()
+    {
+        var dialogRef = await DialogService.ShowAsync<SubstitutionDialog>("Add substitution", SubstitutionParams(null, "Add"));
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not SubstitutionRule rule)
+        {
+            return;
+        }
+        try
+        {
+            await BomAuthoringService.AddSubstitutionAsync(ModelCode, ElementCode, rule);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task EditSubstitutionAsync(int index)
+    {
+        var current = _element!.Substitutions[index];
+        var dialogRef = await DialogService.ShowAsync<SubstitutionDialog>("Edit substitution", SubstitutionParams(current, "Save"));
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not SubstitutionRule rule)
+        {
+            return;
+        }
+        try
+        {
+            await BomAuthoringService.UpdateSubstitutionAsync(ModelCode, ElementCode, index, rule);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task DeleteSubstitutionAsync(int index)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete substitution",
+            "Delete this substitution?",
+            yesText: "Delete",
+            cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+        try
+        {
+            await BomAuthoringService.RemoveSubstitutionAsync(ModelCode, ElementCode, index);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
 
     private async Task AddAsync(BomSectionKind kind)
     {

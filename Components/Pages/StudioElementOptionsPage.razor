@@ -214,9 +214,11 @@ else
             .Count(r => r.TriggerOptionDefinitionCode == existing.OptionDefinitionCode);
         var bomRefs = _element.Bom.Sections.SelectMany(s => s.Lines)
             .Count(l => l.Condition is not null && l.Condition.RequiredSelections.Any(k => k.OptionDefinitionCode == existing.OptionDefinitionCode));
-        var impact = visibilityRefs == 0 && bomRefs == 0
+        var substitutionRefs = _element.Substitutions
+            .Count(s => s.When.RequiredSelections.Any(k => k.OptionDefinitionCode == existing.OptionDefinitionCode));
+        var impact = visibilityRefs == 0 && bomRefs == 0 && substitutionRefs == 0
             ? string.Empty
-            : $" This option is referenced by {visibilityRefs} visibility rule(s) and {bomRefs} BOM line condition(s), which will be removed.";
+            : $" This option is referenced by {visibilityRefs} visibility rule(s), {bomRefs} BOM line condition(s), and {substitutionRefs} substitution(s), which will be removed.";
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete option",
             $"Delete '{existing.OptionDefinitionCode}'? If it affects the BOM, this also removes any named variants for this element.{impact}",

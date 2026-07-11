@@ -1,0 +1,66 @@
+@using CheapFurniturePlanner.Domain.Bom
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudSelect T="string" Label="Replace material" @bind-Value="_replaceCode">
+                @foreach (var materialCode in MaterialCodes)
+                {
+                    <MudSelectItem T="string" Value="@materialCode">@materialCode</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" Label="With material" @bind-Value="_withCode">
+                @foreach (var materialCode in MaterialCodes)
+                {
+                    <MudSelectItem T="string" Value="@materialCode">@materialCode</MudSelectItem>
+                }
+            </MudSelect>
+            <MudNumericField T="decimal?" Label="Quantity override (optional)" @bind-Value="_quantityOverride" />
+            <ConditionEditor @ref="_conditionEditor" ConditionOptions="@ConditionOptions" Condition="@Substitution?.When" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public IReadOnlyList<string> MaterialCodes { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<(string DefCode, IReadOnlyList<string> ChoiceCodes)> ConditionOptions { get; set; } = [];
+
+    [Parameter]
+    public SubstitutionRule? Substitution { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private ConditionEditor? _conditionEditor;
+    private string? _replaceCode;
+    private string? _withCode;
+    private decimal? _quantityOverride;
+
+    protected override void OnInitialized()
+    {
+        if (Substitution is null)
+        {
+            return;
+        }
+        _replaceCode = Substitution.ReplaceMaterialCode;
+        _withCode = Substitution.WithMaterialCode;
+        _quantityOverride = Substitution.QuantityOverride;
+    }
+
+    private void Submit()
+    {
+        var when = _conditionEditor?.BuildCondition() ?? new ApplicabilityCondition([]);
+        var rule = new SubstitutionRule(when, _replaceCode ?? string.Empty, _withCode ?? string.Empty, _quantityOverride);
+        MudDialog.Close(DialogResult.Ok<SubstitutionRule>(rule));
+    }
+}
