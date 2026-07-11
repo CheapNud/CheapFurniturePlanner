@@ -1,0 +1,95 @@
+@page "/studio/prices"
+@using CheapFurniturePlanner.Components.Studio
+@using CheapFurniturePlanner.Services
+
+@inject PriceVersionService PriceVersionService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Price versions - Cheap Furniture Planner</PageTitle>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h5">Price versions</MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Publish"
+                       OnClick="@PublishAsync">
+                Publish new version
+            </MudButton>
+        </MudStack>
+        @if (_pending)
+        {
+            <MudAlert Severity="Severity.Warning">Unpublished price changes — publish a new version to apply them.</MudAlert>
+        }
+    </MudStack>
+</MudPaper>
+
+@if (_versions is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudTable Items="@_versions" Hover="true" Dense="true" Elevation="2">
+        <HeaderContent>
+            <MudTh>Version</MudTh>
+            <MudTh>Effective</MudTh>
+            <MudTh>Published</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Hash</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Version">@context.Version</MudTd>
+            <MudTd DataLabel="Effective">@context.EffectiveDate.ToString("yyyy-MM-dd")</MudTd>
+            <MudTd DataLabel="Published">@context.PublishedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
+            </MudTd>
+            <MudTd DataLabel="Hash">@ShortHash(context.ContentHash)</MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    private IReadOnlyList<PriceVersionInfo>? _versions;
+    private bool _pending;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _versions = await PriceVersionService.ListVersionsAsync();
+        _pending = await PriceVersionService.HasPendingChangesAsync();
+    }
+
+    private static string ShortHash(string hash) => hash.Length > 12 ? hash[..12] : hash;
+
+    private static Color StatusColor(PriceVersionStatus status) => status switch
+    {
+        PriceVersionStatus.Effective => Color.Success,
+        PriceVersionStatus.Scheduled => Color.Warning,
+        _ => Color.Default
+    };
+
+    private async Task PublishAsync()
+    {
+        var dialogRef = await DialogService.ShowAsync<PublishVersionDialog>("Publish new version");
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not DateTime effectiveDate)
+        {
+            return;
+        }
+        try
+        {
+            await PriceVersionService.PublishNewVersionAsync(effectiveDate);
+            Snackbar.Add($"Published — effective {effectiveDate:yyyy-MM-dd}.", Severity.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+}
