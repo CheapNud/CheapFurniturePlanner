@@ -130,6 +130,21 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
                     {
                         errors.Add($"Element '{element.Code}' substitution references missing material '{rule.WithMaterialCode}'.");
                     }
+                    if (!materialCodes.Contains(rule.ReplaceMaterialCode))
+                    {
+                        errors.Add($"Element '{element.Code}' substitution replaces missing material '{rule.ReplaceMaterialCode}'.");
+                    }
+                    foreach (var key in rule.When.RequiredSelections)
+                    {
+                        var substitutionOption = element.Options.FirstOrDefault(o => o.OptionDefinitionCode == key.OptionDefinitionCode);
+                        var resolves = key.OptionDefinitionCode == VariantCode.MaterialDefCode
+                            || (substitutionOption is ChoiceOption substitutionChoice
+                                && substitutionChoice.Values.Any(v => v.OptionChoiceCode == key.ChoiceCode));
+                        if (!resolves)
+                        {
+                            errors.Add($"Element '{element.Code}' substitution has a condition referencing unknown selection '{key.OptionDefinitionCode}:{key.ChoiceCode}'.");
+                        }
+                    }
                 }
             }
         }

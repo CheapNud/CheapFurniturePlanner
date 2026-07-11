@@ -426,6 +426,82 @@ public class StudioElementBomPageTests : TestContext
         cut.WaitForAssertion(() => Assert.NotNull(FindRow(cut, "LB-SEW-FS2")));
     }
 
+    // FS2's seed substitution: WHEN MECH=REC, replace FM-STD with FM-FIRM (no quantity override).
+    [Fact]
+    public async Task Render_ShowsSubstitution()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+
+        Assert.Contains("FM-STD", cut.Markup);
+        Assert.Contains("FM-FIRM", cut.Markup);
+        Assert.Contains("when MECH=REC", cut.Markup);
+    }
+
+    [Fact]
+    public async Task AddSubstitution_ThroughDialog_Persists()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add substitution");
+
+        // AddSubstitutionAsync awaits dialogRef.Result, which only resolves once the dialog closes -
+        // awaiting the click itself here would deadlock the test; fire it and drive the dialog instead.
+        var pendingClick = cut.InvokeAsync(() => addButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<SubstitutionDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<SubstitutionDialog>();
+
+        var materialSelects = dialog.FindComponents<MudSelect<string>>();
+        await dialog.InvokeAsync(() => materialSelects[0].Instance.ValueChanged.InvokeAsync("GLUE"));
+        await dialog.InvokeAsync(() => materialSelects[1].Instance.ValueChanged.InvokeAsync("RESIN"));
+
+        var submitButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Add");
+        await cut.InvokeAsync(() => submitButton.Click());
+        await pendingClick;
+
+        var model = await new AuthoringCatalogueStore(factory).LoadModelAsync(Studio);
+        var substitutions = model!.Elements.Single(e => e.Code == StudioElement).Substitutions;
+        Assert.Contains(substitutions, s => s.ReplaceMaterialCode == "GLUE" && s.WithMaterialCode == "RESIN");
+        cut.WaitForAssertion(() => Assert.Contains("RESIN", cut.Markup));
+    }
+
+    [Fact]
+    public async Task DeleteSubstitution_ThroughConfirm_Removes()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var deleteButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Delete"
+            && b.Closest("table")?.QuerySelector("th")?.TextContent.Trim() == "Swap");
+
+        var pendingClick = cut.InvokeAsync(() => deleteButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<MudMessageBox>().Count > 0);
+        var messageBox = dialogProvider.FindComponent<MudMessageBox>();
+        var confirmButton = messageBox.FindAll("button").Single(b => b.TextContent.Trim() == "Delete");
+        await cut.InvokeAsync(() => confirmButton.Click());
+        await pendingClick;
+
+        var model = await new AuthoringCatalogueStore(factory).LoadModelAsync(Studio);
+        Assert.Empty(model!.Elements.Single(e => e.Code == StudioElement).Substitutions);
+        cut.WaitForAssertion(() => Assert.Contains("No substitutions.", cut.Markup));
+    }
+
     [Fact]
     public async Task FrozenModel_DisablesControls()
     {

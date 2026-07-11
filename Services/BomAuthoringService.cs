@@ -66,6 +66,40 @@ public sealed class BomAuthoringService(IDbContextFactory<FurniturePlannerContex
         await store.SaveModelAsync(model, ct);
     }
 
+    public async Task AddSubstitutionAsync(string modelCode, string elementCode, SubstitutionRule rule, CancellationToken ct = default)
+    {
+        var (model, element) = await LoadDraftElementAsync(modelCode, elementCode, ct);
+        await ValidateSubstitutionAsync(element, rule, ct);
+        element.Substitutions.Add(rule);
+        await store.SaveModelAsync(model, ct);
+    }
+
+    public async Task UpdateSubstitutionAsync(string modelCode, string elementCode, int index, SubstitutionRule rule, CancellationToken ct = default)
+    {
+        var (model, element) = await LoadDraftElementAsync(modelCode, elementCode, ct);
+        if (index < 0 || index >= element.Substitutions.Count) { throw new InvalidOperationException($"Substitution index {index} is out of range on element '{elementCode}'."); }
+        await ValidateSubstitutionAsync(element, rule, ct);
+        element.Substitutions[index] = rule;
+        await store.SaveModelAsync(model, ct);
+    }
+
+    public async Task RemoveSubstitutionAsync(string modelCode, string elementCode, int index, CancellationToken ct = default)
+    {
+        var (model, element) = await LoadDraftElementAsync(modelCode, elementCode, ct);
+        if (index < 0 || index >= element.Substitutions.Count) { throw new InvalidOperationException($"Substitution index {index} is out of range on element '{elementCode}'."); }
+        element.Substitutions.RemoveAt(index);
+        await store.SaveModelAsync(model, ct);
+    }
+
+    private async Task ValidateSubstitutionAsync(Element element, SubstitutionRule rule, CancellationToken ct)
+    {
+        var materialCodes = (await store.LoadAsync(ct)).Materials.Select(m => m.Code).ToHashSet();
+        if (!materialCodes.Contains(rule.ReplaceMaterialCode)) { throw new InvalidOperationException($"Material '{rule.ReplaceMaterialCode}' does not exist."); }
+        if (!materialCodes.Contains(rule.WithMaterialCode)) { throw new InvalidOperationException($"Material '{rule.WithMaterialCode}' does not exist."); }
+        if (rule.QuantityOverride is < 0) { throw new InvalidOperationException("Quantity override cannot be negative."); }
+        ValidateCondition(element, rule.When);   // reuse the 9B condition validator (__MATERIAL__ carve-out, unknown option/choice, dup option)
+    }
+
     private async Task<(FurnitureModel Model, Element Element)> LoadDraftElementAsync(string modelCode, string elementCode, CancellationToken ct)
     {
         var model = await store.LoadModelAsync(modelCode, ct)

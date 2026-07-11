@@ -318,4 +318,104 @@ public class BomAuthoringServiceTests
 
         Assert.Single(await harness.Naming.NamesForModelAsync(Studio));   // BOM authoring never touches VariantNaming
     }
+
+    // --- substitution CRUD ---
+
+    private static async Task<IReadOnlyList<SubstitutionRule>> SubsAsync(Harness harness)
+        => (await harness.Store.LoadModelAsync(Studio))!.Elements.Single(e => e.Code == Element).Substitutions;
+
+    private static SubstitutionRule Sub(ApplicabilityCondition when, string replace, string with, decimal? qty = null)
+        => new(when, replace, with, qty);
+
+    [Fact]
+    public async Task AddSubstitution_Appends()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Bom.AddSubstitutionAsync(Studio, Element, Sub(Cond(("DEPTH", "DEEP")), "GLUE", "RESIN"));
+
+        Assert.Contains(await SubsAsync(harness), s => s.ReplaceMaterialCode == "GLUE" && s.WithMaterialCode == "RESIN"
+            && s.When.Equals(Cond(("DEPTH", "DEEP"))));
+    }
+
+    [Fact]
+    public async Task UpdateSubstitution_ReplacesAtIndex()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);   // seed FS2 already has one substitution at index 0
+
+        await harness.Bom.UpdateSubstitutionAsync(Studio, Element, 0, Sub(new ApplicabilityCondition([]), "GLUE", "RESIN", 2m));
+
+        var subs = await SubsAsync(harness);
+        Assert.Single(subs);
+        Assert.Equal("GLUE", subs[0].ReplaceMaterialCode);
+        Assert.Equal(2m, subs[0].QuantityOverride);
+    }
+
+    [Fact]
+    public async Task RemoveSubstitution_RemovesAtIndex()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Bom.RemoveSubstitutionAsync(Studio, Element, 0);
+
+        Assert.Empty(await SubsAsync(harness));
+    }
+
+    [Fact]
+    public async Task RemoveSubstitution_OutOfRange_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Bom.RemoveSubstitutionAsync(Studio, Element, 9));
+    }
+
+    [Theory]
+    [InlineData("BOGUS", "FM-FIRM")]
+    [InlineData("FM-STD", "BOGUS")]
+    public async Task AddSubstitution_BadMaterial_Throws(string replace, string with)
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddSubstitutionAsync(Studio, Element, Sub(new ApplicabilityCondition([]), replace, with)));
+    }
+
+    [Fact]
+    public async Task AddSubstitution_UnknownConditionOption_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddSubstitutionAsync(Studio, Element, Sub(Cond(("BOGUS", "X")), "GLUE", "RESIN")));
+    }
+
+    [Fact]
+    public async Task AddSubstitution_NegativeQuantityOverride_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddSubstitutionAsync(Studio, Element, Sub(new ApplicabilityCondition([]), "GLUE", "RESIN", -1m)));
+    }
+
+    [Fact]
+    public async Task SubstitutionMutations_OnActiveModel_ThrowStructureFrozen()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<StructureFrozenException>(() => harness.Bom.AddSubstitutionAsync(Active, "FJ2", Sub(new ApplicabilityCondition([]), "FM-STD", "FM-FIRM")));
+        await Assert.ThrowsAsync<StructureFrozenException>(() => harness.Bom.UpdateSubstitutionAsync(Active, "FJ2", 0, Sub(new ApplicabilityCondition([]), "FM-STD", "FM-FIRM")));
+        await Assert.ThrowsAsync<StructureFrozenException>(() => harness.Bom.RemoveSubstitutionAsync(Active, "FJ2", 0));
+    }
 }

@@ -342,6 +342,98 @@ public class CataloguePublishServiceTests
     }
 
     [Fact]
+    public async Task PublishAsync_DanglingSubstitutionReplaceMaterialReference_FailsAndWritesNoRow()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Materials = [new Material("FM-FIRM", "Foam Firm", 10m, "pc")],
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Substitutions =
+                                [
+                                    new SubstitutionRule(new ApplicabilityCondition([]), "MISSING", "FM-FIRM", null),
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains("substitution replaces missing material") && e.Contains("MISSING"));
+            Assert.Null(result.Version);
+            Assert.False(source.Invalidated);
+
+            using var verifyContext = factory.CreateDbContext();
+            Assert.Empty(verifyContext.PublishedCatalogues);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_DanglingSubstitutionCondition_FailsAndWritesNoRow()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Materials = [new Material("FM-STD", "Foam Standard", 8m, "pc"), new Material("FM-FIRM", "Foam Firm", 10m, "pc")],
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Substitutions =
+                                [
+                                    new SubstitutionRule(new ApplicabilityCondition([new SelectionKey("MECH2", "REC")]), "FM-STD", "FM-FIRM", null),
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains("substitution has a condition referencing unknown selection") && e.Contains("MECH2:REC"));
+            Assert.Null(result.Version);
+            Assert.False(source.Invalidated);
+
+            using var verifyContext = factory.CreateDbContext();
+            Assert.Empty(verifyContext.PublishedCatalogues);
+        }
+    }
+
+    [Fact]
     public async Task PublishAsync_DanglingVisibilityRuleTrigger_FailsAndWritesNoRow()
     {
         var (factory, connection) = NewFactory();

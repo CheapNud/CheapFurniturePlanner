@@ -80,34 +80,7 @@
                     break;
             }
 
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Applies when</MudText>
-            @if (_conditionRows.Count == 0)
-            {
-                <MudText Typo="Typo.body2" Color="Color.Secondary">Always applies — add a row to make this line conditional.</MudText>
-            }
-            @foreach (var row in _conditionRows)
-            {
-                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                    <MudSelect T="string" Label="Option" Value="@row.Option" ValueChanged="@(code => OnConditionOptionChanged(row, code))">
-                        @foreach (var conditionOption in ConditionOptions)
-                        {
-                            <MudSelectItem T="string" Value="@conditionOption.DefCode">@conditionOption.DefCode</MudSelectItem>
-                        }
-                    </MudSelect>
-                    <MudSelect T="string" Label="Choice" @bind-Value="row.Choice">
-                        @foreach (var choiceCode in row.Choices)
-                        {
-                            <MudSelectItem T="string" Value="@choiceCode">@choiceCode</MudSelectItem>
-                        }
-                    </MudSelect>
-                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Title="Remove condition" OnClick="@(() => _conditionRows.Remove(row))" />
-                </MudStack>
-            }
-            <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => _conditionRows.Add(new ConditionRow()))">Add condition</MudButton>
-            @if (_preservedKeys.Count > 0)
-            {
-                <MudText Typo="Typo.caption" Color="Color.Secondary">also when @string.Join(", ", _preservedKeys.Select(k => $"material = {k.ChoiceCode}"))</MudText>
-            }
+            <ConditionEditor @ref="_conditionEditor" ConditionOptions="@ConditionOptions" Condition="@Line?.Condition" />
         </MudStack>
     </DialogContent>
     <DialogActions>
@@ -150,13 +123,6 @@
         public decimal Metrage { get; set; }
     }
 
-    private sealed class ConditionRow
-    {
-        public string? Option { get; set; }
-        public string? Choice { get; set; }
-        public IReadOnlyList<string> Choices { get; set; } = [];
-    }
-
     private string _lineKey = string.Empty;
     private decimal _quantity = 1m;
     private string? _frameBodyCode;
@@ -172,13 +138,7 @@
     private string? _operationCode;
     private decimal _units;
     private readonly List<SecondaryRow> _secondaryRows = [];
-    private readonly List<ConditionRow> _conditionRows = [];
-
-    // Selections whose option isn't in ConditionOptions (e.g. the synthetic __MATERIAL__ key the
-    // pricing engine injects at resolve time - it is never an authored ChoiceOption, so the option
-    // picker can't offer it). Kept aside untouched and merged back into the condition on submit so
-    // editing a line never silently drops them.
-    private readonly List<SelectionKey> _preservedKeys = [];
+    private ConditionEditor? _conditionEditor;
 
     protected override void OnInitialized()
     {
@@ -221,37 +181,9 @@
                 _units = labor.Units;
                 break;
         }
-
-        foreach (var key in Line.Condition?.RequiredSelections ?? [])
-        {
-            var editableChoices = ConditionOptions.FirstOrDefault(o => o.DefCode == key.OptionDefinitionCode).ChoiceCodes;
-            if (editableChoices is null)
-            {
-                _preservedKeys.Add(key);
-                continue;
-            }
-            _conditionRows.Add(new ConditionRow { Option = key.OptionDefinitionCode, Choice = key.ChoiceCode, Choices = editableChoices });
-        }
     }
 
     private void Cancel() => MudDialog.Cancel();
-
-    private void OnConditionOptionChanged(ConditionRow row, string optionDefCode)
-    {
-        row.Option = optionDefCode;
-        row.Choices = ConditionOptions.FirstOrDefault(o => o.DefCode == optionDefCode).ChoiceCodes ?? [];
-        row.Choice = null;
-    }
-
-    private ApplicabilityCondition? BuildCondition()
-    {
-        var keys = _conditionRows
-            .Where(row => !string.IsNullOrEmpty(row.Option) && !string.IsNullOrEmpty(row.Choice))
-            .Select(row => new SelectionKey(row.Option!, row.Choice!))
-            .Concat(_preservedKeys)
-            .ToList();
-        return keys.Count == 0 ? null : new ApplicabilityCondition(keys);
-    }
 
     private void Submit()
     {
@@ -275,6 +207,6 @@
             BomSectionKind.Labor => new LaborBomLine { LineKey = _lineKey.Trim(), Quantity = _quantity, OperationCode = _operationCode ?? string.Empty, Units = _units },
             _ => throw new InvalidOperationException($"Unknown BOM section kind '{Kind}'.")
         };
-        MudDialog.Close(DialogResult.Ok<BomLine>(line with { Condition = BuildCondition() }));
+        MudDialog.Close(DialogResult.Ok<BomLine>(line with { Condition = _conditionEditor?.BuildCondition() }));
     }
 }
