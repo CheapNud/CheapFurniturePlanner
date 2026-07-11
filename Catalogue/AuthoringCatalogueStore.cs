@@ -111,12 +111,16 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
     }
 
     // Upserts the single working-masters document. The masters doc holds only master lists, so Models
-    // is cleared before serialization (model docs live in AuthoringModels). This is the working-copy
-    // write P2's price editor uses; publishing snapshots the working copy into a versioned catalogue.
+    // is cleared before serialization (model docs live in AuthoringModels); Version/ContentHash are
+    // publish-time metadata and are zeroed too, matching SeedFromAsync's masters write, so a caller
+    // passing a stamped snapshot can't persist stale metadata. This is the working-copy write P2's
+    // price editor uses; publishing snapshots the working copy into a versioned catalogue.
     public async Task SaveMastersAsync(CatalogueSnapshot masters, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         masters.Models = [];
+        masters.Version = "";
+        masters.ContentHash = "";
         var json = CanonicalJson.Serialize(masters);
         var row = await db.AuthoringMasters.FirstOrDefaultAsync(ct);
         if (row is null) { db.AuthoringMasters.Add(new AuthoringMastersDocument { BundleJson = json }); }
