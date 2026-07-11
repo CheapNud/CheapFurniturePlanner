@@ -44,6 +44,7 @@ public sealed class OptionAuthoringService(IDbContextFactory<FurniturePlannerCon
         element.Options[index] = option;
         ReconcileVisibilityRules(element, originalDefCode, defCode);
         ReconcileBomConditions(element, originalDefCode, defCode);
+        ReconcileSubstitutionConditions(element, originalDefCode, defCode);
         if (mustPrune) { await PruneNamingRowsAsync(modelCode, elementCode, ct); }
         await store.SaveModelAsync(model, ct);
     }
@@ -57,6 +58,7 @@ public sealed class OptionAuthoringService(IDbContextFactory<FurniturePlannerCon
         RenumberOptions(element);
         ReconcileVisibilityRules(element, renamedFrom: null, renamedTo: null);
         ReconcileBomConditions(element, renamedFrom: null, renamedTo: null);
+        ReconcileSubstitutionConditions(element, renamedFrom: null, renamedTo: null);
         if (IsBomSignificant(existing)) { await PruneNamingRowsAsync(modelCode, elementCode, ct); }
         await store.SaveModelAsync(model, ct);
     }
@@ -245,6 +247,25 @@ public sealed class OptionAuthoringService(IDbContextFactory<FurniturePlannerCon
                 && line.Condition.RequiredSelections.Any(key => !SelectionResolves(element, key)));
         }
         element.Bom.Sections.RemoveAll(section => section.Lines.Count == 0);
+    }
+
+    // Keeps substitution When-conditions consistent after an option is renamed or removed, mirroring
+    // ReconcileBomConditions. Migrate rewrites SelectionKeys on rename; drop removes any substitution
+    // whose When references a now-unresolvable selection. Records/conditions are immutable, so rebuild.
+    private static void ReconcileSubstitutionConditions(Element element, string? renamedFrom, string? renamedTo)
+    {
+        if (renamedFrom is not null && renamedTo is not null && renamedFrom != renamedTo)
+        {
+            for (var index = 0; index < element.Substitutions.Count; index++)
+            {
+                var rule = element.Substitutions[index];
+                var migrated = rule.When.RequiredSelections
+                    .Select(key => key.OptionDefinitionCode == renamedFrom ? new SelectionKey(renamedTo, key.ChoiceCode) : key)
+                    .ToList();
+                element.Substitutions[index] = rule with { When = new ApplicabilityCondition(migrated) };
+            }
+        }
+        element.Substitutions.RemoveAll(rule => rule.When.RequiredSelections.Any(key => !SelectionResolves(element, key)));
     }
 
     // The synthetic __MATERIAL__ selection is never an authored ChoiceOption (VariantCode reserves the

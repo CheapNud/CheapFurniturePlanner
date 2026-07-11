@@ -533,4 +533,48 @@ public class OptionAuthoringServiceTests
 
         Assert.NotNull(await BomLineAsync(harness, "FM-DEEP-FS2"));
     }
+
+    // --- substitution condition cascade ---
+
+    private static async Task<IReadOnlyList<SubstitutionRule>> SubsOnAsync(Harness harness)
+        => (await harness.Store.LoadModelAsync(Studio))!.Elements.Single(e => e.Code == Element).Substitutions;
+
+    [Fact]
+    public async Task RenameOption_MigratesSubstitutionCondition()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        // FS2 substitution: WHEN MECH=REC replace FM-STD with FM-FIRM.
+        await harness.Options.UpdateOptionAsync(Studio, Element, "MECH", Choice("MECH2", affectsBom: true, "NONE", "REC"));
+
+        var subs = await SubsOnAsync(harness);
+        Assert.Single(subs);
+        Assert.Equal(new ApplicabilityCondition([new SelectionKey("MECH2", "REC")]), subs[0].When);
+    }
+
+    [Fact]
+    public async Task RemoveOption_DropsSubstitution()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Options.RemoveOptionAsync(Studio, Element, "MECH");
+
+        Assert.Empty(await SubsOnAsync(harness));
+    }
+
+    [Fact]
+    public async Task RemoveNonReferencedOption_KeepsSubstitution()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Options.RemoveOptionAsync(Studio, Element, "STITCH");
+
+        Assert.Single(await SubsOnAsync(harness));
+    }
 }
