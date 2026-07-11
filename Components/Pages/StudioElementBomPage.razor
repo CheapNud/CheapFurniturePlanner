@@ -4,6 +4,7 @@
 @using CheapFurniturePlanner.Domain.Bom
 @using CheapFurniturePlanner.Domain.Catalog
 @using CheapFurniturePlanner.Domain.Options
+@using CheapFurniturePlanner.Domain.Pricing
 @using CheapFurniturePlanner.Services
 
 @inject AuthoringCatalogueStore AuthoringCatalogueStore
@@ -173,7 +174,8 @@ else
 
     private static string ConditionLabel(BomLine line)
         => line.Condition is null ? string.Empty
-            : "when " + string.Join(", ", line.Condition.RequiredSelections.Select(k => $"{k.OptionDefinitionCode}={k.ChoiceCode}"));
+            : "when " + string.Join(", ", line.Condition.RequiredSelections.Select(k =>
+                k.OptionDefinitionCode == VariantCode.MaterialDefCode ? $"material={k.ChoiceCode}" : $"{k.OptionDefinitionCode}={k.ChoiceCode}"));
 
     private DialogParameters<BomLineDialog> BuildParams(BomSectionKind kind, BomLine? line, string submitLabel) => new()
     {
