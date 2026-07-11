@@ -219,6 +219,42 @@ public class BomAuthoringServiceTests
         Assert.Null((await LineAsync(harness, "FM-DEEP-FS2"))!.Condition);
     }
 
+    // __MATERIAL__ is the synthetic selection ResolveStage injects from the resolved material type at
+    // pricing time (VariantCode.MaterialDefCode) - it is never an authored ChoiceOption, so
+    // ValidateCondition must carve it out rather than rejecting it as an unknown option. FSCH is the
+    // seeded Draft element (FJORD-STUDIO) whose LB-LEATHERWORK-FSCH labor line already carries this
+    // condition; keeping it on an update proves editing that line stays safe.
+    [Fact]
+    public async Task AddLine_WithMaterialCondition_DoesNotThrow()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc,
+            new MiscBomLine { LineKey = "MI-LEATHER", MaterialCode = "GLUE", Condition = Cond(("__MATERIAL__", "LEATHER-THICK")) });
+
+        var line = await LineAsync(harness, "MI-LEATHER");
+        Assert.Equal(Cond(("__MATERIAL__", "LEATHER-THICK")), line!.Condition);
+    }
+
+    [Fact]
+    public async Task UpdateLine_KeepingMaterialCondition_DoesNotThrow()
+    {
+        const string element = "FSCH";
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Bom.UpdateLineAsync(Studio, element, "LB-LEATHERWORK-FSCH",
+            new LaborBomLine { LineKey = "LB-LEATHERWORK-FSCH", OperationCode = "OP-LEATHERWORK", Units = 3, Condition = Cond(("__MATERIAL__", "LEATHER-THICK")) });
+
+        var bom = (await harness.Store.LoadModelAsync(Studio))!.Elements.Single(e => e.Code == element).Bom;
+        var updated = bom.Sections.SelectMany(s => s.Lines).Single(l => l.LineKey == "LB-LEATHERWORK-FSCH");
+        Assert.Equal(Cond(("__MATERIAL__", "LEATHER-THICK")), updated.Condition);
+        Assert.Equal(3m, ((LaborBomLine)updated).Units);
+    }
+
     [Fact]
     public async Task RemoveLine_DropsEmptiedSection()
     {

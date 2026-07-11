@@ -116,6 +116,11 @@ public sealed class BomAuthoringService(IDbContextFactory<FurniturePlannerContex
             {
                 throw new InvalidOperationException($"Condition references option '{key.OptionDefinitionCode}' more than once.");
             }
+            // The synthetic __MATERIAL__ selection is never an authored ChoiceOption (VariantCode
+            // reserves the code); ResolveStage injects it from the resolved material type at pricing
+            // time, so it always resolves regardless of the element's option list - same carve-out as
+            // OptionAuthoringService.SelectionResolves and CataloguePublishService's condition check.
+            if (key.OptionDefinitionCode == VariantCode.MaterialDefCode) { continue; }
             if (element.Options.FirstOrDefault(o => o.OptionDefinitionCode == key.OptionDefinitionCode) is not ChoiceOption trigger)
             {
                 throw new InvalidOperationException($"Condition references unknown option '{key.OptionDefinitionCode}'.");
