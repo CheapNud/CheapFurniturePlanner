@@ -93,6 +93,52 @@ public class DbCatalogueSourceTests
         }
     }
 
+    [Fact]
+    public async Task GetCurrentAsync_ScheduledVersion_WaitsUntilItsEffectiveDate()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        var now = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var publishService = NewPublishService(factory);
+        await publishService.PublishAsync(ValidSnapshotWithModel("A"), now);              // v1 effective now
+        await publishService.PublishAsync(ValidSnapshotWithModel("B"), now.AddDays(10));  // v2 scheduled
+
+        var source = new DbCatalogueSource(factory, () => now);
+        var current = await source.GetCurrentAsync();
+        Assert.Contains(current.Models, m => m.Code == "A");   // v1 served; v2 not yet effective
+
+        now = now.AddDays(11);                                  // cross the boundary
+        var afterBoundary = await source.GetCurrentAsync();     // re-resolves automatically (no Invalidate)
+        Assert.Contains(afterBoundary.Models, m => m.Code == "B");
+    }
+
+    [Fact]
+    public async Task GetCurrentAsync_NoEffectiveVersion_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var publishService = NewPublishService(factory);
+        await publishService.PublishAsync(ValidSnapshot(), now.AddDays(5));   // only a future version exists
+        var source = new DbCatalogueSource(factory, () => now);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => source.GetCurrentAsync());
+    }
+
+    private static CataloguePublishService NewPublishService(IDbContextFactory<FurniturePlannerContext> factory) =>
+        new(factory, new NoOpCatalogueSource());
+
+    private static CatalogueSnapshot ValidSnapshot() => ValidSnapshotWithModel("M1");
+
+    private static CatalogueSnapshot ValidSnapshotWithModel(string modelCode) => new()
+    {
+        Version = "irrelevant",
+        Models = [new FurnitureModel { Code = modelCode, Name = $"Model {modelCode}", Elements = [new Element { Code = "E1", Name = "Element One" }] }],
+    };
+
+    private sealed class NoOpCatalogueSource : ICatalogueSource
+    {
+        public Task<CatalogueSnapshot> GetCurrentAsync() => throw new NotSupportedException();
+        public void Invalidate() { }
+    }
+
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
     {
         public FurniturePlannerContext CreateDbContext() => new(options);

@@ -12,7 +12,7 @@ public record PublishResult(bool Success, IReadOnlyList<string> Errors, string? 
 
 public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerContext> factory, ICatalogueSource source)
 {
-    public async Task<PublishResult> PublishAsync(CatalogueSnapshot snapshot)
+    public async Task<PublishResult> PublishAsync(CatalogueSnapshot snapshot, DateTime? effectiveDate = null)
     {
         List<string> errors = Validate(snapshot);
         if (errors.Count > 0)
@@ -42,7 +42,8 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
             ContentHash = hash,
             BundleJson = CanonicalJson.Serialize(snapshot),
             IsCurrent = true,
-            PublishedAt = DateTime.UtcNow
+            PublishedAt = DateTime.UtcNow,
+            EffectiveDate = effectiveDate ?? DateTime.UtcNow
         });
         await ctx.SaveChangesAsync();
         await tx.CommitAsync();

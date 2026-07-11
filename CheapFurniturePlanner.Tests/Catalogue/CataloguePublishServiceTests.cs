@@ -729,6 +729,56 @@ public class CataloguePublishServiceTests
         }
     }
 
+    [Fact]
+    public async Task PublishAsync_DefaultEffectiveDate_IsNow()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                PriceGroups = [new PriceGroup { Code = "PGA", RatePerMeter = 21.50m }],
+                FabricGroups = [new FabricGroup { Code = "AQUA", PriceGroupCode = "PGA" }],
+            };
+
+            var before = DateTime.UtcNow;
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.True(result.Success);
+            using var verifyContext = factory.CreateDbContext();
+            var row = verifyContext.PublishedCatalogues.Single(c => c.Version == result.Version);
+            Assert.InRange(row.EffectiveDate, before.AddSeconds(-5), DateTime.UtcNow.AddSeconds(5));
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_ExplicitEffectiveDate_IsStamped()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                PriceGroups = [new PriceGroup { Code = "PGA", RatePerMeter = 21.50m }],
+                FabricGroups = [new FabricGroup { Code = "AQUA", PriceGroupCode = "PGA" }],
+            };
+            var future = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+            var result = await service.PublishAsync(snapshot, future);
+
+            Assert.True(result.Success);
+            using var verifyContext = factory.CreateDbContext();
+            var row = verifyContext.PublishedCatalogues.Single(c => c.Version == result.Version);
+            Assert.Equal(future, row.EffectiveDate);
+        }
+    }
+
     private sealed class FakeCatalogueSource : ICatalogueSource
     {
         public bool Invalidated { get; private set; }

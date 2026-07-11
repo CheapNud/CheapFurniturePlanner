@@ -1,0 +1,21 @@
+<MudDialog>
+    <DialogContent>
+        <MudDatePicker Label="Effective date" @bind-Date="_effectiveDate" MinDate="DateTime.Today" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Publish</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private DateTime? _effectiveDate = DateTime.Today;
+
+    // Treat the picked calendar day as a UTC date (midnight UTC), not the server's local midnight
+    // converted to UTC — otherwise a scheduled date shifts by the host's offset and can activate on
+    // the wrong day. "Today" resolves to today-00:00 UTC (<= now, so effective immediately).
+    private void Submit() => MudDialog.Close(DialogResult.Ok(DateTime.SpecifyKind((_effectiveDate ?? DateTime.Today).Date, DateTimeKind.Utc)));
+}
