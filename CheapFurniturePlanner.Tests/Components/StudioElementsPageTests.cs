@@ -101,11 +101,11 @@ public class StudioElementsPageTests : TestContext
     private static IElement FindRowButtonByTitle(IRenderedComponent<StudioElementsPage> cut, string elementCode, string title) =>
         FindRow(cut, elementCode).QuerySelectorAll("button").Single(b => b.GetAttribute("title") == title);
 
-    // Row action cell now renders five buttons: up-arrow, down-arrow, Edit, Delete, Options.
+    // Row action cell now renders six buttons: up-arrow, down-arrow, Edit, Delete, Options, BOM.
     private static (IElement Up, IElement Down, IElement Edit, IElement Delete) RowButtons(IRenderedComponent<StudioElementsPage> cut, string elementCode)
     {
         var buttons = FindRow(cut, elementCode).QuerySelectorAll("button").ToList();
-        Assert.Equal(5, buttons.Count);
+        Assert.Equal(6, buttons.Count);
         return (buttons[0], buttons[1], buttons[2], buttons[3]);
     }
 
@@ -291,5 +291,23 @@ public class StudioElementsPageTests : TestContext
 
         var navigation = Services.GetRequiredService<NavigationManager>();
         Assert.EndsWith("/studio/FJORD-STUDIO/elements/FS2/options", navigation.Uri);
+    }
+
+    [Fact]
+    public async Task ElementRow_BomButton_NavigatesToBomPage()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
+        var bomButton = FindRowButton(cut, "FS2", "BOM");
+
+        await cut.InvokeAsync(() => bomButton.Click());
+
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        Assert.EndsWith("/studio/FJORD-STUDIO/elements/FS2/bom", navigation.Uri);
     }
 }

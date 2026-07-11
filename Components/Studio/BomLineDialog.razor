@@ -1,0 +1,206 @@
+@using CheapFurniturePlanner.Domain.Bom
+
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Line key" @bind-Value="_lineKey" Disabled="@(Line is not null)" Required="true" />
+            <MudNumericField T="decimal" Label="Quantity" @bind-Value="_quantity" />
+            @switch (Kind)
+            {
+                case BomSectionKind.Frame:
+                    <MudSelect T="string" Label="Frame body" @bind-Value="_frameBodyCode">
+                        @foreach (var masterCode in FrameBodyCodes)
+                        {
+                            <MudSelectItem T="string" Value="@masterCode">@masterCode</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudSwitch T="bool" @bind-Value="_colored" Label="Colored" Color="Color.Primary" />
+                    break;
+                case BomSectionKind.Foam:
+                    <MudSelect T="string" Label="Foam material" @bind-Value="_foamCode">
+                        @foreach (var masterCode in MaterialCodes)
+                        {
+                            <MudSelectItem T="string" Value="@masterCode">@masterCode</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudTextField T="string" Label="Hardness (optional)" @bind-Value="_hardnessCode" />
+                    break;
+                case BomSectionKind.Cotton:
+                    <MudSelect T="string" Label="Cotton material" @bind-Value="_cottonCode">
+                        @foreach (var masterCode in MaterialCodes)
+                        {
+                            <MudSelectItem T="string" Value="@masterCode">@masterCode</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudNumericField T="decimal" Label="Measurement" @bind-Value="_measurement" />
+                    <MudNumericField T="decimal" Label="Cut units" @bind-Value="_cutUnits" />
+                    <MudNumericField T="decimal" Label="Unit conversion factor" @bind-Value="_unitConversionFactor" />
+                    break;
+                case BomSectionKind.CutSort:
+                    <MudNumericField T="decimal" Label="Metrage" @bind-Value="_metrage" />
+                    <MudNumericField T="decimal" Label="Cut units" @bind-Value="_cutUnits" />
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Secondary group metrages</MudText>
+                    @foreach (var row in _secondaryRows)
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudSelect T="string" Label="Fabric group" @bind-Value="row.Group">
+                                @foreach (var masterCode in FabricGroupCodes)
+                                {
+                                    <MudSelectItem T="string" Value="@masterCode">@masterCode</MudSelectItem>
+                                }
+                            </MudSelect>
+                            <MudNumericField T="decimal" Label="Metrage" @bind-Value="row.Metrage" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Title="Remove group"
+                                           OnClick="@(() => _secondaryRows.Remove(row))" />
+                        </MudStack>
+                    }
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => _secondaryRows.Add(new SecondaryRow()))">Add group metrage</MudButton>
+                    break;
+                case BomSectionKind.Misc:
+                    <MudSelect T="string" Label="Material" @bind-Value="_materialCode">
+                        @foreach (var masterCode in MaterialCodes)
+                        {
+                            <MudSelectItem T="string" Value="@masterCode">@masterCode</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudNumericField T="decimal" Label="Unit conversion factor" @bind-Value="_unitConversionFactor" />
+                    break;
+                case BomSectionKind.Labor:
+                    <MudSelect T="string" Label="Operation" @bind-Value="_operationCode">
+                        @foreach (var masterCode in OperationCodes)
+                        {
+                            <MudSelectItem T="string" Value="@masterCode">@masterCode</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudNumericField T="decimal" Label="Units" @bind-Value="_units" />
+                    break;
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public BomSectionKind Kind { get; set; }
+
+    [Parameter]
+    public BomLine? Line { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    [Parameter]
+    public IReadOnlyList<string> FrameBodyCodes { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<string> MaterialCodes { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<string> OperationCodes { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<string> FabricGroupCodes { get; set; } = [];
+
+    private sealed class SecondaryRow
+    {
+        public string? Group { get; set; }
+        public decimal Metrage { get; set; }
+    }
+
+    private string _lineKey = string.Empty;
+    private decimal _quantity = 1m;
+    private string? _frameBodyCode;
+    private bool _colored;
+    private string? _foamCode;
+    private string? _hardnessCode;
+    private string? _cottonCode;
+    private decimal _measurement;
+    private decimal _cutUnits;
+    private decimal _unitConversionFactor = 1m;
+    private decimal _metrage;
+    private string? _materialCode;
+    private string? _operationCode;
+    private decimal _units;
+    private readonly List<SecondaryRow> _secondaryRows = [];
+
+    protected override void OnInitialized()
+    {
+        if (Line is null)
+        {
+            return;
+        }
+        _lineKey = Line.LineKey;
+        _quantity = Line.Quantity;
+        switch (Line)
+        {
+            case FrameBomLine frame:
+                _frameBodyCode = frame.FrameBodyCode;
+                _colored = frame.Colored;
+                break;
+            case FoamBomLine foam:
+                _foamCode = foam.FoamCode;
+                _hardnessCode = foam.HardnessCode;
+                break;
+            case CottonBomLine cotton:
+                _cottonCode = cotton.CottonQualityCode;
+                _measurement = cotton.Measurement;
+                _cutUnits = cotton.CutUnits;
+                _unitConversionFactor = cotton.UnitConversionFactor;
+                break;
+            case CutSortBomLine cutsort:
+                _metrage = cutsort.Metrage;
+                _cutUnits = cutsort.CutUnits;
+                foreach (var groupMetrage in cutsort.SecondaryGroupMetrages)
+                {
+                    _secondaryRows.Add(new SecondaryRow { Group = groupMetrage.Key, Metrage = groupMetrage.Value });
+                }
+                break;
+            case MiscBomLine misc:
+                _materialCode = misc.MaterialCode;
+                _unitConversionFactor = misc.UnitConversionFactor;
+                break;
+            case LaborBomLine labor:
+                _operationCode = labor.OperationCode;
+                _units = labor.Units;
+                break;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        if (Kind == BomSectionKind.CutSort)
+        {
+            var groups = _secondaryRows.Where(row => !string.IsNullOrEmpty(row.Group)).Select(row => row.Group!).ToList();
+            if (groups.Count != groups.Distinct().Count())
+            {
+                Snackbar.Add("Each fabric group can appear at most once.", Severity.Error);
+                return;
+            }
+        }
+
+        BomLine line = Kind switch
+        {
+            BomSectionKind.Frame => new FrameBomLine { LineKey = _lineKey.Trim(), Quantity = _quantity, FrameBodyCode = _frameBodyCode ?? string.Empty, Colored = _colored },
+            BomSectionKind.Foam => new FoamBomLine { LineKey = _lineKey.Trim(), Quantity = _quantity, FoamCode = _foamCode ?? string.Empty, HardnessCode = string.IsNullOrWhiteSpace(_hardnessCode) ? null : _hardnessCode.Trim() },
+            BomSectionKind.Cotton => new CottonBomLine { LineKey = _lineKey.Trim(), Quantity = _quantity, CottonQualityCode = _cottonCode ?? string.Empty, Measurement = _measurement, CutUnits = _cutUnits, UnitConversionFactor = _unitConversionFactor },
+            BomSectionKind.CutSort => new CutSortBomLine { LineKey = _lineKey.Trim(), Quantity = _quantity, Metrage = _metrage, CutUnits = _cutUnits, SecondaryGroupMetrages = _secondaryRows.Where(row => !string.IsNullOrEmpty(row.Group)).ToDictionary(row => row.Group!, row => row.Metrage) },
+            BomSectionKind.Misc => new MiscBomLine { LineKey = _lineKey.Trim(), Quantity = _quantity, MaterialCode = _materialCode ?? string.Empty, UnitConversionFactor = _unitConversionFactor },
+            BomSectionKind.Labor => new LaborBomLine { LineKey = _lineKey.Trim(), Quantity = _quantity, OperationCode = _operationCode ?? string.Empty, Units = _units },
+            _ => throw new InvalidOperationException($"Unknown BOM section kind '{Kind}'.")
+        };
+        MudDialog.Close(DialogResult.Ok<BomLine>(line));
+    }
+}
