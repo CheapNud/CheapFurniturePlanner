@@ -1,5 +1,7 @@
 @using CheapFurniturePlanner.Domain.Bom
 
+@inject ISnackbar Snackbar
+
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
@@ -179,6 +181,16 @@
 
     private void Submit()
     {
+        if (Kind == BomSectionKind.CutSort)
+        {
+            var groups = _secondaryRows.Where(row => !string.IsNullOrEmpty(row.Group)).Select(row => row.Group!).ToList();
+            if (groups.Count != groups.Distinct().Count())
+            {
+                Snackbar.Add("Each fabric group can appear at most once.", Severity.Error);
+                return;
+            }
+        }
+
         BomLine line = Kind switch
         {
             BomSectionKind.Frame => new FrameBomLine { LineKey = _lineKey.Trim(), Quantity = _quantity, FrameBodyCode = _frameBodyCode ?? string.Empty, Colored = _colored },

@@ -200,6 +200,57 @@ public class StudioElementBomPageTests : TestContext
         Assert.Equal(1.5m, added.SecondaryGroupMetrages["AQUA"]);
     }
 
+    // Duplicate secondary-group fabric codes would crash ToDictionary in Submit() with an
+    // ArgumentException, tearing down the circuit (no ErrorBoundary wraps the app). The dialog
+    // must reject the duplicate via Snackbar instead of building the line.
+    [Fact]
+    public async Task AddCutSortLine_WithDuplicateSecondaryGroups_IsRejected()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add CutSort line");
+
+        var pendingClick = cut.InvokeAsync(() => addButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<BomLineDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<BomLineDialog>();
+
+        var lineKeyField = dialog.FindComponent<MudTextField<string>>();
+        await dialog.InvokeAsync(() => lineKeyField.Instance.ValueChanged.InvokeAsync("CS-DUP"));
+
+        // Re-find the button after each click: adding a row re-renders the tree and the previous
+        // element reference's event handler ID goes stale (bUnit throws UnknownEventHandlerIdException).
+        await dialog.InvokeAsync(() => dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Add group metrage").Click());
+        await dialog.InvokeAsync(() => dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Add group metrage").Click());
+
+        var groupSelects = dialog.FindComponents<MudSelect<string>>();
+        await dialog.InvokeAsync(() => groupSelects[0].Instance.ValueChanged.InvokeAsync("AQUA"));
+        await dialog.InvokeAsync(() => groupSelects[1].Instance.ValueChanged.InvokeAsync("AQUA"));
+
+        // Numeric fields render in document order: Quantity, Metrage, CutUnits, then each row's Metrage.
+        var numericFields = dialog.FindComponents<MudNumericField<decimal>>();
+        await dialog.InvokeAsync(() => numericFields[3].Instance.ValueChanged.InvokeAsync(1m));
+        await dialog.InvokeAsync(() => numericFields[4].Instance.ValueChanged.InvokeAsync(2m));
+
+        var submitButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Add");
+        await cut.InvokeAsync(() => submitButton.Click());
+
+        // Submit() returns early on the duplicate-group guard, so the dialog never closes - the
+        // click's own await returns immediately, but the outer AddAsync stays pending until the
+        // provider tears the dialog down, which never happens here. Assert the dialog is still up
+        // instead of awaiting pendingClick (which would hang).
+        Assert.Single(dialogProvider.FindComponents<BomLineDialog>());
+
+        var bom = await BomAsync(factory);
+        var cutSortSection = bom.Sections.Single(s => s.Kind == BomSectionKind.CutSort);
+        Assert.DoesNotContain(cutSortSection.Lines, l => l.LineKey == "CS-DUP");
+    }
+
     [Fact]
     public async Task EditLine_ChangesField()
     {
