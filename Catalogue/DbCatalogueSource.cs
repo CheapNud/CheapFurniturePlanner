@@ -27,17 +27,23 @@ public sealed class DbCatalogueSource(IDbContextFactory<FurniturePlannerContext>
                 return _cached;
             }
             await using var context = await factory.CreateDbContextAsync();
-            var rows = await context.PublishedCatalogues.AsNoTracking().ToListAsync();
-            var effective = rows
+            var candidates = await context.PublishedCatalogues.AsNoTracking()
+                .Select(c => new { c.Id, c.Version, c.EffectiveDate })
+                .ToListAsync();
+            var effective = candidates
                 .Where(c => c.EffectiveDate <= now)
                 .OrderByDescending(c => c.EffectiveDate)
                 .ThenByDescending(c => int.TryParse(c.Version, out var parsed) ? parsed : 0)
                 .FirstOrDefault()
                 ?? throw new InvalidOperationException("No published catalogue is effective.");
-            var snapshot = CanonicalJson.Deserialize<CatalogueSnapshot>(effective.BundleJson)
+            var bundleJson = await context.PublishedCatalogues.AsNoTracking()
+                .Where(c => c.Id == effective.Id)
+                .Select(c => c.BundleJson)
+                .SingleAsync();
+            var snapshot = CanonicalJson.Deserialize<CatalogueSnapshot>(bundleJson)
                 ?? throw new InvalidOperationException($"Catalogue version {effective.Version} failed to deserialize.");
             _cached = snapshot;
-            _reresolveAfter = rows.Where(c => c.EffectiveDate > now).Select(c => (DateTime?)c.EffectiveDate).OrderBy(d => d).FirstOrDefault();
+            _reresolveAfter = candidates.Where(c => c.EffectiveDate > now).Select(c => (DateTime?)c.EffectiveDate).OrderBy(d => d).FirstOrDefault();
             return snapshot;
         }
         finally
