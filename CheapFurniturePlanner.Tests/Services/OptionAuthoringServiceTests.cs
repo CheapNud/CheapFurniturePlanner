@@ -339,4 +339,139 @@ public class OptionAuthoringServiceTests
 
         Assert.Single(await harness.Naming.NamesForModelAsync(Studio));   // untouched
     }
+
+    // --- visibility rules ---
+
+    private static async Task<IReadOnlyList<VisibilityRule>> RulesOnAsync(Harness harness, string optionDefCode)
+        => (await OptionOnAsync(harness, optionDefCode)).VisibilityRules;
+
+    [Fact]
+    public async Task AddVisibilityRule_Adds()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Options.AddVisibilityRuleAsync(Studio, Element, "STITCH", "DEPTH", "DEEP");
+
+        var rules = await RulesOnAsync(harness, "STITCH");
+        Assert.Contains(rules, r => r.TriggerOptionDefinitionCode == "DEPTH" && r.TriggerChoiceCode == "DEEP" && r.RevealedOptionDefinitionCode == "STITCH");
+    }
+
+    [Fact]
+    public async Task AddVisibilityRule_SelfTrigger_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Options.AddVisibilityRuleAsync(Studio, Element, "STITCH", "STITCH", "PLAIN"));
+    }
+
+    [Fact]
+    public async Task AddVisibilityRule_TriggerIsFabric_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Options.AddVisibilityRuleAsync(Studio, Element, "STITCH", "FABRIC", "AQUA"));
+    }
+
+    [Fact]
+    public async Task AddVisibilityRule_TriggerChoiceNotInValues_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Options.AddVisibilityRuleAsync(Studio, Element, "STITCH", "DEPTH", "BOGUS"));
+    }
+
+    [Fact]
+    public async Task AddVisibilityRule_Duplicate_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        // HEAD already has MECH:REC in the seed.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Options.AddVisibilityRuleAsync(Studio, Element, "HEAD", "MECH", "REC"));
+    }
+
+    [Fact]
+    public async Task AddVisibilityRule_OnActiveModel_ThrowsStructureFrozen()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<StructureFrozenException>(() =>
+            harness.Options.AddVisibilityRuleAsync(Active, "FJ2", "HEAD", "MECH", "REC"));
+    }
+
+    [Fact]
+    public async Task RemoveVisibilityRule_Removes()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Options.RemoveVisibilityRuleAsync(Studio, Element, "HEAD", "MECH", "REC");
+
+        Assert.Empty(await RulesOnAsync(harness, "HEAD"));
+    }
+
+    [Fact]
+    public async Task RenameTriggerOption_MigratesDependentRule()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Options.UpdateOptionAsync(Studio, Element, "MECH", Choice("MECH2", affectsBom: true, "NONE", "REC"));
+
+        var rules = await RulesOnAsync(harness, "HEAD");
+        Assert.Single(rules);
+        Assert.Equal(new VisibilityRule("MECH2", "REC", "HEAD"), rules[0]);
+    }
+
+    [Fact]
+    public async Task RemoveTriggerOption_DropsDependentRule()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Options.RemoveOptionAsync(Studio, Element, "MECH");
+
+        Assert.Empty(await RulesOnAsync(harness, "HEAD"));
+    }
+
+    [Fact]
+    public async Task RemoveTriggerChoiceValue_DropsDependentRule()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        // MECH keeps its code but drops the REC value -> HEAD's MECH:REC rule no longer resolves.
+        await harness.Options.UpdateOptionAsync(Studio, Element, "MECH", Choice("MECH", affectsBom: true, "NONE"));
+
+        Assert.Empty(await RulesOnAsync(harness, "HEAD"));
+    }
+
+    [Fact]
+    public async Task RenameNonTriggerOption_KeepsDependentRule()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        // STITCH is not HEAD's trigger, so renaming it must not touch HEAD's rule.
+        await harness.Options.UpdateOptionAsync(Studio, Element, "STITCH", Choice("STITCH2", affectsBom: false, "PLAIN", "CONTRAST"));
+
+        var rules = await RulesOnAsync(harness, "HEAD");
+        Assert.Single(rules);
+        Assert.Equal(new VisibilityRule("MECH", "REC", "HEAD"), rules[0]);
+    }
 }
