@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace CheapFurniturePlanner.Models;
 
-/// <summary>A published, immutable catalogue snapshot. Exactly one row has IsCurrent = true.</summary>
+/// <summary>A published, immutable catalogue snapshot. Current = the version with the greatest EffectiveDate &lt;= now (IsCurrent marks the most recently published, informational).</summary>
 public class PublishedCatalogue : IEntityId
 {
     [Key]
@@ -21,6 +21,10 @@ public class PublishedCatalogue : IEntityId
     public string BundleJson { get; set; } = "";
 
     public DateTime PublishedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>When this version becomes the served ("current") catalogue. Current = the row with the
+    /// greatest EffectiveDate that is &lt;= now.</summary>
+    public DateTime EffectiveDate { get; set; }
 
     public bool IsCurrent { get; set; }
 }

@@ -1,6 +1,7 @@
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -42,7 +43,7 @@ public sealed class ModelPublishService(IDbContextFactory<FurniturePlannerContex
         await db.SaveChangesAsync(ct);
         try
         {
-            await RepublishAsync(ct);
+            await RepublishAsync(ct: ct);
         }
         catch
         {
@@ -52,17 +53,25 @@ public sealed class ModelPublishService(IDbContextFactory<FurniturePlannerContex
         }
     }
 
-    // Loads the persisted authoring catalogue, keeps only the models whose state row is Active, and
-    // publishes that Active-only snapshot. PublishAsync validates, persists, flips IsCurrent and
-    // invalidates the source, so the published catalogue the planner reads only ever contains
-    // released models.
-    public async Task RepublishAsync(CancellationToken ct = default)
+    // Builds the Active-only publish snapshot (masters + Active models). Public so PriceVersionService
+    // can hash the identical would-be snapshot for pending-change detection.
+    public async Task<CatalogueSnapshot> LoadActiveSnapshotAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         var active = (await db.ModelStates.AsNoTracking().Where(s => s.State == TradeItemState.Active).Select(s => s.ModelCode).ToListAsync(ct)).ToHashSet();
         var snapshot = await store.LoadAsync(ct);
         snapshot.Models = snapshot.Models.Where(m => active.Contains(m.Code)).ToList();
-        var result = await publish.PublishAsync(snapshot);
+        return snapshot;
+    }
+
+    // Loads the persisted authoring catalogue, keeps only the models whose state row is Active, and
+    // publishes that Active-only snapshot. PublishAsync validates, persists, flips IsCurrent and
+    // invalidates the source, so the published catalogue the planner reads only ever contains
+    // released models.
+    public async Task RepublishAsync(DateTime? effectiveDate = null, CancellationToken ct = default)
+    {
+        var snapshot = await LoadActiveSnapshotAsync(ct);
+        var result = await publish.PublishAsync(snapshot, effectiveDate);
         if (!result.Success)
         {
             throw new InvalidOperationException("Republish failed validation: " + string.Join("; ", result.Errors));

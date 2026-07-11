@@ -42,7 +42,7 @@ public sealed class ModelAuthoringService(IDbContextFactory<FurniturePlannerCont
         {
             try
             {
-                await publish.RepublishAsync(ct);
+                await publish.RepublishAsync(ct: ct);
             }
             catch
             {
