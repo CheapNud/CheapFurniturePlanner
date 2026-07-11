@@ -151,20 +151,72 @@ public class BomAuthoringServiceTests
             harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Frame, new FrameBomLine { LineKey = "FR-NEG", FrameBodyCode = "FBX", Quantity = -1m }));
     }
 
+    private static ApplicabilityCondition Cond(params (string Option, string Choice)[] keys)
+        => new(keys.Select(k => new SelectionKey(k.Option, k.Choice)).ToList());
+
     [Fact]
-    public async Task UpdateLine_PreservesCondition()
+    public async Task AddLine_WithValidCondition_StoresIt()
     {
         var (factory, conn) = NewFactory(); using var _ = conn;
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
-        var before = (FoamBomLine)(await LineAsync(harness, "FM-DEEP-FS2"))!;   // carries Condition WHEN DEPTH=DEEP
-        Assert.NotNull(before.Condition);
 
-        await harness.Bom.UpdateLineAsync(Studio, Element, "FM-DEEP-FS2", new FoamBomLine { LineKey = "FM-DEEP-FS2", FoamCode = "FM-DEEP-PAD", Quantity = 5m });
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc,
+            new MiscBomLine { LineKey = "MI-COND", MaterialCode = "GLUE", Condition = Cond(("DEPTH", "DEEP")) });
 
-        var after = (FoamBomLine)(await LineAsync(harness, "FM-DEEP-FS2"))!;
-        Assert.Equal(5m, after.Quantity);
-        Assert.Equal(before.Condition, after.Condition);   // preserved
+        var line = await LineAsync(harness, "MI-COND");
+        Assert.Equal(Cond(("DEPTH", "DEEP")), line!.Condition);
+    }
+
+    [Fact]
+    public async Task AddLine_ConditionUnknownOption_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc,
+                new MiscBomLine { LineKey = "MI-COND", MaterialCode = "GLUE", Condition = Cond(("BOGUS", "X")) }));
+    }
+
+    [Fact]
+    public async Task AddLine_ConditionUnknownChoice_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc,
+                new MiscBomLine { LineKey = "MI-COND", MaterialCode = "GLUE", Condition = Cond(("DEPTH", "BOGUS")) }));
+    }
+
+    [Fact]
+    public async Task AddLine_ConditionDuplicateOption_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc,
+                new MiscBomLine { LineKey = "MI-COND", MaterialCode = "GLUE", Condition = Cond(("DEPTH", "DEEP"), ("DEPTH", "STD")) }));
+    }
+
+    [Fact]
+    public async Task UpdateLine_SetsCondition()   // replaces the 9A UpdateLine_PreservesCondition test
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        // FM-DEEP-FS2 starts with WHEN DEPTH=DEEP; the dialog now owns the condition, so update sets it.
+        await harness.Bom.UpdateLineAsync(Studio, Element, "FM-DEEP-FS2",
+            new FoamBomLine { LineKey = "FM-DEEP-FS2", FoamCode = "FM-DEEP-PAD", Quantity = 1, Condition = Cond(("HEAD", "HS1")) });
+        Assert.Equal(Cond(("HEAD", "HS1")), (await LineAsync(harness, "FM-DEEP-FS2"))!.Condition);
+
+        // Updating with a null condition makes the line unconditional.
+        await harness.Bom.UpdateLineAsync(Studio, Element, "FM-DEEP-FS2",
+            new FoamBomLine { LineKey = "FM-DEEP-FS2", FoamCode = "FM-DEEP-PAD", Quantity = 1, Condition = null });
+        Assert.Null((await LineAsync(harness, "FM-DEEP-FS2"))!.Condition);
     }
 
     [Fact]

@@ -2,6 +2,7 @@ using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Domain.Pricing;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,8 +12,8 @@ namespace CheapFurniturePlanner.Services;
 // authoring store. NO pruning (VariantCode is derived from AffectsBom options, never the BOM) and
 // never republishes (Draft models are absent from the Active-only published snapshot). Sections are
 // auto-managed: a BomSection exists for a kind exactly when it has >= 1 line. Line records are
-// immutable; updates rebuild via `with`, pinning the stable LineKey and preserving the existing
-// Condition (9B authors conditions).
+// immutable; updates rebuild via `with`, pinning the stable LineKey. Each line's Condition is
+// authored by the caller and validated against the element's choice options.
 public sealed class BomAuthoringService(IDbContextFactory<FurniturePlannerContext> factory, AuthoringCatalogueStore store, ModelPublishService publish)
 {
     public async Task AddLineAsync(string modelCode, string elementCode, BomSectionKind kind, BomLine line, CancellationToken ct = default)
@@ -25,7 +26,7 @@ public sealed class BomAuthoringService(IDbContextFactory<FurniturePlannerContex
             section = new BomSection { Kind = kind };
             element.Bom.Sections.Add(section);
         }
-        section.Lines.Add(line with { LineKey = lineKey, Condition = null });
+        section.Lines.Add(line with { LineKey = lineKey, Condition = line.Condition });
         await store.SaveModelAsync(model, ct);
     }
 
@@ -35,7 +36,7 @@ public sealed class BomAuthoringService(IDbContextFactory<FurniturePlannerContex
         var located = LocateLine(element, lineKey)
             ?? throw new InvalidOperationException($"BOM line '{lineKey}' not found on element '{elementCode}'.");
         await ValidateLineAsync(element, located.Section.Kind, line, isAdd: false, ct);
-        located.Section.Lines[located.Index] = line with { LineKey = lineKey, Condition = located.Line.Condition };
+        located.Section.Lines[located.Index] = line with { LineKey = lineKey, Condition = line.Condition };
         await store.SaveModelAsync(model, ct);
     }
 
@@ -101,7 +102,29 @@ public sealed class BomAuthoringService(IDbContextFactory<FurniturePlannerContex
         RequireKindMatch(kind, line);
         RequireNonNegative(line);
         ValidateReferences(line, await store.LoadAsync(ct));
+        ValidateCondition(element, line.Condition);
         return lineKey;
+    }
+
+    private static void ValidateCondition(Element element, ApplicabilityCondition? condition)
+    {
+        if (condition is null) { return; }
+        var seenOptions = new HashSet<string>();
+        foreach (var key in condition.RequiredSelections)
+        {
+            if (!seenOptions.Add(key.OptionDefinitionCode))
+            {
+                throw new InvalidOperationException($"Condition references option '{key.OptionDefinitionCode}' more than once.");
+            }
+            if (element.Options.FirstOrDefault(o => o.OptionDefinitionCode == key.OptionDefinitionCode) is not ChoiceOption trigger)
+            {
+                throw new InvalidOperationException($"Condition references unknown option '{key.OptionDefinitionCode}'.");
+            }
+            if (!trigger.Values.Any(v => v.OptionChoiceCode == key.ChoiceCode))
+            {
+                throw new InvalidOperationException($"Option '{key.OptionDefinitionCode}' has no choice '{key.ChoiceCode}'.");
+            }
+        }
     }
 
     private static void RequireKindMatch(BomSectionKind kind, BomLine line)
