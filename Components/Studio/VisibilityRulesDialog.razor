@@ -1,0 +1,111 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Options
+@using CheapFurniturePlanner.Services
+
+@inject OptionAuthoringService OptionAuthoringService
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (_rules.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Always visible — add a rule to reveal this option conditionally.</MudText>
+        }
+        else
+        {
+            @foreach (var rule in _rules)
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.body2">visible when <b>@rule.TriggerOptionDefinitionCode = @rule.TriggerChoiceCode</b></MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Title="Remove rule" OnClick="@(() => RemoveAsync(rule))" />
+                </MudStack>
+            }
+        }
+        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-2">
+            <MudSelect T="string" Label="Trigger option" Value="@_triggerOption" ValueChanged="@OnTriggerChanged">
+                @foreach (var trigger in EligibleTriggers)
+                {
+                    <MudSelectItem T="string" Value="@trigger.DefCode">@trigger.DefCode</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" Label="When choice" @bind-Value="_triggerChoice">
+                @foreach (var choiceCode in _triggerChoices)
+                {
+                    <MudSelectItem T="string" Value="@choiceCode">@choiceCode</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Color="Color.Primary" OnClick="@AddAsync" Disabled="@(string.IsNullOrEmpty(_triggerOption) || string.IsNullOrEmpty(_triggerChoice))">Add</MudButton>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Close())">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public string ModelCode { get; set; } = string.Empty;
+
+    [Parameter]
+    public string ElementCode { get; set; } = string.Empty;
+
+    [Parameter]
+    public string OptionDefCode { get; set; } = string.Empty;
+
+    [Parameter]
+    public IReadOnlyList<(string DefCode, IReadOnlyList<string> ChoiceCodes)> EligibleTriggers { get; set; } = [];
+
+    private List<VisibilityRule> _rules = [];
+    private string? _triggerOption;
+    private string? _triggerChoice;
+    private IReadOnlyList<string> _triggerChoices = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadRulesAsync();
+
+    private async Task ReloadRulesAsync()
+    {
+        var model = await AuthoringCatalogueStore.LoadModelAsync(ModelCode);
+        var owner = model?.Elements.FirstOrDefault(e => e.Code == ElementCode)?.Options.FirstOrDefault(o => o.OptionDefinitionCode == OptionDefCode);
+        _rules = owner?.VisibilityRules.ToList() ?? [];
+    }
+
+    private void OnTriggerChanged(string triggerOption)
+    {
+        _triggerOption = triggerOption;
+        _triggerChoices = EligibleTriggers.FirstOrDefault(t => t.DefCode == triggerOption).ChoiceCodes ?? [];
+        _triggerChoice = null;
+    }
+
+    private async Task AddAsync()
+    {
+        try
+        {
+            await OptionAuthoringService.AddVisibilityRuleAsync(ModelCode, ElementCode, OptionDefCode, _triggerOption!, _triggerChoice!);
+            _triggerOption = null;
+            _triggerChoice = null;
+            _triggerChoices = [];
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadRulesAsync();
+    }
+
+    private async Task RemoveAsync(VisibilityRule rule)
+    {
+        try
+        {
+            await OptionAuthoringService.RemoveVisibilityRuleAsync(ModelCode, ElementCode, OptionDefCode, rule.TriggerOptionDefinitionCode, rule.TriggerChoiceCode);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadRulesAsync();
+    }
+}

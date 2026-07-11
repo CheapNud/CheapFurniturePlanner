@@ -292,4 +292,111 @@ public class StudioElementOptionsPageTests : TestContext
             Assert.True(button.HasAttribute("disabled"));
         }
     }
+
+    [Fact]
+    public async Task VisibilityButton_PresentPerRow_ShowsRuleCount()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+
+        // HEAD carries the seeded MECH:REC rule; STITCH has none.
+        Assert.NotNull(FindRow(cut, "HEAD").QuerySelectorAll("button").SingleOrDefault(b => b.TextContent.Trim() == "Visibility (1)"));
+        Assert.NotNull(FindRow(cut, "STITCH").QuerySelectorAll("button").SingleOrDefault(b => b.TextContent.Trim() == "Visibility (0)"));
+    }
+
+    [Fact]
+    public async Task VisibilityButton_DisabledWhenFrozen()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Active).Add(x => x.ElementCode, ActiveElement));
+
+        var visibilityButtons = cut.FindAll("tbody tr")
+            .SelectMany(tr => tr.QuerySelectorAll("button"))
+            .Where(b => b.TextContent.Trim().StartsWith("Visibility ("))
+            .ToList();
+        Assert.NotEmpty(visibilityButtons);
+        foreach (var button in visibilityButtons)
+        {
+            Assert.True(button.HasAttribute("disabled"));
+        }
+    }
+
+    [Fact]
+    public async Task VisibilityDialog_ListsAndRemovesRule()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var visibilityButton = FindRowButton(cut, "HEAD", "Visibility (1)");
+
+        var pendingClick = cut.InvokeAsync(() => visibilityButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<VisibilityRulesDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<VisibilityRulesDialog>();
+
+        Assert.Contains("MECH", dialog.Markup);
+        Assert.Contains("REC", dialog.Markup);
+
+        var removeButton = dialog.FindAll("button").Single(b => b.GetAttribute("title") == "Remove rule");
+        await dialog.InvokeAsync(() => removeButton.Click());
+
+        var store = new AuthoringCatalogueStore(factory);
+        var model = await store.LoadModelAsync(Studio);
+        var head = model!.Elements.Single(e => e.Code == StudioElement).Options.Single(o => o.OptionDefinitionCode == "HEAD");
+        Assert.Empty(head.VisibilityRules);
+
+        var closeButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Close");
+        await cut.InvokeAsync(() => closeButton.Click());
+        await pendingClick;
+    }
+
+    [Fact]
+    public async Task VisibilityDialog_AddRule_Persists()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var visibilityButton = FindRowButton(cut, "STITCH", "Visibility (0)");
+
+        var pendingClick = cut.InvokeAsync(() => visibilityButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<VisibilityRulesDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<VisibilityRulesDialog>();
+
+        var triggerSelect = dialog.FindComponent<MudSelect<string>>();
+        await dialog.InvokeAsync(() => triggerSelect.Instance.ValueChanged.InvokeAsync("DEPTH"));
+
+        var choiceSelect = dialog.FindComponents<MudSelect<string>>()[1];
+        await dialog.InvokeAsync(() => choiceSelect.Instance.ValueChanged.InvokeAsync("DEEP"));
+
+        var addButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Add");
+        await dialog.InvokeAsync(() => addButton.Click());
+
+        var store = new AuthoringCatalogueStore(factory);
+        var model = await store.LoadModelAsync(Studio);
+        var stitch = model!.Elements.Single(e => e.Code == StudioElement).Options.Single(o => o.OptionDefinitionCode == "STITCH");
+        Assert.Contains(stitch.VisibilityRules, r => r.TriggerOptionDefinitionCode == "DEPTH" && r.TriggerChoiceCode == "DEEP");
+
+        var closeButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Close");
+        await cut.InvokeAsync(() => closeButton.Click());
+        await pendingClick;
+    }
 }

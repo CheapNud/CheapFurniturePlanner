@@ -103,6 +103,12 @@ else
                                OnClick="@(() => DeleteAsync(context))">
                         Delete
                     </MudButton>
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               Disabled="@(_state != TradeItemState.Draft)"
+                               OnClick="@(() => VisibilityAsync(context))">
+                        Visibility (@context.VisibilityRules.Count)
+                    </MudButton>
                 </MudStack>
             </MudTd>
         </RowTemplate>
@@ -246,6 +252,26 @@ else
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
+        await ReloadAsync();
+    }
+
+    private IReadOnlyList<(string DefCode, IReadOnlyList<string> ChoiceCodes)> EligibleTriggersFor(ProductOption owner) =>
+        _element is null ? [] : _element.Options.OfType<ChoiceOption>()
+            .Where(choice => choice.OptionDefinitionCode != owner.OptionDefinitionCode)
+            .Select(choice => (choice.OptionDefinitionCode, (IReadOnlyList<string>)choice.Values.Select(v => v.OptionChoiceCode).ToList()))
+            .ToList();
+
+    private async Task VisibilityAsync(ProductOption owner)
+    {
+        var parameters = new DialogParameters<VisibilityRulesDialog>
+        {
+            { dialog => dialog.ModelCode, ModelCode },
+            { dialog => dialog.ElementCode, ElementCode },
+            { dialog => dialog.OptionDefCode, owner.OptionDefinitionCode },
+            { dialog => dialog.EligibleTriggers, EligibleTriggersFor(owner) }
+        };
+        var dialogRef = await DialogService.ShowAsync<VisibilityRulesDialog>("Visibility rules", parameters);
+        await dialogRef.Result;
         await ReloadAsync();
     }
 
