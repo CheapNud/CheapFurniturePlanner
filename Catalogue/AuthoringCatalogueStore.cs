@@ -118,10 +118,23 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
     public async Task SaveMastersAsync(CatalogueSnapshot masters, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
+        // Persist a masters-only view without mutating the caller's instance: snapshot the fields we
+        // zero for storage, serialize, then restore — so a caller that reuses `masters` afterward
+        // still has its Models/Version/ContentHash intact.
+        var savedModels = masters.Models;
+        var savedVersion = masters.Version;
+        var savedHash = masters.ContentHash;
         masters.Models = [];
         masters.Version = "";
         masters.ContentHash = "";
-        var json = CanonicalJson.Serialize(masters);
+        string json;
+        try { json = CanonicalJson.Serialize(masters); }
+        finally
+        {
+            masters.Models = savedModels;
+            masters.Version = savedVersion;
+            masters.ContentHash = savedHash;
+        }
         var row = await db.AuthoringMasters.FirstOrDefaultAsync(ct);
         if (row is null) { db.AuthoringMasters.Add(new AuthoringMastersDocument { BundleJson = json }); }
         else { row.BundleJson = json; }

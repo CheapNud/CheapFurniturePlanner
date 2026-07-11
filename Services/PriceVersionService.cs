@@ -37,6 +37,10 @@ public sealed class PriceVersionService(IDbContextFactory<FurniturePlannerContex
         var working = await publish.LoadActiveSnapshotAsync(ct);
         var workingSignature = ContentSignature(working);
         await using var db = await factory.CreateDbContextAsync(ct);
+        // "Latest published" here is the most-recently-published bundle (max Id, append-only), NOT the
+        // currently-effective one. This is deliberate: the banner asks "have I edited since my last
+        // publish?" — after scheduling a future-dated version, the working copy matches that new bundle
+        // (no pending), even though the served/effective version is still the older one.
         var latest = await db.PublishedCatalogues.AsNoTracking().OrderByDescending(c => c.Id).FirstOrDefaultAsync(ct);
         if (latest is null) { return true; }
         var published = CanonicalJson.Deserialize<CatalogueSnapshot>(latest.BundleJson);

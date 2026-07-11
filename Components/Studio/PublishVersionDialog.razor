@@ -14,5 +14,8 @@
 
     private DateTime? _effectiveDate = DateTime.Today;
 
-    private void Submit() => MudDialog.Close(DialogResult.Ok((_effectiveDate ?? DateTime.Today).ToUniversalTime()));
+    // Treat the picked calendar day as a UTC date (midnight UTC), not the server's local midnight
+    // converted to UTC — otherwise a scheduled date shifts by the host's offset and can activate on
+    // the wrong day. "Today" resolves to today-00:00 UTC (<= now, so effective immediately).
+    private void Submit() => MudDialog.Close(DialogResult.Ok(DateTime.SpecifyKind((_effectiveDate ?? DateTime.Today).Date, DateTimeKind.Utc)));
 }
