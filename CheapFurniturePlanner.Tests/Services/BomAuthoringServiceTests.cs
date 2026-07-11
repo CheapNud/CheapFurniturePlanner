@@ -1,0 +1,233 @@
+using CheapFurniturePlanner.Catalogue;
+using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Bom;
+using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Models;
+using CheapFurniturePlanner.Services;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Xunit;
+
+namespace CheapFurniturePlanner.Tests.Services;
+
+// Draft-only authoring of an element's BOM structure over the real AuthoringCatalogueStore +
+// ModelPublishService on in-memory SQLite. Operates on seed Draft model FJORD-STUDIO, element FS2.
+public class BomAuthoringServiceTests
+{
+    private const string Studio = "FJORD-STUDIO";
+    private const string Active = "FJORD";
+    private const string Element = "FS2";
+
+    private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new(options);
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    private static (IDbContextFactory<FurniturePlannerContext> Factory, SqliteConnection Connection) NewFactory()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(connection).Options;
+        using (var migrateContext = new FurniturePlannerContext(options))
+        {
+            migrateContext.Database.Migrate();
+        }
+        return (new TestDbContextFactory(options), connection);
+    }
+
+    private sealed record Harness(BomAuthoringService Bom, ModelPublishService Publish, VariantNamingService Naming, AuthoringCatalogueStore Store);
+
+    private static async Task<Harness> NewHarnessAsync(IDbContextFactory<FurniturePlannerContext> factory)
+    {
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
+        var source = new DbCatalogueSource(factory);
+        var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
+        return new Harness(new BomAuthoringService(factory, store, publish), publish, new VariantNamingService(factory, publish), store);
+    }
+
+    private static async Task SeedModelStatesAsync(IDbContextFactory<FurniturePlannerContext> factory)
+    {
+        await using var db = factory.CreateDbContext();
+        db.ModelStates.Add(new ModelStateRecord { ModelCode = Active, State = TradeItemState.Active });
+        db.ModelStates.Add(new ModelStateRecord { ModelCode = Studio, State = TradeItemState.Draft });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<BomDocument> BomAsync(Harness harness)
+        => (await harness.Store.LoadModelAsync(Studio))!.Elements.Single(e => e.Code == Element).Bom;
+
+    private static async Task<BomLine?> LineAsync(Harness harness, string lineKey)
+        => (await BomAsync(harness)).Sections.SelectMany(s => s.Lines).FirstOrDefault(l => l.LineKey == lineKey);
+
+    [Fact]
+    public async Task AddLine_EachKind_AppendsToItsSection()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Frame, new FrameBomLine { LineKey = "FR-NEW", FrameBodyCode = "FBX", Colored = false });
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Foam, new FoamBomLine { LineKey = "FO-NEW", FoamCode = "FM-STD" });
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Cotton, new CottonBomLine { LineKey = "CT-NEW", CottonQualityCode = "COT-STD", Measurement = 1, CutUnits = 1 });
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.CutSort, new CutSortBomLine { LineKey = "CS-NEW", Metrage = 2, CutUnits = 1, SecondaryGroupMetrages = new() { ["AQUA"] = 0.5m } });
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc, new MiscBomLine { LineKey = "MI-NEW", MaterialCode = "GLUE" });
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Labor, new LaborBomLine { LineKey = "LB-NEW", OperationCode = "OP-CUT", Units = 2 });
+
+        var bom = await BomAsync(harness);
+        Assert.Contains(bom.Sections.Single(s => s.Kind == BomSectionKind.Frame).Lines, l => l.LineKey == "FR-NEW");
+        Assert.IsType<CutSortBomLine>(bom.Sections.Single(s => s.Kind == BomSectionKind.CutSort).Lines.Single(l => l.LineKey == "CS-NEW"));
+        Assert.Contains(bom.Sections.Single(s => s.Kind == BomSectionKind.Labor).Lines, l => l.LineKey == "LB-NEW");
+    }
+
+    [Fact]
+    public async Task AddLine_DuplicateLineKey_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Frame, new FrameBomLine { LineKey = "FR-FS2", FrameBodyCode = "FBX" }));  // FR-FS2 exists
+    }
+
+    [Fact]
+    public async Task AddLine_BadFrameBody_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Frame, new FrameBomLine { LineKey = "FR-NEW", FrameBodyCode = "BOGUS" }));
+    }
+
+    [Fact]
+    public async Task AddLine_BadMaterial_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc, new MiscBomLine { LineKey = "MI-NEW", MaterialCode = "BOGUS" }));
+    }
+
+    [Fact]
+    public async Task AddLine_BadOperation_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Labor, new LaborBomLine { LineKey = "LB-NEW", OperationCode = "BOGUS", Units = 1 }));
+    }
+
+    [Fact]
+    public async Task AddLine_BadCutSortGroup_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.CutSort, new CutSortBomLine { LineKey = "CS-NEW", Metrage = 1, CutUnits = 1, SecondaryGroupMetrages = new() { ["BOGUS"] = 1m } }));
+    }
+
+    [Fact]
+    public async Task AddLine_KindMismatch_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Frame, new LaborBomLine { LineKey = "X", OperationCode = "OP-CUT", Units = 1 }));
+    }
+
+    [Fact]
+    public async Task AddLine_NegativeQuantity_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Frame, new FrameBomLine { LineKey = "FR-NEG", FrameBodyCode = "FBX", Quantity = -1m }));
+    }
+
+    [Fact]
+    public async Task UpdateLine_PreservesCondition()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        var before = (FoamBomLine)(await LineAsync(harness, "FM-DEEP-FS2"))!;   // carries Condition WHEN DEPTH=DEEP
+        Assert.NotNull(before.Condition);
+
+        await harness.Bom.UpdateLineAsync(Studio, Element, "FM-DEEP-FS2", new FoamBomLine { LineKey = "FM-DEEP-FS2", FoamCode = "FM-DEEP-PAD", Quantity = 5m });
+
+        var after = (FoamBomLine)(await LineAsync(harness, "FM-DEEP-FS2"))!;
+        Assert.Equal(5m, after.Quantity);
+        Assert.Equal(before.Condition, after.Condition);   // preserved
+    }
+
+    [Fact]
+    public async Task RemoveLine_DropsEmptiedSection()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Bom.RemoveLineAsync(Studio, Element, "FR-FS2");   // the only Frame line
+
+        var bom = await BomAsync(harness);
+        Assert.DoesNotContain(bom.Sections, s => s.Kind == BomSectionKind.Frame);
+    }
+
+    [Fact]
+    public async Task ReorderLines_ReordersWithinSection()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Bom.ReorderLinesAsync(Studio, Element, BomSectionKind.Labor, ["LB-SEW-FS2", "LB-CUT-FS2"]);
+
+        var labor = (await BomAsync(harness)).Sections.Single(s => s.Kind == BomSectionKind.Labor);
+        Assert.Equal(["LB-SEW-FS2", "LB-CUT-FS2"], labor.Lines.Select(l => l.LineKey));
+    }
+
+    [Fact]
+    public async Task ReorderLines_NonPermutation_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.ReorderLinesAsync(Studio, Element, BomSectionKind.Labor, ["LB-CUT-FS2", "LB-CUT-FS2"]));
+    }
+
+    [Fact]
+    public async Task AllMutations_OnActiveModel_ThrowStructureFrozen()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<StructureFrozenException>(() => harness.Bom.AddLineAsync(Active, "FJ2", BomSectionKind.Frame, new FrameBomLine { LineKey = "X", FrameBodyCode = "FBX" }));
+        await Assert.ThrowsAsync<StructureFrozenException>(() => harness.Bom.UpdateLineAsync(Active, "FJ2", "FR-FJ2", new FrameBomLine { LineKey = "FR-FJ2", FrameBodyCode = "FBX" }));
+        await Assert.ThrowsAsync<StructureFrozenException>(() => harness.Bom.RemoveLineAsync(Active, "FJ2", "FR-FJ2"));
+        await Assert.ThrowsAsync<StructureFrozenException>(() => harness.Bom.ReorderLinesAsync(Active, "FJ2", BomSectionKind.Frame, ["FR-FJ2"]));
+    }
+
+    [Fact]
+    public async Task BomMutations_DoNotPruneNamingRows()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await harness.Naming.AssignAsync(Studio, "FS2-DEPTH:STD", "STUDIO-A");
+        Assert.Single(await harness.Naming.NamesForModelAsync(Studio));
+
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc, new MiscBomLine { LineKey = "MI-NEW", MaterialCode = "GLUE" });
+        await harness.Bom.UpdateLineAsync(Studio, Element, "MI-NEW", new MiscBomLine { LineKey = "MI-NEW", MaterialCode = "RESIN" });
+        await harness.Bom.RemoveLineAsync(Studio, Element, "MI-NEW");
+
+        Assert.Single(await harness.Naming.NamesForModelAsync(Studio));   // BOM authoring never touches VariantNaming
+    }
+}
