@@ -1,0 +1,251 @@
+@page "/studio/{ModelCode}/elements/{ElementCode}/bom"
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Components.Studio
+@using CheapFurniturePlanner.Domain.Bom
+@using CheapFurniturePlanner.Domain.Catalog
+@using CheapFurniturePlanner.Services
+
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject ModelPublishService ModelPublishService
+@inject BomAuthoringService BomAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>BOM - @ElementCode - Cheap Furniture Planner</PageTitle>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h5">BOM — @ModelCode / @ElementCode</MudText>
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       Href="@($"/studio/{ModelCode}/elements")">
+                Back to elements
+            </MudButton>
+        </MudStack>
+
+        @if (_element is not null && _state != TradeItemState.Draft)
+        {
+            <MudAlert Severity="Severity.Warning">frozen — model is @_state</MudAlert>
+        }
+    </MudStack>
+</MudPaper>
+
+@if (_notFound)
+{
+    <MudAlert Severity="Severity.Error">Model '@ModelCode' / element '@ElementCode' not found.</MudAlert>
+}
+else if (_element is null)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    @foreach (var kind in _kinds)
+    {
+        var lines = LinesFor(kind);
+        <MudPaper Elevation="1" Class="pa-4 mb-4">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.h6">@kind</MudText>
+                <MudButton Size="Size.Small"
+                           Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           Disabled="@(_state != TradeItemState.Draft)"
+                           OnClick="@(() => AddAsync(kind))">
+                    Add @kind line
+                </MudButton>
+            </MudStack>
+            @if (lines.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No lines.</MudText>
+            }
+            else
+            {
+                <MudTable Items="@lines" Hover="true" Dense="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Key</MudTh>
+                        <MudTh>Detail</MudTh>
+                        <MudTh>Qty</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Key">@context.LineKey</MudTd>
+                        <MudTd DataLabel="Detail">@Summary(context)</MudTd>
+                        <MudTd DataLabel="Qty">@context.Quantity</MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                               Size="Size.Small"
+                                               Title="Move up"
+                                               Disabled="@(_state != TradeItemState.Draft || IsFirst(kind, context))"
+                                               OnClick="@(() => MoveAsync(kind, context.LineKey, -1))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                               Size="Size.Small"
+                                               Title="Move down"
+                                               Disabled="@(_state != TradeItemState.Draft || IsLast(kind, context))"
+                                               OnClick="@(() => MoveAsync(kind, context.LineKey, 1))" />
+                                <MudButton Size="Size.Small"
+                                           Variant="Variant.Outlined"
+                                           Color="Color.Default"
+                                           Disabled="@(_state != TradeItemState.Draft)"
+                                           OnClick="@(() => EditAsync(kind, context))">
+                                    Edit
+                                </MudButton>
+                                <MudButton Size="Size.Small"
+                                           Variant="Variant.Outlined"
+                                           Color="Color.Error"
+                                           Disabled="@(_state != TradeItemState.Draft)"
+                                           OnClick="@(() => DeleteAsync(context))">
+                                    Delete
+                                </MudButton>
+                            </MudStack>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    }
+}
+
+@code {
+    [Parameter]
+    public string ModelCode { get; set; } = string.Empty;
+
+    [Parameter]
+    public string ElementCode { get; set; } = string.Empty;
+
+    private static readonly BomSectionKind[] _kinds = Enum.GetValues<BomSectionKind>();
+
+    private Element? _element;
+    private bool _notFound;
+    private TradeItemState _state;
+    private IReadOnlyList<string> _frameBodyCodes = [];
+    private IReadOnlyList<string> _materialCodes = [];
+    private IReadOnlyList<string> _operationCodes = [];
+    private IReadOnlyList<string> _fabricGroupCodes = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _notFound = false;
+        var model = await AuthoringCatalogueStore.LoadModelAsync(ModelCode);
+        _element = model?.Elements.FirstOrDefault(e => e.Code == ElementCode);
+        if (_element is null)
+        {
+            _notFound = true;
+            return;
+        }
+        _state = await ModelPublishService.GetStateAsync(ModelCode);
+        var snapshot = await AuthoringCatalogueStore.LoadAsync();
+        _frameBodyCodes = snapshot.FrameBodies.Select(f => f.Code).ToList();
+        _materialCodes = snapshot.Materials.Select(m => m.Code).ToList();
+        _operationCodes = snapshot.Operations.Select(o => o.Code).ToList();
+        _fabricGroupCodes = snapshot.FabricGroups.Select(g => g.Code).ToList();
+    }
+
+    private IReadOnlyList<BomLine> LinesFor(BomSectionKind kind)
+        => _element?.Bom.Sections.FirstOrDefault(s => s.Kind == kind)?.Lines ?? [];
+
+    private bool IsFirst(BomSectionKind kind, BomLine line) => LinesFor(kind).FirstOrDefault()?.LineKey == line.LineKey;
+
+    private bool IsLast(BomSectionKind kind, BomLine line) => LinesFor(kind).LastOrDefault()?.LineKey == line.LineKey;
+
+    private static string Summary(BomLine line) => line switch
+    {
+        FrameBomLine frame => frame.Colored ? $"{frame.FrameBodyCode} (colored)" : frame.FrameBodyCode,
+        FoamBomLine foam => foam.HardnessCode is null ? foam.FoamCode : $"{foam.FoamCode} / {foam.HardnessCode}",
+        CottonBomLine cotton => $"{cotton.CottonQualityCode} m{cotton.Measurement}",
+        CutSortBomLine cutsort => $"metrage {cutsort.Metrage}",
+        MiscBomLine misc => misc.MaterialCode,
+        LaborBomLine labor => $"{labor.OperationCode} × {labor.Units}",
+        _ => string.Empty
+    };
+
+    private DialogParameters<BomLineDialog> BuildParams(BomSectionKind kind, BomLine? line, string submitLabel) => new()
+    {
+        { dialog => dialog.Kind, kind },
+        { dialog => dialog.Line, line },
+        { dialog => dialog.SubmitLabel, submitLabel },
+        { dialog => dialog.FrameBodyCodes, _frameBodyCodes },
+        { dialog => dialog.MaterialCodes, _materialCodes },
+        { dialog => dialog.OperationCodes, _operationCodes },
+        { dialog => dialog.FabricGroupCodes, _fabricGroupCodes }
+    };
+
+    private async Task AddAsync(BomSectionKind kind)
+    {
+        var dialogRef = await DialogService.ShowAsync<BomLineDialog>($"Add {kind} line", BuildParams(kind, null, "Add"));
+        await ApplyDialogAsync(dialogRef, line => BomAuthoringService.AddLineAsync(ModelCode, ElementCode, kind, line));
+    }
+
+    private async Task EditAsync(BomSectionKind kind, BomLine existing)
+    {
+        var lineKey = existing.LineKey;
+        var dialogRef = await DialogService.ShowAsync<BomLineDialog>("Edit BOM line", BuildParams(kind, existing, "Save"));
+        await ApplyDialogAsync(dialogRef, line => BomAuthoringService.UpdateLineAsync(ModelCode, ElementCode, lineKey, line));
+    }
+
+    private async Task DeleteAsync(BomLine existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete BOM line",
+            $"Delete '{existing.LineKey}'?",
+            yesText: "Delete",
+            cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+        try
+        {
+            await BomAuthoringService.RemoveLineAsync(ModelCode, ElementCode, existing.LineKey);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task MoveAsync(BomSectionKind kind, string lineKey, int delta)
+    {
+        var keys = LinesFor(kind).Select(l => l.LineKey).ToList();
+        var index = keys.IndexOf(lineKey);
+        var target = index + delta;
+        if (index < 0 || target < 0 || target >= keys.Count)
+        {
+            return;
+        }
+        (keys[index], keys[target]) = (keys[target], keys[index]);
+        try
+        {
+            await BomAuthoringService.ReorderLinesAsync(ModelCode, ElementCode, kind, keys);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyDialogAsync(IDialogReference dialogRef, Func<BomLine, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not BomLine line)
+        {
+            return;
+        }
+        try
+        {
+            await apply(line);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or StructureFrozenException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+}

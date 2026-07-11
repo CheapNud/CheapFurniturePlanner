@@ -105,6 +105,12 @@ else
                                OnClick="@(() => Navigation.NavigateTo($"/studio/{ModelCode}/elements/{context.Code}/options"))">
                         Options
                     </MudButton>
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               Color="Color.Info"
+                               OnClick="@(() => Navigation.NavigateTo($"/studio/{ModelCode}/elements/{context.Code}/bom"))">
+                        BOM
+                    </MudButton>
                 </MudStack>
             </MudTd>
         </RowTemplate>
