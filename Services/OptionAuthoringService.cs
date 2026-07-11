@@ -1,5 +1,6 @@
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Domain.Pricing;
@@ -42,6 +43,7 @@ public sealed class OptionAuthoringService(IDbContextFactory<FurniturePlannerCon
         var mustPrune = PruneRequiredForUpdate(existing, option);
         element.Options[index] = option;
         ReconcileVisibilityRules(element, originalDefCode, defCode);
+        ReconcileBomConditions(element, originalDefCode, defCode);
         if (mustPrune) { await PruneNamingRowsAsync(modelCode, elementCode, ct); }
         await store.SaveModelAsync(model, ct);
     }
@@ -54,6 +56,7 @@ public sealed class OptionAuthoringService(IDbContextFactory<FurniturePlannerCon
         element.Options.Remove(existing);
         RenumberOptions(element);
         ReconcileVisibilityRules(element, renamedFrom: null, renamedTo: null);
+        ReconcileBomConditions(element, renamedFrom: null, renamedTo: null);
         if (IsBomSignificant(existing)) { await PruneNamingRowsAsync(modelCode, elementCode, ct); }
         await store.SaveModelAsync(model, ct);
     }
@@ -214,6 +217,43 @@ public sealed class OptionAuthoringService(IDbContextFactory<FurniturePlannerCon
                 .ToList();
         }
     }
+
+    // Keeps BOM line conditions consistent after an option is renamed or removed. Step 1 migrates any
+    // SelectionKey referencing the old code to the new code (rename preserves conditioned lines). Step 2
+    // drops any BOM line whose condition references a now-unresolvable selection (option removed or choice
+    // value removed), then drops any section left empty. Records/conditions are immutable, so rebuild.
+    private static void ReconcileBomConditions(Element element, string? renamedFrom, string? renamedTo)
+    {
+        if (renamedFrom is not null && renamedTo is not null && renamedFrom != renamedTo)
+        {
+            foreach (var section in element.Bom.Sections)
+            {
+                for (var index = 0; index < section.Lines.Count; index++)
+                {
+                    var line = section.Lines[index];
+                    if (line.Condition is null) { continue; }
+                    var migrated = line.Condition.RequiredSelections
+                        .Select(key => key.OptionDefinitionCode == renamedFrom ? new SelectionKey(renamedTo, key.ChoiceCode) : key)
+                        .ToList();
+                    section.Lines[index] = line with { Condition = new ApplicabilityCondition(migrated) };
+                }
+            }
+        }
+        foreach (var section in element.Bom.Sections)
+        {
+            section.Lines.RemoveAll(line => line.Condition is not null
+                && line.Condition.RequiredSelections.Any(key => !SelectionResolves(element, key)));
+        }
+        element.Bom.Sections.RemoveAll(section => section.Lines.Count == 0);
+    }
+
+    // The synthetic __MATERIAL__ selection is never an authored ChoiceOption (VariantCode reserves the
+    // code); ResolveStage injects it from the resolved material type at pricing time, so it always
+    // resolves regardless of the element's option list.
+    private static bool SelectionResolves(Element element, SelectionKey key)
+        => key.OptionDefinitionCode == VariantCode.MaterialDefCode
+            || (element.Options.FirstOrDefault(o => o.OptionDefinitionCode == key.OptionDefinitionCode) is ChoiceOption trigger
+                && trigger.Values.Any(v => v.OptionChoiceCode == key.ChoiceCode));
 
     private static void RenumberOptions(Element element)
     {
