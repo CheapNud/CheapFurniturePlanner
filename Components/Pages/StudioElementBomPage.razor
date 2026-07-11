@@ -3,6 +3,8 @@
 @using CheapFurniturePlanner.Components.Studio
 @using CheapFurniturePlanner.Domain.Bom
 @using CheapFurniturePlanner.Domain.Catalog
+@using CheapFurniturePlanner.Domain.Options
+@using CheapFurniturePlanner.Domain.Pricing
 @using CheapFurniturePlanner.Services
 
 @inject AuthoringCatalogueStore AuthoringCatalogueStore
@@ -72,7 +74,13 @@ else
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Key">@context.LineKey</MudTd>
-                        <MudTd DataLabel="Detail">@Summary(context)</MudTd>
+                        <MudTd DataLabel="Detail">
+                            @Summary(context)
+                            @if (context.Condition is not null)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@ConditionLabel(context)</MudText>
+                            }
+                        </MudTd>
                         <MudTd DataLabel="Qty">@context.Quantity</MudTd>
                         <MudTd DataLabel="Actions">
                             <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
@@ -164,6 +172,11 @@ else
         _ => string.Empty
     };
 
+    private static string ConditionLabel(BomLine line)
+        => line.Condition is null ? string.Empty
+            : "when " + string.Join(", ", line.Condition.RequiredSelections.Select(k =>
+                k.OptionDefinitionCode == VariantCode.MaterialDefCode ? $"material={k.ChoiceCode}" : $"{k.OptionDefinitionCode}={k.ChoiceCode}"));
+
     private DialogParameters<BomLineDialog> BuildParams(BomSectionKind kind, BomLine? line, string submitLabel) => new()
     {
         { dialog => dialog.Kind, kind },
@@ -172,7 +185,9 @@ else
         { dialog => dialog.FrameBodyCodes, _frameBodyCodes },
         { dialog => dialog.MaterialCodes, _materialCodes },
         { dialog => dialog.OperationCodes, _operationCodes },
-        { dialog => dialog.FabricGroupCodes, _fabricGroupCodes }
+        { dialog => dialog.FabricGroupCodes, _fabricGroupCodes },
+        { dialog => dialog.ConditionOptions, _element!.Options.OfType<ChoiceOption>()
+            .Select(c => (c.OptionDefinitionCode, (IReadOnlyList<string>)c.Values.Select(v => v.OptionChoiceCode).ToList())).ToList() }
     };
 
     private async Task AddAsync(BomSectionKind kind)

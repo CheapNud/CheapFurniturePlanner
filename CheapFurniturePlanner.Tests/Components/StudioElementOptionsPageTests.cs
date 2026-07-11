@@ -248,6 +248,31 @@ public class StudioElementOptionsPageTests : TestContext
             tr => tr.QuerySelectorAll("td").Any(td => td.TextContent.Trim() == "STITCH")));
     }
 
+    // DEPTH is referenced by FM-DEEP-FS2's condition (WHEN DEPTH=DEEP) but has no visibility rules -
+    // the confirm message must fold in the BOM-line impact count.
+    [Fact]
+    public async Task DeleteReferencedOption_ConfirmShowsImpact()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var deleteButton = FindRowButton(cut, "DEPTH", "Delete");
+
+        var pendingClick = cut.InvokeAsync(() => deleteButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<MudMessageBox>().Count > 0);
+        var messageBox = dialogProvider.FindComponent<MudMessageBox>();
+        Assert.Contains("BOM line condition(s)", messageBox.Markup);
+
+        var cancelButton = messageBox.FindAll("button").Single(b => b.TextContent.Trim() == "Cancel");
+        await cut.InvokeAsync(() => cancelButton.Click());
+        await pendingClick;
+    }
+
     [Fact]
     public async Task Reorder_MovesOptionDown()
     {

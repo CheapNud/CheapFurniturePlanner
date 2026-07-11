@@ -3,6 +3,7 @@ using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Fabrics;
+using CheapFurniturePlanner.Domain.Masters;
 using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Domain.Serialization;
@@ -427,6 +428,143 @@ public class CataloguePublishServiceTests
                                         VisibilityRules = [new VisibilityRule("MECH", "REC", "HEAD")],
                                     },
                                 ],
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.True(result.Success);
+            Assert.Empty(result.Errors);
+            Assert.NotNull(result.Version);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_DanglingBomLineCondition_FailsAndWritesNoRow()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Options =
+                                [
+                                    new ChoiceOption
+                                    {
+                                        OptionDefinitionCode = "DEPTH2",
+                                        Values = [new ProductOptionValue { OptionChoiceCode = "STD", IsDefault = true }],
+                                    },
+                                ],
+                                Bom = new BomDocument
+                                {
+                                    Sections =
+                                    [
+                                        new BomSection
+                                        {
+                                            Kind = BomSectionKind.Foam,
+                                            Lines =
+                                            [
+                                                new FoamBomLine
+                                                {
+                                                    LineKey = "foam1",
+                                                    FoamCode = "FM-STD",
+                                                    Condition = new ApplicabilityCondition([new SelectionKey("DEPTH2", "DEEP")]),
+                                                },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains("condition referencing unknown selection") && e.Contains("DEPTH2:DEEP"));
+            Assert.Null(result.Version);
+            Assert.False(source.Invalidated);
+
+            using var verifyContext = factory.CreateDbContext();
+            Assert.Empty(verifyContext.PublishedCatalogues);
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_ValidBomLineCondition_PublishesSuccessfully()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                Materials = [new Material("FM-STD", "Standard Foam", 1m, "Unit")],
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Options =
+                                [
+                                    new ChoiceOption
+                                    {
+                                        OptionDefinitionCode = "DEPTH2",
+                                        Values =
+                                        [
+                                            new ProductOptionValue { OptionChoiceCode = "STD", IsDefault = true },
+                                            new ProductOptionValue { OptionChoiceCode = "DEEP" },
+                                        ],
+                                    },
+                                ],
+                                Bom = new BomDocument
+                                {
+                                    Sections =
+                                    [
+                                        new BomSection
+                                        {
+                                            Kind = BomSectionKind.Foam,
+                                            Lines =
+                                            [
+                                                new FoamBomLine
+                                                {
+                                                    LineKey = "foam1",
+                                                    FoamCode = "FM-STD",
+                                                    Condition = new ApplicabilityCondition([new SelectionKey("DEPTH2", "DEEP")]),
+                                                },
+                                            ],
+                                        },
+                                    ],
+                                },
                             },
                         ],
                     },

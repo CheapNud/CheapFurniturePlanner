@@ -151,20 +151,108 @@ public class BomAuthoringServiceTests
             harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Frame, new FrameBomLine { LineKey = "FR-NEG", FrameBodyCode = "FBX", Quantity = -1m }));
     }
 
+    private static ApplicabilityCondition Cond(params (string Option, string Choice)[] keys)
+        => new(keys.Select(k => new SelectionKey(k.Option, k.Choice)).ToList());
+
     [Fact]
-    public async Task UpdateLine_PreservesCondition()
+    public async Task AddLine_WithValidCondition_StoresIt()
     {
         var (factory, conn) = NewFactory(); using var _ = conn;
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
-        var before = (FoamBomLine)(await LineAsync(harness, "FM-DEEP-FS2"))!;   // carries Condition WHEN DEPTH=DEEP
-        Assert.NotNull(before.Condition);
 
-        await harness.Bom.UpdateLineAsync(Studio, Element, "FM-DEEP-FS2", new FoamBomLine { LineKey = "FM-DEEP-FS2", FoamCode = "FM-DEEP-PAD", Quantity = 5m });
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc,
+            new MiscBomLine { LineKey = "MI-COND", MaterialCode = "GLUE", Condition = Cond(("DEPTH", "DEEP")) });
 
-        var after = (FoamBomLine)(await LineAsync(harness, "FM-DEEP-FS2"))!;
-        Assert.Equal(5m, after.Quantity);
-        Assert.Equal(before.Condition, after.Condition);   // preserved
+        var line = await LineAsync(harness, "MI-COND");
+        Assert.Equal(Cond(("DEPTH", "DEEP")), line!.Condition);
+    }
+
+    [Fact]
+    public async Task AddLine_ConditionUnknownOption_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc,
+                new MiscBomLine { LineKey = "MI-COND", MaterialCode = "GLUE", Condition = Cond(("BOGUS", "X")) }));
+    }
+
+    [Fact]
+    public async Task AddLine_ConditionUnknownChoice_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc,
+                new MiscBomLine { LineKey = "MI-COND", MaterialCode = "GLUE", Condition = Cond(("DEPTH", "BOGUS")) }));
+    }
+
+    [Fact]
+    public async Task AddLine_ConditionDuplicateOption_Throws()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc,
+                new MiscBomLine { LineKey = "MI-COND", MaterialCode = "GLUE", Condition = Cond(("DEPTH", "DEEP"), ("DEPTH", "STD")) }));
+    }
+
+    [Fact]
+    public async Task UpdateLine_SetsCondition()   // replaces the 9A UpdateLine_PreservesCondition test
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        // FM-DEEP-FS2 starts with WHEN DEPTH=DEEP; the dialog now owns the condition, so update sets it.
+        await harness.Bom.UpdateLineAsync(Studio, Element, "FM-DEEP-FS2",
+            new FoamBomLine { LineKey = "FM-DEEP-FS2", FoamCode = "FM-DEEP-PAD", Quantity = 1, Condition = Cond(("HEAD", "HS1")) });
+        Assert.Equal(Cond(("HEAD", "HS1")), (await LineAsync(harness, "FM-DEEP-FS2"))!.Condition);
+
+        // Updating with a null condition makes the line unconditional.
+        await harness.Bom.UpdateLineAsync(Studio, Element, "FM-DEEP-FS2",
+            new FoamBomLine { LineKey = "FM-DEEP-FS2", FoamCode = "FM-DEEP-PAD", Quantity = 1, Condition = null });
+        Assert.Null((await LineAsync(harness, "FM-DEEP-FS2"))!.Condition);
+    }
+
+    // __MATERIAL__ is the synthetic selection ResolveStage injects from the resolved material type at
+    // pricing time (VariantCode.MaterialDefCode) - it is never an authored ChoiceOption, so
+    // ValidateCondition must carve it out rather than rejecting it as an unknown option. FSCH is the
+    // seeded Draft element (FJORD-STUDIO) whose LB-LEATHERWORK-FSCH labor line already carries this
+    // condition; keeping it on an update proves editing that line stays safe.
+    [Fact]
+    public async Task AddLine_WithMaterialCondition_DoesNotThrow()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc,
+            new MiscBomLine { LineKey = "MI-LEATHER", MaterialCode = "GLUE", Condition = Cond(("__MATERIAL__", "LEATHER-THICK")) });
+
+        var line = await LineAsync(harness, "MI-LEATHER");
+        Assert.Equal(Cond(("__MATERIAL__", "LEATHER-THICK")), line!.Condition);
+    }
+
+    [Fact]
+    public async Task UpdateLine_KeepingMaterialCondition_DoesNotThrow()
+    {
+        const string element = "FSCH";
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Bom.UpdateLineAsync(Studio, element, "LB-LEATHERWORK-FSCH",
+            new LaborBomLine { LineKey = "LB-LEATHERWORK-FSCH", OperationCode = "OP-LEATHERWORK", Units = 3, Condition = Cond(("__MATERIAL__", "LEATHER-THICK")) });
+
+        var bom = (await harness.Store.LoadModelAsync(Studio))!.Elements.Single(e => e.Code == element).Bom;
+        var updated = bom.Sections.SelectMany(s => s.Lines).Single(l => l.LineKey == "LB-LEATHERWORK-FSCH");
+        Assert.Equal(Cond(("__MATERIAL__", "LEATHER-THICK")), updated.Condition);
+        Assert.Equal(3m, ((LaborBomLine)updated).Units);
     }
 
     [Fact]

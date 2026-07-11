@@ -1,5 +1,6 @@
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Models;
@@ -473,5 +474,63 @@ public class OptionAuthoringServiceTests
         var rules = await RulesOnAsync(harness, "HEAD");
         Assert.Single(rules);
         Assert.Equal(new VisibilityRule("MECH", "REC", "HEAD"), rules[0]);
+    }
+
+    // --- BOM condition cascade ---
+
+    private static async Task<BomLine?> BomLineAsync(Harness harness, string lineKey)
+        => (await harness.Store.LoadModelAsync(Studio))!.Elements.Single(e => e.Code == Element)
+            .Bom.Sections.SelectMany(s => s.Lines).FirstOrDefault(l => l.LineKey == lineKey);
+
+    [Fact]
+    public async Task RenameOption_MigratesBomLineCondition()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        // DEPTH (STD/DEEP) is referenced by FM-DEEP-FS2's condition WHEN DEPTH=DEEP.
+        await harness.Options.UpdateOptionAsync(Studio, Element, "DEPTH", Choice("DEPTH2", affectsBom: true, "STD", "DEEP"));
+
+        var line = await BomLineAsync(harness, "FM-DEEP-FS2");
+        Assert.Equal(new ApplicabilityCondition([new SelectionKey("DEPTH2", "DEEP")]), line!.Condition);
+    }
+
+    [Fact]
+    public async Task RemoveOption_DropsConditionedBomLine()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Options.RemoveOptionAsync(Studio, Element, "DEPTH");
+
+        Assert.Null(await BomLineAsync(harness, "FM-DEEP-FS2"));      // dropped (condition dangled)
+        Assert.NotNull(await BomLineAsync(harness, "FM-BASE-FS2"));   // unconditional line survives
+    }
+
+    [Fact]
+    public async Task RemoveChoiceValue_DropsConditionedBomLine()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        // DEPTH keeps its code but drops the DEEP value -> FM-DEEP-FS2's WHEN DEPTH=DEEP no longer resolves.
+        await harness.Options.UpdateOptionAsync(Studio, Element, "DEPTH", Choice("DEPTH", affectsBom: true, "STD"));
+
+        Assert.Null(await BomLineAsync(harness, "FM-DEEP-FS2"));
+    }
+
+    [Fact]
+    public async Task RemoveNonReferencedOption_KeepsBomLines()
+    {
+        var (factory, conn) = NewFactory(); using var _ = conn;
+        await SeedModelStatesAsync(factory);
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Options.RemoveOptionAsync(Studio, Element, "STITCH");   // no BOM line references STITCH
+
+        Assert.NotNull(await BomLineAsync(harness, "FM-DEEP-FS2"));
     }
 }

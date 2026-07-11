@@ -210,9 +210,16 @@ else
 
     private async Task DeleteAsync(ProductOption existing)
     {
+        var visibilityRefs = _element!.Options.SelectMany(o => o.VisibilityRules)
+            .Count(r => r.TriggerOptionDefinitionCode == existing.OptionDefinitionCode);
+        var bomRefs = _element.Bom.Sections.SelectMany(s => s.Lines)
+            .Count(l => l.Condition is not null && l.Condition.RequiredSelections.Any(k => k.OptionDefinitionCode == existing.OptionDefinitionCode));
+        var impact = visibilityRefs == 0 && bomRefs == 0
+            ? string.Empty
+            : $" This option is referenced by {visibilityRefs} visibility rule(s) and {bomRefs} BOM line condition(s), which will be removed.";
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete option",
-            $"Delete '{existing.OptionDefinitionCode}'? If it affects the BOM, this also removes any named variants for this element.",
+            $"Delete '{existing.OptionDefinitionCode}'? If it affects the BOM, this also removes any named variants for this element.{impact}",
             yesText: "Delete",
             cancelText: "Cancel");
         if (confirmed != true)

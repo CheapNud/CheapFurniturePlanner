@@ -251,6 +251,102 @@ public class StudioElementBomPageTests : TestContext
         Assert.DoesNotContain(cutSortSection.Lines, l => l.LineKey == "CS-DUP");
     }
 
+    // DEPTH (STD/DEEP) is a ChoiceOption on FS2, so it's offered by the condition editor's option
+    // picker - the seed's own FM-DEEP-FS2 already carries WHEN DEPTH=DEEP.
+    [Fact]
+    public async Task AddLine_WithCondition_Persists()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add Misc line");
+
+        var pendingClick = cut.InvokeAsync(() => addButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<BomLineDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<BomLineDialog>();
+
+        var lineKeyField = dialog.FindComponent<MudTextField<string>>();
+        await dialog.InvokeAsync(() => lineKeyField.Instance.ValueChanged.InvokeAsync("MI-COND"));
+
+        // Misc renders one top-level material select before the condition editor's own option select.
+        var materialSelect = dialog.FindComponents<MudSelect<string>>()[0];
+        await dialog.InvokeAsync(() => materialSelect.Instance.ValueChanged.InvokeAsync("GLUE"));
+
+        await dialog.InvokeAsync(() => dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Add condition").Click());
+
+        var conditionOptionSelect = dialog.FindComponents<MudSelect<string>>()[1];
+        await dialog.InvokeAsync(() => conditionOptionSelect.Instance.ValueChanged.InvokeAsync("DEPTH"));
+
+        var conditionChoiceSelect = dialog.FindComponents<MudSelect<string>>()[2];
+        await dialog.InvokeAsync(() => conditionChoiceSelect.Instance.ValueChanged.InvokeAsync("DEEP"));
+
+        var submitButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Add");
+        await cut.InvokeAsync(() => submitButton.Click());
+        await pendingClick;
+
+        var bom = await BomAsync(factory);
+        var added = bom.Sections.Single(s => s.Kind == BomSectionKind.Misc).Lines.Single(l => l.LineKey == "MI-COND");
+        Assert.Equal(new ApplicabilityCondition([new SelectionKey("DEPTH", "DEEP")]), added.Condition);
+        cut.WaitForAssertion(() => Assert.Contains("when DEPTH=DEEP", cut.Markup));
+    }
+
+    [Fact]
+    public async Task Render_ShowsLineCondition()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+
+        Assert.Contains("when DEPTH=DEEP", FindRow(cut, "FM-DEEP-FS2").TextContent);
+    }
+
+    // FSCH is the seeded Draft element whose LB-LEATHERWORK-FSCH labor line is conditioned on the
+    // synthetic __MATERIAL__ selection - never an authored ChoiceOption, so it's absent from
+    // ConditionOptions and the dialog can't offer it as an editable row. Editing the line (touching an
+    // unrelated field, Units) must not silently drop that condition.
+    [Fact]
+    public async Task EditLine_WithMaterialCondition_PreservesIt()
+    {
+        const string chaiseElement = "FSCH";
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAuthoringStoreAsync(factory);
+        await SeedModelStatesAsync(factory);
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, chaiseElement));
+        var editButton = FindRowButton(cut, "LB-LEATHERWORK-FSCH", "Edit");
+
+        var pendingClick = cut.InvokeAsync(() => editButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<BomLineDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<BomLineDialog>();
+
+        Assert.Contains("also when material = LEATHER-THICK", dialog.Markup);
+
+        var numericFields = dialog.FindComponents<MudNumericField<decimal>>();
+        await dialog.InvokeAsync(() => numericFields[1].Instance.ValueChanged.InvokeAsync(5m));   // Quantity, then Units
+
+        var submitButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Save");
+        await cut.InvokeAsync(() => submitButton.Click());
+        await pendingClick;
+
+        var model = await new AuthoringCatalogueStore(factory).LoadModelAsync(Studio);
+        var updated = model!.Elements.Single(e => e.Code == chaiseElement).Bom.Sections
+            .SelectMany(s => s.Lines).Single(l => l.LineKey == "LB-LEATHERWORK-FSCH");
+        Assert.Equal(new ApplicabilityCondition([new SelectionKey("__MATERIAL__", "LEATHER-THICK")]), updated.Condition);
+        Assert.Equal(5m, ((LaborBomLine)updated).Units);
+    }
+
     [Fact]
     public async Task EditLine_ChangesField()
     {

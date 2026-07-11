@@ -106,6 +106,22 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
                     foreach (var line in section.Lines)
                     {
                         errors.AddRange(MissingBomCodes(element.Code, line, operationCodes, frameCodes, materialCodes, priceGroupCodes));
+                        if (line.Condition is not null)
+                        {
+                            foreach (var key in line.Condition.RequiredSelections)
+                            {
+                                // The synthetic __MATERIAL__ selection is never an authored ChoiceOption; it is
+                                // injected from the resolved material type at pricing time, so it always resolves.
+                                var conditionOption = element.Options.FirstOrDefault(o => o.OptionDefinitionCode == key.OptionDefinitionCode);
+                                var resolves = key.OptionDefinitionCode == VariantCode.MaterialDefCode
+                                    || (conditionOption is ChoiceOption conditionChoice
+                                        && conditionChoice.Values.Any(v => v.OptionChoiceCode == key.ChoiceCode));
+                                if (!resolves)
+                                {
+                                    errors.Add($"Element '{element.Code}' BOM line '{line.LineKey}' has a condition referencing unknown selection '{key.OptionDefinitionCode}:{key.ChoiceCode}'.");
+                                }
+                            }
+                        }
                     }
                 }
                 foreach (var rule in element.Substitutions)
