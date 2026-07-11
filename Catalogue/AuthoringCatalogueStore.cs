@@ -110,6 +110,20 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
         if (row is not null) { db.AuthoringModels.Remove(row); await db.SaveChangesAsync(ct); }
     }
 
+    // Upserts the single working-masters document. The masters doc holds only master lists, so Models
+    // is cleared before serialization (model docs live in AuthoringModels). This is the working-copy
+    // write P2's price editor uses; publishing snapshots the working copy into a versioned catalogue.
+    public async Task SaveMastersAsync(CatalogueSnapshot masters, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        masters.Models = [];
+        var json = CanonicalJson.Serialize(masters);
+        var row = await db.AuthoringMasters.FirstOrDefaultAsync(ct);
+        if (row is null) { db.AuthoringMasters.Add(new AuthoringMastersDocument { BundleJson = json }); }
+        else { row.BundleJson = json; }
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task<IReadOnlyList<string>> ModelCodesAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
