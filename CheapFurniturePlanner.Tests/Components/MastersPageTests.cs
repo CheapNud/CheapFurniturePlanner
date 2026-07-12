@@ -135,4 +135,17 @@ public class MastersPageTests : TestContext
 
         Assert.Contains((await store.LoadAsync()).PriceGroups, p => p.Code == "PG-NEW" && p.Kind == MaterialKind.Leather);
     }
+
+    [Fact]
+    public async Task Render_ShowsFabricGroupsTab()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<MastersPage>();
+
+        cut.WaitForAssertion(() => Assert.Contains("Fabric groups", cut.Markup));
+    }
 }
