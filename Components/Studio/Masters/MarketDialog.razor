@@ -1,0 +1,102 @@
+@using CheapFurniturePlanner.Domain.Pricing
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" Disabled="@(Market is not null)" />
+            <MudNumericField T="decimal" Label="Transport rate per unit" @bind-Value="_transportRate" Min="0" />
+            <MudNumericField T="decimal" Label="Fixed cost percent" @bind-Value="_fixedCostPercent" Min="0" />
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Markup steps</MudText>
+            @foreach (var step in _markupSteps)
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <MudTextField T="string" Label="Name" @bind-Value="step.Name" />
+                    <MudNumericField T="decimal" Label="Percent" @bind-Value="step.Percent" Min="0" />
+                    <MudSelect T="MarkupMode" Label="Mode" @bind-Value="step.Mode">
+                        @foreach (var mode in Enum.GetValues<MarkupMode>())
+                        {
+                            <MudSelectItem T="MarkupMode" Value="@mode">@mode</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Title="Remove step" OnClick="@(() => _markupSteps.Remove(step))" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@AddStep">Add markup step</MudButton>
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Rounding</MudText>
+            <MudNumericField T="int" Label="Line decimals" @bind-Value="_lineDecimals" Min="0" Max="28" />
+            <MudNumericField T="int" Label="Final decimals" @bind-Value="_finalDecimals" Min="0" Max="28" />
+            <MudSelect T="MidpointRounding" Label="Midpoint" @bind-Value="_midpoint">
+                @foreach (var midpoint in Enum.GetValues<MidpointRounding>())
+                {
+                    <MudSelectItem T="MidpointRounding" Value="@midpoint">@midpoint</MudSelectItem>
+                }
+            </MudSelect>
+            <MudCheckBox T="bool" Label="Round lines" @bind-Value="_roundLine" />
+            <MudCheckBox T="bool" Label="Round subtotal" @bind-Value="_roundSubtotal" />
+            <MudCheckBox T="bool" Label="Round final" @bind-Value="_roundFinal" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public MarketParameters? Market { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private sealed class MarkupRow
+    {
+        public string Name { get; set; } = string.Empty;
+        public decimal Percent { get; set; }
+        public MarkupMode Mode { get; set; } = MarkupMode.Compound;
+    }
+
+    private string _code = string.Empty;
+    private decimal _transportRate;
+    private decimal _fixedCostPercent;
+    private readonly List<MarkupRow> _markupSteps = [];
+    private int _lineDecimals = 2;
+    private int _finalDecimals = 2;
+    private MidpointRounding _midpoint = MidpointRounding.ToEven;
+    private bool _roundLine;
+    private bool _roundSubtotal;
+    private bool _roundFinal;
+
+    protected override void OnInitialized()
+    {
+        if (Market is not null)
+        {
+            _code = Market.Code;
+            _transportRate = Market.TransportRatePerUnit;
+            _fixedCostPercent = Market.FixedCostPercent;
+            _markupSteps.AddRange(Market.MarkupSteps.Select(step => new MarkupRow { Name = step.Name, Percent = step.Percent, Mode = step.Mode }));
+            _lineDecimals = Market.Rounding.LineDecimals;
+            _finalDecimals = Market.Rounding.FinalDecimals;
+            _midpoint = Market.Rounding.Midpoint;
+            _roundLine = Market.Rounding.Stages.HasFlag(RoundStage.Line);
+            _roundSubtotal = Market.Rounding.Stages.HasFlag(RoundStage.Subtotal);
+            _roundFinal = Market.Rounding.Stages.HasFlag(RoundStage.Final);
+        }
+    }
+
+    private void AddStep() => _markupSteps.Add(new MarkupRow());
+
+    private void Submit()
+    {
+        var steps = _markupSteps.Select(step => new MarkupStep(step.Name.Trim(), step.Percent, step.Mode)).ToList();
+        var stages = RoundStage.None;
+        if (_roundLine) { stages |= RoundStage.Line; }
+        if (_roundSubtotal) { stages |= RoundStage.Subtotal; }
+        if (_roundFinal) { stages |= RoundStage.Final; }
+        var rounding = new RoundingPolicy(_lineDecimals, _finalDecimals, _midpoint, stages);
+        MudDialog.Close(DialogResult.Ok(new MarketParameters(_code.Trim(), _transportRate, _fixedCostPercent, steps, rounding)));
+    }
+}

@@ -1,0 +1,67 @@
+@using CheapFurniturePlanner.Domain.Bom
+@using CheapFurniturePlanner.Domain.Pricing
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle2">Required selections (all must match)</MudText>
+            @foreach (var selectionRow in _selections)
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <MudTextField T="string" Label="Option code" @bind-Value="selectionRow.OptionDefinitionCode" />
+                    <MudTextField T="string" Label="Choice code" @bind-Value="selectionRow.ChoiceCode" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Title="Remove selection" OnClick="@(() => _selections.Remove(selectionRow))" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@AddSelection">Add selection</MudButton>
+            <MudNumericField T="decimal" Label="Adjustment" @bind-Value="_adjustment" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public CombinationPriceRule? Rule { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private sealed class SelectionRow
+    {
+        public string OptionDefinitionCode { get; set; } = string.Empty;
+        public string ChoiceCode { get; set; } = string.Empty;
+    }
+
+    private readonly List<SelectionRow> _selections = [];
+    private decimal _adjustment;
+
+    protected override void OnInitialized()
+    {
+        if (Rule is not null)
+        {
+            _adjustment = Rule.Adjustment;
+            _selections.AddRange(Rule.RequiredSelections.Select(key => new SelectionRow
+            {
+                OptionDefinitionCode = key.OptionDefinitionCode,
+                ChoiceCode = key.ChoiceCode
+            }));
+        }
+    }
+
+    private void AddSelection() => _selections.Add(new SelectionRow());
+
+    private void Submit()
+    {
+        var selections = _selections
+            .Select(row => new SelectionKey(row.OptionDefinitionCode.Trim(), row.ChoiceCode.Trim()))
+            .ToList();
+        MudDialog.Close(DialogResult.Ok(new CombinationPriceRule(selections, _adjustment)));
+    }
+}

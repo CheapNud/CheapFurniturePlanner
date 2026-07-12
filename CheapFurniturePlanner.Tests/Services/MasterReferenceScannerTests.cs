@@ -4,6 +4,7 @@ using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Fabrics;
 using CheapFurniturePlanner.Domain.Masters;
+using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Services;
 using Microsoft.Data.Sqlite;
@@ -33,7 +34,7 @@ public class MasterReferenceScannerTests
         {
             Code = "E-A",
             Name = "Element A",
-            Options = [],
+            Options = [new FabricOption { OptionDefinitionCode = "OPT-FAB", FabricGroupCodes = ["FG-A"] }],
             Bom = new BomDocument
             {
                 Sections =
@@ -60,7 +61,11 @@ public class MasterReferenceScannerTests
                 new PriceGroup { Code = "PG-FREE", Kind = MaterialKind.Fabric, RatePerMeter = 1m },
                 new PriceGroup { Code = "PG-CUT", Kind = MaterialKind.Fabric, RatePerMeter = 1m },
             ],
-            FabricGroups = [new FabricGroup { Code = "FG-A", PriceGroupCode = "PG-A" }],
+            FabricGroups =
+            [
+                new FabricGroup { Code = "FG-A", PriceGroupCode = "PG-A" },
+                new FabricGroup { Code = "FG-FREE", PriceGroupCode = "PG-A" }
+            ],
         };
     }
 
@@ -170,5 +175,43 @@ public class MasterReferenceScannerTests
 
         await service.DeleteSprayPriceAsync("FRAME-A");
         Assert.Empty((await store.LoadAsync()).SprayPrices);
+    }
+
+    [Fact]
+    public void FindReferences_FabricGroupUsedByOption_ReturnsNonEmpty()
+    {
+        Assert.NotEmpty(MasterReferenceScanner.FindReferences(BuildSnapshot(), MasterKind.FabricGroup, "FG-A"));
+    }
+
+    [Fact]
+    public void FindReferences_FabricGroupUnreferenced_ReturnsEmpty()
+    {
+        Assert.Empty(MasterReferenceScanner.FindReferences(BuildSnapshot(), MasterKind.FabricGroup, "FG-FREE"));
+    }
+
+    [Fact]
+    public async Task DeleteFabricGroup_Referenced_ThrowsMasterReferenced()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(BuildSnapshot());
+        var service = new MasterAuthoringService(store);
+
+        await Assert.ThrowsAsync<MasterReferencedException>(() => service.DeleteFabricGroupAsync("FG-A"));
+        Assert.Contains((await store.LoadAsync()).FabricGroups, g => g.Code == "FG-A");
+    }
+
+    [Fact]
+    public async Task DeleteFabricGroup_Unreferenced_Succeeds()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(BuildSnapshot());
+        var service = new MasterAuthoringService(store);
+
+        await service.DeleteFabricGroupAsync("FG-FREE");
+        Assert.DoesNotContain((await store.LoadAsync()).FabricGroups, g => g.Code == "FG-FREE");
     }
 }

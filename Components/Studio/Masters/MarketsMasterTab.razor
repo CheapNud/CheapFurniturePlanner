@@ -1,0 +1,72 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Pricing
+@using CheapFurniturePlanner.Services
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject MasterAuthoringService MasterAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add market</MudButton>
+    <MudTable Items="@_markets" Hover="true" Striped="true" Dense="true" Elevation="2" T="MarketParameters">
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Transport rate</MudTh>
+            <MudTh>Fixed cost %</MudTh>
+            <MudTh>Markup steps</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Code">@context.Code</MudTd>
+            <MudTd DataLabel="Transport rate">@context.TransportRatePerUnit</MudTd>
+            <MudTd DataLabel="Fixed cost %">@context.FixedCostPercent</MudTd>
+            <MudTd DataLabel="Markup steps">@context.MarkupSteps.Count</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<MarketParameters> _markets = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _markets = (await AuthoringCatalogueStore.LoadAsync()).Markets;
+
+    private async Task AddAsync()
+    {
+        var parameters = new DialogParameters<MarketDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<MarketDialog>("Add market", parameters);
+        await ApplyAsync(dialogRef, market => MasterAuthoringService.AddMarketAsync(market));
+    }
+
+    private async Task EditAsync(MarketParameters existing)
+    {
+        var parameters = new DialogParameters<MarketDialog> { { d => d.Market, existing }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<MarketDialog>("Edit market", parameters);
+        await ApplyAsync(dialogRef, market => MasterAuthoringService.UpdateMarketAsync(existing.Code, market));
+    }
+
+    private async Task DeleteAsync(MarketParameters existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete market", $"Delete '{existing.Code}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MasterAuthoringService.DeleteMarketAsync(existing.Code); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyAsync(IDialogReference dialogRef, Func<MarketParameters, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not MarketParameters market) { return; }
+        try { await apply(market); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+}

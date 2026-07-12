@@ -1,0 +1,98 @@
+@using CheapFurniturePlanner.Domain.Fabrics
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" Disabled="@(FabricGroup is not null)" />
+            <MudSelect T="string" Label="Price group" @bind-Value="_priceGroupCode" Required="true">
+                @foreach (var priceGroupCode in PriceGroupCodes)
+                {
+                    <MudSelectItem T="string" Value="@priceGroupCode">@priceGroupCode</MudSelectItem>
+                }
+            </MudSelect>
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Colors</MudText>
+            @foreach (var color in _colors)
+            {
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <MudTextField T="string" Label="Code" @bind-Value="color.Code" />
+                    <MudTextField T="string" Label="Name" @bind-Value="color.Name" />
+                    <MudNumericField T="decimal" Label="Purchase" @bind-Value="color.PurchasePrice" Min="0" />
+                    <MudNumericField T="decimal" Label="Shipping" @bind-Value="color.ShippingCost" Min="0" />
+                    <MudSelect T="FabricUnit" Label="Unit" @bind-Value="color.Unit">
+                        @foreach (var unit in Enum.GetValues<FabricUnit>())
+                        {
+                            <MudSelectItem T="FabricUnit" Value="@unit">@unit</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudTextField T="string" Label="Hex" @bind-Value="color.Hex" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Title="Remove color" OnClick="@(() => _colors.Remove(color))" />
+                </MudStack>
+            }
+            <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@AddColor">Add color</MudButton>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public FabricGroup? FabricGroup { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<string> PriceGroupCodes { get; set; } = [];
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _code = string.Empty;
+    private string _priceGroupCode = string.Empty;
+    private readonly List<FabricColor> _colors = [];
+
+    protected override void OnInitialized()
+    {
+        if (FabricGroup is not null)
+        {
+            _code = FabricGroup.Code;
+            _priceGroupCode = FabricGroup.PriceGroupCode;
+            // Colours are identified by Code. The inherited TradeItem fields (Id/Gtin/DisplayIndex/State)
+            // aren't authored on this surface, so they're intentionally not carried across an edit —
+            // revisit if fabric-colour GTIN authoring is ever added.
+            _colors.AddRange(FabricGroup.Colors.Select(existing => new FabricColor
+            {
+                Code = existing.Code,
+                Name = existing.Name,
+                PurchasePrice = existing.PurchasePrice,
+                ShippingCost = existing.ShippingCost,
+                Unit = existing.Unit,
+                Hex = existing.Hex
+            }));
+        }
+    }
+
+    private void AddColor() => _colors.Add(new FabricColor { Code = string.Empty, Name = string.Empty });
+
+    private void Submit()
+    {
+        var colors = _colors.Select(color => new FabricColor
+        {
+            Code = color.Code.Trim(),
+            Name = color.Name.Trim(),
+            PurchasePrice = color.PurchasePrice,
+            ShippingCost = color.ShippingCost,
+            Unit = color.Unit,
+            Hex = string.IsNullOrWhiteSpace(color.Hex) ? null : color.Hex.Trim()
+        }).ToList();
+        MudDialog.Close(DialogResult.Ok(new FabricGroup
+        {
+            Code = _code.Trim(),
+            PriceGroupCode = _priceGroupCode,
+            Colors = colors
+        }));
+    }
+}
