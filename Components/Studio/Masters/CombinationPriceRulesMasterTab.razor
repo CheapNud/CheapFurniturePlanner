@@ -1,0 +1,74 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Pricing
+@using CheapFurniturePlanner.Services
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject MasterAuthoringService MasterAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add rule</MudButton>
+    <MudTable Items="@_rows" Hover="true" Striped="true" Dense="true" Elevation="2" T="RuleRow">
+        <HeaderContent>
+            <MudTh>Required selections</MudTh>
+            <MudTh>Adjustment</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Required selections">@string.Join(", ", context.Rule.RequiredSelections.Select(k => $"{k.OptionDefinitionCode}={k.ChoiceCode}"))</MudTd>
+            <MudTd DataLabel="Adjustment">@context.Rule.Adjustment</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context.Index))">Delete</MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private sealed record RuleRow(CombinationPriceRule Rule, int Index);
+
+    private List<RuleRow> _rows = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        var rules = (await AuthoringCatalogueStore.LoadAsync()).CombinationPriceRules;
+        _rows = rules.Select((rule, index) => new RuleRow(rule, index)).ToList();
+    }
+
+    private async Task AddAsync()
+    {
+        var parameters = new DialogParameters<CombinationPriceRuleDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<CombinationPriceRuleDialog>("Add combination rule", parameters);
+        await ApplyAsync(dialogRef, rule => MasterAuthoringService.AddCombinationPriceRuleAsync(rule));
+    }
+
+    private async Task EditAsync(RuleRow row)
+    {
+        var parameters = new DialogParameters<CombinationPriceRuleDialog> { { d => d.Rule, row.Rule }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<CombinationPriceRuleDialog>("Edit combination rule", parameters);
+        await ApplyAsync(dialogRef, rule => MasterAuthoringService.UpdateCombinationPriceRuleAsync(row.Index, rule));
+    }
+
+    private async Task DeleteAsync(int index)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete rule", "Delete this combination price rule?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MasterAuthoringService.RemoveCombinationPriceRuleAsync(index); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyAsync(IDialogReference dialogRef, Func<CombinationPriceRule, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not CombinationPriceRule rule) { return; }
+        try { await apply(rule); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+}

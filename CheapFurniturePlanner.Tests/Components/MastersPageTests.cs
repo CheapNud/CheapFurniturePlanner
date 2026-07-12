@@ -148,4 +148,17 @@ public class MastersPageTests : TestContext
 
         cut.WaitForAssertion(() => Assert.Contains("Fabric groups", cut.Markup));
     }
+
+    [Fact]
+    public async Task Render_ShowsCombinationPricingTab()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<MastersPage>();
+
+        cut.WaitForAssertion(() => Assert.Contains("Combination pricing", cut.Markup));
+    }
 }
