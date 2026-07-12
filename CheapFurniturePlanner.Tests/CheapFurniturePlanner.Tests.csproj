@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CheapFurniturePlanner.csproj" />
+    <ProjectReference Include="..\CheapFurniturePlanner.Domain.Tests\CheapFurniturePlanner.Domain.Tests.csproj" />
   </ItemGroup>
 
 </Project>

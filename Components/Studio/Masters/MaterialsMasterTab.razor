@@ -1,0 +1,86 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Masters
+@using CheapFurniturePlanner.Services
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject MasterAuthoringService MasterAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
+        Add material
+    </MudButton>
+    <MudTable Items="@_materials" Hover="true" Striped="true" Dense="true" Elevation="2" T="Material">
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Unit cost</MudTh>
+            <MudTh>Unit</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Code">@context.Code</MudTd>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Unit cost">@context.UnitCost</MudTd>
+            <MudTd DataLabel="Unit">@context.Unit</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<Material> _materials = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _materials = (await AuthoringCatalogueStore.LoadAsync()).Materials;
+
+    private async Task AddAsync()
+    {
+        var parameters = new DialogParameters<MaterialDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<MaterialDialog>("Add material", parameters);
+        await ApplyAsync(dialogRef, material => MasterAuthoringService.AddMaterialAsync(material));
+    }
+
+    private async Task EditAsync(Material existing)
+    {
+        var parameters = new DialogParameters<MaterialDialog> { { d => d.Material, existing }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<MaterialDialog>("Edit material", parameters);
+        await ApplyAsync(dialogRef, material => MasterAuthoringService.UpdateMaterialAsync(existing.Code, material));
+    }
+
+    private async Task DeleteAsync(Material existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete material", $"Delete '{existing.Code}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try
+        {
+            await MasterAuthoringService.DeleteMaterialAsync(existing.Code);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyAsync(IDialogReference dialogRef, Func<Material, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not Material material) { return; }
+        try
+        {
+            await apply(material);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+}

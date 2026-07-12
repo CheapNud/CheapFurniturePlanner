@@ -1,0 +1,72 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Fabrics
+@using CheapFurniturePlanner.Services
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject MasterAuthoringService MasterAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add price group</MudButton>
+    <MudTable Items="@_priceGroups" Hover="true" Striped="true" Dense="true" Elevation="2" T="PriceGroup">
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Kind</MudTh>
+            <MudTh>Rate / meter</MudTh>
+            <MudTh>Material type</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Code">@context.Code</MudTd>
+            <MudTd DataLabel="Kind">@context.Kind</MudTd>
+            <MudTd DataLabel="Rate / meter">@context.RatePerMeter</MudTd>
+            <MudTd DataLabel="Material type">@context.MaterialTypeCode</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<PriceGroup> _priceGroups = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _priceGroups = (await AuthoringCatalogueStore.LoadAsync()).PriceGroups;
+
+    private async Task AddAsync()
+    {
+        var parameters = new DialogParameters<PriceGroupDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<PriceGroupDialog>("Add price group", parameters);
+        await ApplyAsync(dialogRef, priceGroup => MasterAuthoringService.AddPriceGroupAsync(priceGroup));
+    }
+
+    private async Task EditAsync(PriceGroup existing)
+    {
+        var parameters = new DialogParameters<PriceGroupDialog> { { d => d.PriceGroup, existing }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<PriceGroupDialog>("Edit price group", parameters);
+        await ApplyAsync(dialogRef, priceGroup => MasterAuthoringService.UpdatePriceGroupAsync(existing.Code, priceGroup));
+    }
+
+    private async Task DeleteAsync(PriceGroup existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete price group", $"Delete '{existing.Code}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MasterAuthoringService.DeletePriceGroupAsync(existing.Code); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyAsync(IDialogReference dialogRef, Func<PriceGroup, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not PriceGroup priceGroup) { return; }
+        try { await apply(priceGroup); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+}

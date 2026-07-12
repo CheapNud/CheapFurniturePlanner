@@ -1,0 +1,56 @@
+@using CheapFurniturePlanner.Domain.Fabrics
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" Disabled="@(PriceGroup is not null)" />
+            <MudSelect T="MaterialKind" Label="Kind" @bind-Value="_kind">
+                @foreach (var kind in Enum.GetValues<MaterialKind>())
+                {
+                    <MudSelectItem T="MaterialKind" Value="@kind">@kind</MudSelectItem>
+                }
+            </MudSelect>
+            <MudNumericField T="decimal" Label="Rate per meter" @bind-Value="_ratePerMeter" Min="0" />
+            <MudTextField T="string" Label="Material type code (optional)" @bind-Value="_materialTypeCode" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public PriceGroup? PriceGroup { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _code = string.Empty;
+    private MaterialKind _kind = MaterialKind.Fabric;
+    private decimal _ratePerMeter;
+    private string _materialTypeCode = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        if (PriceGroup is not null)
+        {
+            _code = PriceGroup.Code;
+            _kind = PriceGroup.Kind;
+            _ratePerMeter = PriceGroup.RatePerMeter;
+            _materialTypeCode = PriceGroup.MaterialTypeCode ?? string.Empty;
+        }
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new PriceGroup
+    {
+        Code = _code.Trim(),
+        Kind = _kind,
+        RatePerMeter = _ratePerMeter,
+        MaterialTypeCode = string.IsNullOrWhiteSpace(_materialTypeCode) ? null : _materialTypeCode.Trim()
+    }));
+}

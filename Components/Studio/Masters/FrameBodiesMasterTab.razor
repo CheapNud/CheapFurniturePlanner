@@ -1,0 +1,74 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Masters
+@using CheapFurniturePlanner.Services
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject MasterAuthoringService MasterAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add frame body</MudButton>
+    <MudTable Items="@_frameBodies" Hover="true" Striped="true" Dense="true" Elevation="2" T="FrameBody">
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Price</MudTh>
+            <MudTh>Unit cost</MudTh>
+            <MudTh>Machining</MudTh>
+            <MudTh>Refining</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Code">@context.Code</MudTd>
+            <MudTd DataLabel="Price">@context.Price</MudTd>
+            <MudTd DataLabel="Unit cost">@context.UnitCost</MudTd>
+            <MudTd DataLabel="Machining">@context.MachiningUnits</MudTd>
+            <MudTd DataLabel="Refining">@context.RefiningUnits</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<FrameBody> _frameBodies = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _frameBodies = (await AuthoringCatalogueStore.LoadAsync()).FrameBodies;
+
+    private async Task AddAsync()
+    {
+        var parameters = new DialogParameters<FrameBodyDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<FrameBodyDialog>("Add frame body", parameters);
+        await ApplyAsync(dialogRef, frameBody => MasterAuthoringService.AddFrameBodyAsync(frameBody));
+    }
+
+    private async Task EditAsync(FrameBody existing)
+    {
+        var parameters = new DialogParameters<FrameBodyDialog> { { d => d.FrameBody, existing }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<FrameBodyDialog>("Edit frame body", parameters);
+        await ApplyAsync(dialogRef, frameBody => MasterAuthoringService.UpdateFrameBodyAsync(existing.Code, frameBody));
+    }
+
+    private async Task DeleteAsync(FrameBody existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete frame body", $"Delete '{existing.Code}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MasterAuthoringService.DeleteFrameBodyAsync(existing.Code); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyAsync(IDialogReference dialogRef, Func<FrameBody, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not FrameBody frameBody) { return; }
+        try { await apply(frameBody); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+}

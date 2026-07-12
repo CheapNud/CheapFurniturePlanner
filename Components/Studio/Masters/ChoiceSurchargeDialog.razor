@@ -1,0 +1,45 @@
+@using CheapFurniturePlanner.Domain.Pricing
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Option choice code" @bind-Value="_optionChoiceCode" Required="true" Disabled="@(ChoiceSurcharge is not null)" />
+            <MudTextField T="string" Label="Element code (optional)" @bind-Value="_elementCode" Disabled="@(ChoiceSurcharge is not null)" />
+            <MudNumericField T="decimal" Label="Amount" @bind-Value="_amount" Min="0" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public ChoiceSurcharge? ChoiceSurcharge { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _optionChoiceCode = string.Empty;
+    private string _elementCode = string.Empty;
+    private decimal _amount;
+
+    protected override void OnInitialized()
+    {
+        if (ChoiceSurcharge is not null)
+        {
+            _optionChoiceCode = ChoiceSurcharge.OptionChoiceCode;
+            _elementCode = ChoiceSurcharge.ElementCode ?? string.Empty;
+            _amount = ChoiceSurcharge.Amount;
+        }
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new ChoiceSurcharge(
+        _optionChoiceCode.Trim(),
+        string.IsNullOrWhiteSpace(_elementCode) ? null : _elementCode.Trim(),
+        _amount)));
+}

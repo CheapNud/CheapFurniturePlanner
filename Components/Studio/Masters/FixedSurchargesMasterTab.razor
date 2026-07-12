@@ -1,0 +1,70 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Masters
+@using CheapFurniturePlanner.Services
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject MasterAuthoringService MasterAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add fixed surcharge</MudButton>
+    <MudTable Items="@_surcharges" Hover="true" Striped="true" Dense="true" Elevation="2" T="FixedSurcharge">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Section</MudTh>
+            <MudTh>Amount</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.Name</MudTd>
+            <MudTd DataLabel="Section">@context.AppliesToSection</MudTd>
+            <MudTd DataLabel="Amount">@context.Amount</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<FixedSurcharge> _surcharges = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _surcharges = (await AuthoringCatalogueStore.LoadAsync()).FixedSurcharges;
+
+    private async Task AddAsync()
+    {
+        var parameters = new DialogParameters<FixedSurchargeDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<FixedSurchargeDialog>("Add fixed surcharge", parameters);
+        await ApplyAsync(dialogRef, surcharge => MasterAuthoringService.AddFixedSurchargeAsync(surcharge));
+    }
+
+    private async Task EditAsync(FixedSurcharge existing)
+    {
+        var parameters = new DialogParameters<FixedSurchargeDialog> { { d => d.FixedSurcharge, existing }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<FixedSurchargeDialog>("Edit fixed surcharge", parameters);
+        await ApplyAsync(dialogRef, surcharge => MasterAuthoringService.UpdateFixedSurchargeAsync(existing.Name, surcharge));
+    }
+
+    private async Task DeleteAsync(FixedSurcharge existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete fixed surcharge", $"Delete '{existing.Name}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MasterAuthoringService.DeleteFixedSurchargeAsync(existing.Name); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyAsync(IDialogReference dialogRef, Func<FixedSurcharge, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not FixedSurcharge surcharge) { return; }
+        try { await apply(surcharge); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+}
