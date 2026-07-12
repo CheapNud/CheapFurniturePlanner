@@ -6,8 +6,9 @@ namespace CheapFurniturePlanner.Services;
 public enum MasterKind { Material, Operation, FrameBody, PriceGroup, SprayPrice, FixedSurcharge, ChoiceSurcharge, FabricGroup }
 
 // Pure scan of a catalogue snapshot for everything that references a given master, so the authoring
-// service can block deletion of a still-used master. Static (stateless pure function) — no DI. Only
-// Material/Operation/FrameBody/PriceGroup are referenced by anything; the other three return empty.
+// service can block deletion of a still-used master. Static (stateless pure function) — no DI.
+// Referenced kinds (Material/Operation/FrameBody/PriceGroup/FabricGroup) are scanned; SprayPrice/
+// FixedSurcharge/ChoiceSurcharge are referenced by nothing and return empty.
 public static class MasterReferenceScanner
 {
     public static IReadOnlyList<string> FindReferences(CatalogueSnapshot snapshot, MasterKind kind, string code)

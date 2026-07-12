@@ -60,6 +60,9 @@
         {
             _code = FabricGroup.Code;
             _priceGroupCode = FabricGroup.PriceGroupCode;
+            // Colours are identified by Code. The inherited TradeItem fields (Id/Gtin/DisplayIndex/State)
+            // aren't authored on this surface, so they're intentionally not carried across an edit —
+            // revisit if fabric-colour GTIN authoring is ever added.
             _colors.AddRange(FabricGroup.Colors.Select(existing => new FabricColor
             {
                 Code = existing.Code,

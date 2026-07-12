@@ -334,6 +334,18 @@ public class MasterAuthoringServiceTests
     }
 
     [Fact]
+    public async Task AddMarket_RoundingDecimalsAbove28_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, _) = await NewAsync(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.AddMarketAsync(new MarketParameters("MKT-BADROUND", 0m, 0m, [],
+                new RoundingPolicy(50, 2, MidpointRounding.ToEven, RoundStage.None))));
+    }
+
+    [Fact]
     public async Task DeleteMarket_NonLastSucceeds_LastThrows()
     {
         var (factory, conn) = NewFactory();

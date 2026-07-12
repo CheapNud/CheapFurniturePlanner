@@ -23,8 +23,8 @@
             }
             <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@AddStep">Add markup step</MudButton>
             <MudText Typo="Typo.subtitle2" Class="mt-2">Rounding</MudText>
-            <MudNumericField T="int" Label="Line decimals" @bind-Value="_lineDecimals" Min="0" />
-            <MudNumericField T="int" Label="Final decimals" @bind-Value="_finalDecimals" Min="0" />
+            <MudNumericField T="int" Label="Line decimals" @bind-Value="_lineDecimals" Min="0" Max="28" />
+            <MudNumericField T="int" Label="Final decimals" @bind-Value="_finalDecimals" Min="0" Max="28" />
             <MudSelect T="MidpointRounding" Label="Midpoint" @bind-Value="_midpoint">
                 @foreach (var midpoint in Enum.GetValues<MidpointRounding>())
                 {

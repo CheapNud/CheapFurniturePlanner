@@ -6,11 +6,12 @@ using CheapFurniturePlanner.Domain.Pricing;
 
 namespace CheapFurniturePlanner.Services;
 
-// Edits the seven flat pricing masters in the working masters document: load the full authoring
-// snapshot, mutate the target master list, persist via SaveMastersAsync (masters only). NEVER
-// republishes — edited masters reach the planner only when P1 publishes a new dated version.
-// Codes are immutable: every Update matches the existing row by its identity key and replaces the
-// scalars, pinning the key. Delete is guarded against references in MasterReferenceScanner (Task 2).
+// Edits the ten pricing masters (seven flat + three nested: fabric groups, combination rules,
+// markets) in the working masters document: load the full authoring snapshot, mutate the target
+// master list, persist via SaveMastersAsync (masters only). NEVER republishes — edited masters
+// reach the planner only when P1 publishes a new dated version. Identities are immutable on
+// update — matched by key (Code, or list index for combination price rules) and the scalars are
+// replaced, pinning the key. Delete is guarded against references in MasterReferenceScanner (Task 2).
 public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
 {
     // --- Material (identity: Code) ---
@@ -340,5 +341,7 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
         }
         RequireNonNegative(market.Rounding.LineDecimals, "Line decimals");
         RequireNonNegative(market.Rounding.FinalDecimals, "Final decimals");
+        if (market.Rounding.LineDecimals > 28) { throw new InvalidOperationException("Line decimals cannot exceed 28."); }
+        if (market.Rounding.FinalDecimals > 28) { throw new InvalidOperationException("Final decimals cannot exceed 28."); }
     }
 }
