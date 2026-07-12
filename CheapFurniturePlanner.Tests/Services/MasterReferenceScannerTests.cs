@@ -41,6 +41,7 @@ public class MasterReferenceScannerTests
                     new BomSection { Kind = BomSectionKind.Misc, Lines = [new MiscBomLine { LineKey = "L1", MaterialCode = "MAT-A" }] },
                     new BomSection { Kind = BomSectionKind.Labor, Lines = [new LaborBomLine { LineKey = "L2", OperationCode = "OP-A" }] },
                     new BomSection { Kind = BomSectionKind.Frame, Lines = [new FrameBomLine { LineKey = "L3", FrameBodyCode = "FRAME-A" }] },
+                    new BomSection { Kind = BomSectionKind.CutSort, Lines = [new CutSortBomLine { LineKey = "L4", SecondaryGroupMetrages = new Dictionary<string, decimal> { ["PG-CUT"] = 1.2m } }] },
                 ]
             },
             Substitutions = [new SubstitutionRule(new ApplicabilityCondition([]), "MAT-A", "MAT-B", null)],
@@ -53,7 +54,12 @@ public class MasterReferenceScannerTests
             Operations = [new Operation("OP-A", "A", 1m), new Operation("OP-FREE", "free", 1m)],
             FrameBodies = [new FrameBody("FRAME-A", 1m, 1m, 0m, 0m), new FrameBody("FRAME-FREE", 1m, 1m, 0m, 0m)],
             SprayPrices = [new SprayPrice("FRAME-A", 2m)],
-            PriceGroups = [new PriceGroup { Code = "PG-A", Kind = MaterialKind.Fabric, RatePerMeter = 1m }, new PriceGroup { Code = "PG-FREE", Kind = MaterialKind.Fabric, RatePerMeter = 1m }],
+            PriceGroups =
+            [
+                new PriceGroup { Code = "PG-A", Kind = MaterialKind.Fabric, RatePerMeter = 1m },
+                new PriceGroup { Code = "PG-FREE", Kind = MaterialKind.Fabric, RatePerMeter = 1m },
+                new PriceGroup { Code = "PG-CUT", Kind = MaterialKind.Fabric, RatePerMeter = 1m },
+            ],
             FabricGroups = [new FabricGroup { Code = "FG-A", PriceGroupCode = "PG-A" }],
         };
     }
@@ -63,6 +69,7 @@ public class MasterReferenceScannerTests
     [InlineData(MasterKind.Operation, "OP-A")]     // labor line
     [InlineData(MasterKind.FrameBody, "FRAME-A")]  // frame line + spray price
     [InlineData(MasterKind.PriceGroup, "PG-A")]    // fabric group
+    [InlineData(MasterKind.PriceGroup, "PG-CUT")]  // cutsort BOM line secondary metrage
     public void FindReferences_ReferencedMaster_ReturnsNonEmpty(MasterKind kind, string code)
     {
         Assert.NotEmpty(MasterReferenceScanner.FindReferences(BuildSnapshot(), kind, code));
@@ -124,6 +131,19 @@ public class MasterReferenceScannerTests
         var service = new MasterAuthoringService(store);
 
         await Assert.ThrowsAsync<MasterReferencedException>(() => service.DeleteFrameBodyAsync("FRAME-A"));
+    }
+
+    [Fact]
+    public async Task DeletePriceGroup_ReferencedByCutSortSecondaryMetrage_ThrowsMasterReferenced()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(BuildSnapshot());
+        var service = new MasterAuthoringService(store);
+
+        await Assert.ThrowsAsync<MasterReferencedException>(() => service.DeletePriceGroupAsync("PG-CUT"));
+        Assert.Contains((await store.LoadAsync()).PriceGroups, p => p.Code == "PG-CUT");
     }
 
     [Fact]

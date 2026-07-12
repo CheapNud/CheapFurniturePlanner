@@ -81,6 +81,29 @@ public class MasterAuthoringServiceTests
     }
 
     [Fact]
+    public async Task AddMaterial_EmptyCode_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, _) = await NewAsync(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.AddMaterialAsync(new Material("   ", "x", 1m, "m")));
+    }
+
+    [Fact]
+    public async Task AddMaterial_TrimmedDuplicate_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, _) = await NewAsync(factory);
+        await service.AddMaterialAsync(new Material("MAT-DUP", "first", 1m, "m"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.AddMaterialAsync(new Material("MAT-DUP ", "second", 1m, "m")));
+    }
+
+    [Fact]
     public async Task UpdateMaterial_EditsScalars_KeepsCode()
     {
         var (factory, conn) = NewFactory();

@@ -15,9 +15,11 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
     // --- Material (identity: Code) ---
     public Task AddMaterialAsync(Material material, CancellationToken ct = default) => MutateAsync(s =>
     {
-        RequireUnique(s.Materials.Select(m => m.Code), material.Code, "Material");
+        var code = material.Code.Trim();
+        RequireNonEmpty(code, "Material code");
+        RequireUnique(s.Materials.Select(m => m.Code), code, "Material");
         RequireNonNegative(material.UnitCost, "Unit cost");
-        s.Materials.Add(material with { Code = material.Code.Trim() });
+        s.Materials.Add(material with { Code = code });
     }, ct);
 
     public Task UpdateMaterialAsync(string code, Material material, CancellationToken ct = default) => MutateAsync(s =>
@@ -36,9 +38,11 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
     // --- Operation (identity: Code) ---
     public Task AddOperationAsync(Operation operation, CancellationToken ct = default) => MutateAsync(s =>
     {
-        RequireUnique(s.Operations.Select(o => o.Code), operation.Code, "Operation");
+        var code = operation.Code.Trim();
+        RequireNonEmpty(code, "Operation code");
+        RequireUnique(s.Operations.Select(o => o.Code), code, "Operation");
         RequireNonNegative(operation.UnitCost, "Unit cost");
-        s.Operations.Add(operation with { Code = operation.Code.Trim() });
+        s.Operations.Add(operation with { Code = code });
     }, ct);
 
     public Task UpdateOperationAsync(string code, Operation operation, CancellationToken ct = default) => MutateAsync(s =>
@@ -57,9 +61,11 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
     // --- FrameBody (identity: Code) ---
     public Task AddFrameBodyAsync(FrameBody frameBody, CancellationToken ct = default) => MutateAsync(s =>
     {
-        RequireUnique(s.FrameBodies.Select(f => f.Code), frameBody.Code, "Frame body");
+        var code = frameBody.Code.Trim();
+        RequireNonEmpty(code, "Frame body code");
+        RequireUnique(s.FrameBodies.Select(f => f.Code), code, "Frame body");
         RequireFrameBodyNonNegative(frameBody);
-        s.FrameBodies.Add(frameBody with { Code = frameBody.Code.Trim() });
+        s.FrameBodies.Add(frameBody with { Code = code });
     }, ct);
 
     public Task UpdateFrameBodyAsync(string code, FrameBody frameBody, CancellationToken ct = default) => MutateAsync(s =>
@@ -99,9 +105,11 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
     // --- PriceGroup (class; identity: Code; Id preserved on update) ---
     public Task AddPriceGroupAsync(PriceGroup priceGroup, CancellationToken ct = default) => MutateAsync(s =>
     {
-        RequireUnique(s.PriceGroups.Select(p => p.Code), priceGroup.Code, "Price group");
+        var code = priceGroup.Code.Trim();
+        RequireNonEmpty(code, "Price group code");
+        RequireUnique(s.PriceGroups.Select(p => p.Code), code, "Price group");
         RequireNonNegative(priceGroup.RatePerMeter, "Rate per meter");
-        priceGroup.Code = priceGroup.Code.Trim();
+        priceGroup.Code = code;
         s.PriceGroups.Add(priceGroup);
     }, ct);
 
@@ -124,9 +132,11 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
     // --- FixedSurcharge (identity: Name) ---
     public Task AddFixedSurchargeAsync(FixedSurcharge surcharge, CancellationToken ct = default) => MutateAsync(s =>
     {
-        RequireUnique(s.FixedSurcharges.Select(f => f.Name), surcharge.Name, "Fixed surcharge");
+        var name = surcharge.Name.Trim();
+        RequireNonEmpty(name, "Fixed surcharge name");
+        RequireUnique(s.FixedSurcharges.Select(f => f.Name), name, "Fixed surcharge");
         RequireNonNegative(surcharge.Amount, "Amount");
-        s.FixedSurcharges.Add(surcharge with { Name = surcharge.Name.Trim() });
+        s.FixedSurcharges.Add(surcharge with { Name = name });
     }, ct);
 
     public Task UpdateFixedSurchargeAsync(string name, FixedSurcharge surcharge, CancellationToken ct = default) => MutateAsync(s =>
@@ -144,12 +154,14 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
     // --- ChoiceSurcharge (identity: OptionChoiceCode + ElementCode) ---
     public Task AddChoiceSurchargeAsync(ChoiceSurcharge surcharge, CancellationToken ct = default) => MutateAsync(s =>
     {
-        if (s.ChoiceSurcharges.Any(c => c.OptionChoiceCode == surcharge.OptionChoiceCode && c.ElementCode == surcharge.ElementCode))
+        var optionChoiceCode = surcharge.OptionChoiceCode.Trim();
+        RequireNonEmpty(optionChoiceCode, "Option choice code");
+        if (s.ChoiceSurcharges.Any(c => c.OptionChoiceCode == optionChoiceCode && c.ElementCode == surcharge.ElementCode))
         {
-            throw new InvalidOperationException($"Choice surcharge for '{surcharge.OptionChoiceCode}' / '{surcharge.ElementCode ?? "(any element)"}' already exists.");
+            throw new InvalidOperationException($"Choice surcharge for '{optionChoiceCode}' / '{surcharge.ElementCode ?? "(any element)"}' already exists.");
         }
         RequireNonNegative(surcharge.Amount, "Amount");
-        s.ChoiceSurcharges.Add(surcharge);
+        s.ChoiceSurcharges.Add(surcharge with { OptionChoiceCode = optionChoiceCode });
     }, ct);
 
     public Task UpdateChoiceSurchargeAsync(string optionChoiceCode, string? elementCode, ChoiceSurcharge surcharge, CancellationToken ct = default) => MutateAsync(s =>
@@ -171,6 +183,11 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
         var snapshot = await store.LoadAsync(ct);
         mutate(snapshot);
         await store.SaveMastersAsync(snapshot, ct);
+    }
+
+    private static void RequireNonEmpty(string identity, string label)
+    {
+        if (string.IsNullOrWhiteSpace(identity)) { throw new InvalidOperationException($"{label} is required."); }
     }
 
     private static void RequireUnique(IEnumerable<string> existing, string code, string label)

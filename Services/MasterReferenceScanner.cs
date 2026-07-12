@@ -65,6 +65,13 @@ public static class MasterReferenceScanner
                 {
                     references.Add($"fabric group '{group.Code}'");
                 }
+                foreach (var (model, element, line) in Lines(snapshot))
+                {
+                    if (line is CutSortBomLine cutSort && cutSort.SecondaryGroupMetrages.ContainsKey(code))
+                    {
+                        references.Add($"{model.Code}/{element.Code} BOM line '{line.LineKey}'");
+                    }
+                }
                 break;
 
             // SprayPrice, FixedSurcharge, ChoiceSurcharge are referenced by nothing.
