@@ -161,4 +161,23 @@ public class MastersPageTests : TestContext
 
         cut.WaitForAssertion(() => Assert.Contains("Combination pricing", cut.Markup));
     }
+
+    [Fact]
+    public async Task Render_ShowsAllTenTabs()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<MastersPage>();
+
+        cut.WaitForAssertion(() =>
+        {
+            foreach (var tab in new[] { "Materials", "Operations", "Frame bodies", "Spray prices", "Price groups", "Fixed surcharges", "Choice surcharges", "Fabric groups", "Combination pricing", "Markets" })
+            {
+                Assert.Contains(tab, cut.Markup);
+            }
+        });
+    }
 }
