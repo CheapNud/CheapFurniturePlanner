@@ -29,6 +29,7 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
 
     public Task DeleteMaterialAsync(string code, CancellationToken ct = default) => MutateAsync(s =>
     {
+        Guard(s, MasterKind.Material, code);
         s.Materials.RemoveAll(m => m.Code == code);
     }, ct);
 
@@ -49,6 +50,7 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
 
     public Task DeleteOperationAsync(string code, CancellationToken ct = default) => MutateAsync(s =>
     {
+        Guard(s, MasterKind.Operation, code);
         s.Operations.RemoveAll(o => o.Code == code);
     }, ct);
 
@@ -69,6 +71,7 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
 
     public Task DeleteFrameBodyAsync(string code, CancellationToken ct = default) => MutateAsync(s =>
     {
+        Guard(s, MasterKind.FrameBody, code);
         s.FrameBodies.RemoveAll(f => f.Code == code);
     }, ct);
 
@@ -114,6 +117,7 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
 
     public Task DeletePriceGroupAsync(string code, CancellationToken ct = default) => MutateAsync(s =>
     {
+        Guard(s, MasterKind.PriceGroup, code);
         s.PriceGroups.RemoveAll(p => p.Code == code);
     }, ct);
 
@@ -186,6 +190,12 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
 
     private static int RequireIndex(int index, string label, string code)
         => index >= 0 ? index : throw new InvalidOperationException($"{label} '{code}' not found.");
+
+    private static void Guard(CatalogueSnapshot snapshot, MasterKind kind, string code)
+    {
+        var references = MasterReferenceScanner.FindReferences(snapshot, kind, code);
+        if (references.Count > 0) { throw new MasterReferencedException(kind, code, references); }
+    }
 
     private static void RequireFrameBodyNonNegative(FrameBody frameBody)
     {
