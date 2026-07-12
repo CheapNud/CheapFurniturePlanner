@@ -1,0 +1,74 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Masters
+@using CheapFurniturePlanner.Services
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject MasterAuthoringService MasterAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add spray price</MudButton>
+    <MudTable Items="@_sprayPrices" Hover="true" Striped="true" Dense="true" Elevation="2" T="SprayPrice">
+        <HeaderContent>
+            <MudTh>Frame body</MudTh>
+            <MudTh>Price</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Frame body">@context.FrameBodyCode</MudTd>
+            <MudTd DataLabel="Price">@context.Price</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<SprayPrice> _sprayPrices = [];
+    private IReadOnlyList<string> _frameBodyCodes = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        var masters = await AuthoringCatalogueStore.LoadAsync();
+        _sprayPrices = masters.SprayPrices;
+        _frameBodyCodes = masters.FrameBodies.Select(f => f.Code).ToList();
+    }
+
+    private async Task AddAsync()
+    {
+        var parameters = new DialogParameters<SprayPriceDialog> { { d => d.SubmitLabel, "Add" }, { d => d.FrameBodyCodes, _frameBodyCodes } };
+        var dialogRef = await DialogService.ShowAsync<SprayPriceDialog>("Add spray price", parameters);
+        await ApplyAsync(dialogRef, sprayPrice => MasterAuthoringService.AddSprayPriceAsync(sprayPrice));
+    }
+
+    private async Task EditAsync(SprayPrice existing)
+    {
+        var parameters = new DialogParameters<SprayPriceDialog> { { d => d.SprayPrice, existing }, { d => d.FrameBodyCodes, _frameBodyCodes }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<SprayPriceDialog>("Edit spray price", parameters);
+        await ApplyAsync(dialogRef, sprayPrice => MasterAuthoringService.UpdateSprayPriceAsync(existing.FrameBodyCode, sprayPrice));
+    }
+
+    private async Task DeleteAsync(SprayPrice existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete spray price", $"Delete spray price for '{existing.FrameBodyCode}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MasterAuthoringService.DeleteSprayPriceAsync(existing.FrameBodyCode); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyAsync(IDialogReference dialogRef, Func<SprayPrice, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not SprayPrice sprayPrice) { return; }
+        try { await apply(sprayPrice); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+}

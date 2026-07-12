@@ -1,0 +1,70 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Pricing
+@using CheapFurniturePlanner.Services
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject MasterAuthoringService MasterAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add choice surcharge</MudButton>
+    <MudTable Items="@_surcharges" Hover="true" Striped="true" Dense="true" Elevation="2" T="ChoiceSurcharge">
+        <HeaderContent>
+            <MudTh>Option choice</MudTh>
+            <MudTh>Element</MudTh>
+            <MudTh>Amount</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Option choice">@context.OptionChoiceCode</MudTd>
+            <MudTd DataLabel="Element">@(context.ElementCode ?? "(any)")</MudTd>
+            <MudTd DataLabel="Amount">@context.Amount</MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<ChoiceSurcharge> _surcharges = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _surcharges = (await AuthoringCatalogueStore.LoadAsync()).ChoiceSurcharges;
+
+    private async Task AddAsync()
+    {
+        var parameters = new DialogParameters<ChoiceSurchargeDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<ChoiceSurchargeDialog>("Add choice surcharge", parameters);
+        await ApplyAsync(dialogRef, surcharge => MasterAuthoringService.AddChoiceSurchargeAsync(surcharge));
+    }
+
+    private async Task EditAsync(ChoiceSurcharge existing)
+    {
+        var parameters = new DialogParameters<ChoiceSurchargeDialog> { { d => d.ChoiceSurcharge, existing }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<ChoiceSurchargeDialog>("Edit choice surcharge", parameters);
+        await ApplyAsync(dialogRef, surcharge => MasterAuthoringService.UpdateChoiceSurchargeAsync(existing.OptionChoiceCode, existing.ElementCode, surcharge));
+    }
+
+    private async Task DeleteAsync(ChoiceSurcharge existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete choice surcharge", $"Delete surcharge for '{existing.OptionChoiceCode}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MasterAuthoringService.DeleteChoiceSurchargeAsync(existing.OptionChoiceCode, existing.ElementCode); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyAsync(IDialogReference dialogRef, Func<ChoiceSurcharge, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not ChoiceSurcharge surcharge) { return; }
+        try { await apply(surcharge); }
+        catch (Exception ex) when (ex is InvalidOperationException or MasterReferencedException) { Snackbar.Add(ex.Message, Severity.Error); }
+        await ReloadAsync();
+    }
+}

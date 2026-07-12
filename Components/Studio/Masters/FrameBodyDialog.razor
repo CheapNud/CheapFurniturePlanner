@@ -1,0 +1,48 @@
+@using CheapFurniturePlanner.Domain.Masters
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" Disabled="@(FrameBody is not null)" />
+            <MudNumericField T="decimal" Label="Price" @bind-Value="_price" Min="0" />
+            <MudNumericField T="decimal" Label="Unit cost" @bind-Value="_unitCost" Min="0" />
+            <MudNumericField T="decimal" Label="Machining units" @bind-Value="_machiningUnits" Min="0" />
+            <MudNumericField T="decimal" Label="Refining units" @bind-Value="_refiningUnits" Min="0" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public FrameBody? FrameBody { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _code = string.Empty;
+    private decimal _price;
+    private decimal _unitCost;
+    private decimal _machiningUnits;
+    private decimal _refiningUnits;
+
+    protected override void OnInitialized()
+    {
+        if (FrameBody is not null)
+        {
+            _code = FrameBody.Code;
+            _price = FrameBody.Price;
+            _unitCost = FrameBody.UnitCost;
+            _machiningUnits = FrameBody.MachiningUnits;
+            _refiningUnits = FrameBody.RefiningUnits;
+        }
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new FrameBody(_code.Trim(), _price, _unitCost, _machiningUnits, _refiningUnits)));
+}

@@ -1,0 +1,48 @@
+@using CheapFurniturePlanner.Domain.Bom
+@using CheapFurniturePlanner.Domain.Masters
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" Disabled="@(FixedSurcharge is not null)" />
+            <MudSelect T="BomSectionKind" Label="Applies to section" @bind-Value="_appliesToSection">
+                @foreach (var kind in Enum.GetValues<BomSectionKind>())
+                {
+                    <MudSelectItem T="BomSectionKind" Value="@kind">@kind</MudSelectItem>
+                }
+            </MudSelect>
+            <MudNumericField T="decimal" Label="Amount" @bind-Value="_amount" Min="0" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public FixedSurcharge? FixedSurcharge { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _name = string.Empty;
+    private BomSectionKind _appliesToSection = BomSectionKind.Frame;
+    private decimal _amount;
+
+    protected override void OnInitialized()
+    {
+        if (FixedSurcharge is not null)
+        {
+            _name = FixedSurcharge.Name;
+            _appliesToSection = FixedSurcharge.AppliesToSection;
+            _amount = FixedSurcharge.Amount;
+        }
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new FixedSurcharge(_name.Trim(), _appliesToSection, _amount)));
+}

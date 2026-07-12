@@ -1,0 +1,54 @@
+@using CheapFurniturePlanner.Domain.Masters
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (SprayPrice is null)
+            {
+                <MudSelect T="string" Label="Frame body" @bind-Value="_frameBodyCode" Required="true">
+                    @foreach (var frameBodyCode in FrameBodyCodes)
+                    {
+                        <MudSelectItem T="string" Value="@frameBodyCode">@frameBodyCode</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            else
+            {
+                <MudTextField T="string" Label="Frame body" @bind-Value="_frameBodyCode" Disabled="true" />
+            }
+            <MudNumericField T="decimal" Label="Price" @bind-Value="_price" Min="0" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public SprayPrice? SprayPrice { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<string> FrameBodyCodes { get; set; } = [];
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _frameBodyCode = string.Empty;
+    private decimal _price;
+
+    protected override void OnInitialized()
+    {
+        if (SprayPrice is not null)
+        {
+            _frameBodyCode = SprayPrice.FrameBodyCode;
+            _price = SprayPrice.Price;
+        }
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new SprayPrice(_frameBodyCode, _price)));
+}

@@ -2,6 +2,7 @@ using Bunit;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Components.Pages;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Fabrics;
 using CheapFurniturePlanner.Domain.Masters;
 using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Services;
@@ -101,5 +102,37 @@ public class MastersPageTests : TestContext
         var ex = await Assert.ThrowsAsync<MasterReferencedException>(() => service.DeleteMaterialAsync(referenced));
         Assert.NotEmpty(ex.References);
         Assert.Contains((await store.LoadAsync()).Materials, m => m.Code == referenced);
+    }
+
+    [Fact]
+    public async Task Render_ShowsAllSevenTabs()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAsync(factory);
+        ConfigureServices(factory);
+
+        var cut = RenderComponent<MastersPage>();
+
+        cut.WaitForAssertion(() =>
+        {
+            foreach (var tab in new[] { "Materials", "Operations", "Frame bodies", "Spray prices", "Price groups", "Fixed surcharges", "Choice surcharges" })
+            {
+                Assert.Contains(tab, cut.Markup);
+            }
+        });
+    }
+
+    [Fact]
+    public async Task AddPriceGroup_ThroughService_PersistsAndPreservesIntegrity()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = await SeedAsync(factory);
+        var service = new MasterAuthoringService(store);
+
+        await service.AddPriceGroupAsync(new PriceGroup { Code = "PG-NEW", Kind = MaterialKind.Leather, RatePerMeter = 12m });
+
+        Assert.Contains((await store.LoadAsync()).PriceGroups, p => p.Code == "PG-NEW" && p.Kind == MaterialKind.Leather);
     }
 }
