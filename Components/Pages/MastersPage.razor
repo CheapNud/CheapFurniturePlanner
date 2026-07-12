@@ -1,0 +1,19 @@
+@page "/studio/masters"
+@using CheapFurniturePlanner.Components.Studio.Masters
+
+<PageTitle>Masters - Cheap Furniture Planner</PageTitle>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h5">Pricing masters</MudText>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PriceChange" Href="/studio/prices">
+            Publish a version
+        </MudButton>
+    </MudStack>
+    <MudText Typo="Typo.body2" Class="mt-2">Edits apply to the working catalogue. Publish a new dated version on the Prices page to make them effective.</MudText>
+</MudPaper>
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+    <MudTabPanel Text="Materials"><MaterialsMasterTab /></MudTabPanel>
+    <MudTabPanel Text="Operations"><OperationsMasterTab /></MudTabPanel>
+</MudTabs>

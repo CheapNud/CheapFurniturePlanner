@@ -1,0 +1,42 @@
+@using CheapFurniturePlanner.Domain.Masters
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" Disabled="@(Operation is not null)" />
+            <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" />
+            <MudNumericField T="decimal" Label="Unit cost" @bind-Value="_unitCost" Min="0" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Operation? Operation { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _code = string.Empty;
+    private string _name = string.Empty;
+    private decimal _unitCost;
+
+    protected override void OnInitialized()
+    {
+        if (Operation is not null)
+        {
+            _code = Operation.Code;
+            _name = Operation.Name;
+            _unitCost = Operation.UnitCost;
+        }
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new Operation(_code.Trim(), _name.Trim(), _unitCost)));
+}

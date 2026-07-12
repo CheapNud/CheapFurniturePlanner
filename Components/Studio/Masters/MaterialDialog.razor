@@ -1,0 +1,45 @@
+@using CheapFurniturePlanner.Domain.Masters
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" Disabled="@(Material is not null)" />
+            <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" />
+            <MudNumericField T="decimal" Label="Unit cost" @bind-Value="_unitCost" Min="0" />
+            <MudTextField T="string" Label="Unit" @bind-Value="_unit" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Material? Material { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _code = string.Empty;
+    private string _name = string.Empty;
+    private decimal _unitCost;
+    private string _unit = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        if (Material is not null)
+        {
+            _code = Material.Code;
+            _name = Material.Name;
+            _unitCost = Material.UnitCost;
+            _unit = Material.Unit;
+        }
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new Material(_code.Trim(), _name.Trim(), _unitCost, _unit.Trim())));
+}
