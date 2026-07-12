@@ -109,6 +109,7 @@ class Program
         builder.Services.AddScoped<ElementAuthoringService>();
         builder.Services.AddScoped<OptionAuthoringService>();
         builder.Services.AddScoped<BomAuthoringService>();
+        builder.Services.AddScoped<MasterAuthoringService>();
         builder.Services.AddScoped<ProductionIdentityService>();
         builder.Services.AddScoped<AuthoringCatalogueStore>();
 
