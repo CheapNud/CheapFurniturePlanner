@@ -3,7 +3,7 @@ using CheapFurniturePlanner.Domain.Pricing;
 
 namespace CheapFurniturePlanner.Services;
 
-public enum MasterKind { Material, Operation, FrameBody, PriceGroup, SprayPrice, FixedSurcharge, ChoiceSurcharge }
+public enum MasterKind { Material, Operation, FrameBody, PriceGroup, SprayPrice, FixedSurcharge, ChoiceSurcharge, FabricGroup }
 
 // Pure scan of a catalogue snapshot for everything that references a given master, so the authoring
 // service can block deletion of a still-used master. Static (stateless pure function) — no DI. Only
@@ -70,6 +70,16 @@ public static class MasterReferenceScanner
                     if (line is CutSortBomLine cutSort && cutSort.SecondaryGroupMetrages.ContainsKey(code))
                     {
                         references.Add($"{model.Code}/{element.Code} BOM line '{line.LineKey}'");
+                    }
+                }
+                break;
+
+            case MasterKind.FabricGroup:
+                foreach (var (model, element) in Elements(snapshot))
+                {
+                    foreach (var fabric in element.Options.OfType<Domain.Options.FabricOption>().Where(f => f.FabricGroupCodes.Contains(code)))
+                    {
+                        references.Add($"{model.Code}/{element.Code} fabric option '{fabric.OptionDefinitionCode}'");
                     }
                 }
                 break;

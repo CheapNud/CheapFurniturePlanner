@@ -180,4 +180,174 @@ public class MasterAuthoringServiceTests
         var after = CanonicalJson.Serialize(DemoWorld.Load());
         Assert.Equal(before, after);
     }
+
+    [Fact]
+    public async Task AddFabricGroup_PersistsWithColors()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, store) = await NewAsync(factory);
+        var priceGroup = (await store.LoadAsync()).PriceGroups[0].Code;
+
+        await service.AddFabricGroupAsync(new FabricGroup
+        {
+            Code = "FG-NEW",
+            PriceGroupCode = priceGroup,
+            Colors = [new FabricColor { Code = "COL-A", Name = "Sand", PurchasePrice = 3m, ShippingCost = 1m }]
+        });
+
+        var group = (await store.LoadAsync()).FabricGroups.Single(g => g.Code == "FG-NEW");
+        Assert.Equal(priceGroup, group.PriceGroupCode);
+        Assert.Single(group.Colors);
+    }
+
+    [Fact]
+    public async Task AddFabricGroup_UnknownPriceGroup_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, _) = await NewAsync(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.AddFabricGroupAsync(new FabricGroup
+        {
+            Code = "FG-BAD", PriceGroupCode = "PG-DOES-NOT-EXIST", Colors = []
+        }));
+    }
+
+    [Fact]
+    public async Task AddFabricGroup_DuplicateColorCode_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, store) = await NewAsync(factory);
+        var priceGroup = (await store.LoadAsync()).PriceGroups[0].Code;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.AddFabricGroupAsync(new FabricGroup
+        {
+            Code = "FG-DUP", PriceGroupCode = priceGroup,
+            Colors =
+            [
+                new FabricColor { Code = "COL-X", Name = "a", PurchasePrice = 1m, ShippingCost = 0m },
+                new FabricColor { Code = "COL-X", Name = "b", PurchasePrice = 1m, ShippingCost = 0m }
+            ]
+        }));
+    }
+
+    [Fact]
+    public async Task UpdateFabricGroup_PreservesId_ReplacesColors()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, store) = await NewAsync(factory);
+        var priceGroup = (await store.LoadAsync()).PriceGroups[0].Code;
+        await service.AddFabricGroupAsync(new FabricGroup { Code = "FG-UPD", PriceGroupCode = priceGroup, Colors = [] });
+        var originalId = (await store.LoadAsync()).FabricGroups.Single(g => g.Code == "FG-UPD").Id;
+
+        await service.UpdateFabricGroupAsync("FG-UPD", new FabricGroup
+        {
+            Code = "IGNORED", PriceGroupCode = priceGroup,
+            Colors = [new FabricColor { Code = "COL-B", Name = "Ash", PurchasePrice = 2m, ShippingCost = 0m }]
+        });
+
+        var group = (await store.LoadAsync()).FabricGroups.Single(g => g.Code == "FG-UPD");
+        Assert.Equal(originalId, group.Id);
+        Assert.Single(group.Colors);
+        Assert.DoesNotContain((await store.LoadAsync()).FabricGroups, g => g.Code == "IGNORED");
+    }
+
+    [Fact]
+    public async Task AddCombinationPriceRule_NegativeAdjustment_Accepted()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, store) = await NewAsync(factory);
+
+        await service.AddCombinationPriceRuleAsync(new CombinationPriceRule(
+            [new SelectionKey("OPT-A", "CH-1")], -15m));
+
+        Assert.Contains((await store.LoadAsync()).CombinationPriceRules, r => r.Adjustment == -15m);
+    }
+
+    [Fact]
+    public async Task AddCombinationPriceRule_EmptySelections_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, _) = await NewAsync(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.AddCombinationPriceRuleAsync(new CombinationPriceRule([], 5m)));
+    }
+
+    [Fact]
+    public async Task AddCombinationPriceRule_DuplicateOption_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, _) = await NewAsync(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.AddCombinationPriceRuleAsync(new CombinationPriceRule(
+                [new SelectionKey("OPT-A", "CH-1"), new SelectionKey("OPT-A", "CH-2")], 5m)));
+    }
+
+    [Fact]
+    public async Task UpdateAndRemoveCombinationPriceRule_ByIndex()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, store) = await NewAsync(factory);
+        await service.AddCombinationPriceRuleAsync(new CombinationPriceRule([new SelectionKey("OPT-A", "CH-1")], 5m));
+        var index = (await store.LoadAsync()).CombinationPriceRules.Count - 1;
+
+        await service.UpdateCombinationPriceRuleAsync(index, new CombinationPriceRule([new SelectionKey("OPT-B", "CH-9")], 8m));
+        Assert.Equal(8m, (await store.LoadAsync()).CombinationPriceRules[index].Adjustment);
+
+        await service.RemoveCombinationPriceRuleAsync(index);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.UpdateCombinationPriceRuleAsync(index, new CombinationPriceRule([new SelectionKey("OPT-B", "CH-9")], 1m)));
+    }
+
+    [Fact]
+    public async Task AddMarket_PersistsAndRejectsDuplicate()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, store) = await NewAsync(factory);
+
+        await service.AddMarketAsync(new MarketParameters("MKT-NEW", 1m, 2m, [], new RoundingPolicy(2, 2, MidpointRounding.ToEven, RoundStage.None)));
+        Assert.Contains((await store.LoadAsync()).Markets, m => m.Code == "MKT-NEW");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.AddMarketAsync(new MarketParameters("MKT-NEW", 1m, 2m, [], new RoundingPolicy(2, 2, MidpointRounding.ToEven, RoundStage.None))));
+    }
+
+    [Fact]
+    public async Task AddMarket_NegativeRate_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, _) = await NewAsync(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.AddMarketAsync(new MarketParameters("MKT-NEG", -1m, 0m, [], new RoundingPolicy(2, 2, MidpointRounding.ToEven, RoundStage.None))));
+    }
+
+    [Fact]
+    public async Task DeleteMarket_NonLastSucceeds_LastThrows()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, store) = await NewAsync(factory);
+        await service.AddMarketAsync(new MarketParameters("MKT-EXTRA", 0m, 0m, [], new RoundingPolicy(2, 2, MidpointRounding.ToEven, RoundStage.None)));
+
+        // Deleting a non-last market succeeds.
+        await service.DeleteMarketAsync("MKT-EXTRA");
+
+        // Delete down to the final remaining market; deleting that last one is blocked.
+        var remaining = (await store.LoadAsync()).Markets.Select(m => m.Code).ToList();
+        for (var i = 0; i < remaining.Count - 1; i++) { await service.DeleteMarketAsync(remaining[i]); }
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteMarketAsync(remaining[^1]));
+        Assert.Single((await store.LoadAsync()).Markets);
+    }
 }
