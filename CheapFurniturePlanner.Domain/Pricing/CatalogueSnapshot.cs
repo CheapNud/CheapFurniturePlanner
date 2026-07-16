@@ -11,6 +11,11 @@ public class CatalogueSnapshot
     public string ContentHash { get; set; } = "";
     public List<FurnitureModel> Models { get; set; } = [];
 
+    // Articles: the flat orderable identities (catalogue-backed variants + standalone/dropship).
+    // NOT a master list — stored in its own authoring document (AuthoringArticlesDocument), zeroed
+    // out of the masters doc by SaveMastersAsync exactly like Models. The pricing engine ignores it.
+    public List<Article> Articles { get; set; } = [];
+
     // Master lists (PriceGroups..Markets below): shared, non-model-specific reference data. Any new
     // master list added here must also be copied in AuthoringCatalogueStore.SeedFromAsync's masters
     // clone, or it will silently be dropped from the authoring store on seed/republish.
