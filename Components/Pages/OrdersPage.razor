@@ -3,6 +3,7 @@
 @inject OrderEntryService OrderEntryService
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
+@inject ISnackbar Snackbar
 
 <PageTitle>Orders - Cheap Furniture Planner</PageTitle>
 
@@ -62,7 +63,14 @@
         {
             return;
         }
-        var order = await OrderEntryService.CreateOrderAsync(result.SellerId, result.ConsumerId, result.MarketCode);
-        Navigation.NavigateTo($"/orders/{order.Id}");
+        try
+        {
+            var order = await OrderEntryService.CreateOrderAsync(result.SellerId, result.ConsumerId, result.MarketCode);
+            Navigation.NavigateTo($"/orders/{order.Id}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 }
