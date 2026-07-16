@@ -1,0 +1,76 @@
+@page "/orders"
+@using CheapFurniturePlanner.Components.Orders
+@inject OrderEntryService OrderEntryService
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Orders - Cheap Furniture Planner</PageTitle>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h5">Orders</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => NewOrderAsync())">
+            New order
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+<MudTable Items="@_orders" Hover="true" Striped="true" Dense="true" Elevation="2" T="Order"
+          OnRowClick="@((TableRowClickEventArgs<Order> args) => Navigation.NavigateTo($"/orders/{args.Item!.Id}"))">
+    <HeaderContent>
+        <MudTh>Order number</MudTh>
+        <MudTh>Seller</MudTh>
+        <MudTh>Consumer</MudTh>
+        <MudTh>State</MudTh>
+        <MudTh>Lines</MudTh>
+        <MudTh>Total</MudTh>
+        <MudTh>Pinned version</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Order number">@context.OrderNumber</MudTd>
+        <MudTd DataLabel="Seller">@context.Seller?.Name</MudTd>
+        <MudTd DataLabel="Consumer">@context.Consumer?.Name</MudTd>
+        <MudTd DataLabel="State">
+            <MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Lines">@context.Lines.Count</MudTd>
+        <MudTd DataLabel="Total">@OrderEntryService.OrderTotal(context).ToString("C2")</MudTd>
+        <MudTd DataLabel="Pinned version">@(context.PinnedCatalogueVersion ?? "—")</MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private List<Order> _orders = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _orders = await OrderEntryService.ListOrdersAsync();
+
+    private static Color StateColor(OrderState state) => state switch
+    {
+        OrderState.Draft => Color.Default,
+        OrderState.Placed => Color.Success,
+        OrderState.Cancelled => Color.Error,
+        _ => Color.Default,
+    };
+
+    private async Task NewOrderAsync()
+    {
+        var dialogRef = await DialogService.ShowAsync<NewOrderDialog>("New order");
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not NewOrderDialog.NewOrderResult result)
+        {
+            return;
+        }
+        try
+        {
+            var order = await OrderEntryService.CreateOrderAsync(result.SellerId, result.ConsumerId, result.MarketCode);
+            Navigation.NavigateTo($"/orders/{order.Id}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

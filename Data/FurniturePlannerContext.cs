@@ -43,6 +43,10 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<AuthoringModelDocument> AuthoringModels => Set<AuthoringModelDocument>();
     public DbSet<AuthoringMastersDocument> AuthoringMasters => Set<AuthoringMastersDocument>();
     public DbSet<AuthoringArticlesDocument> AuthoringArticles => Set<AuthoringArticlesDocument>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderLine> OrderLines => Set<OrderLine>();
+    public DbSet<Seller> Sellers => Set<Seller>();
+    public DbSet<Consumer> Consumers => Set<Consumer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -114,6 +114,9 @@ class Program
         builder.Services.AddScoped<MasterAuthoringService>();
         builder.Services.AddScoped<ProductionIdentityService>();
         builder.Services.AddScoped<AuthoringCatalogueStore>();
+        builder.Services.AddScoped<PartyService>();
+        builder.Services.AddScoped<PinnedCatalogueProvider>();
+        builder.Services.AddScoped<OrderEntryService>();
 
         // Run the app - all Avalonia complexity handled by the package
         builder.RunApp(args);
