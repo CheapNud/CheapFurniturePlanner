@@ -1,0 +1,158 @@
+@page "/parties"
+@using CheapFurniturePlanner.Components.Orders
+@inject PartyService PartyService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Parties - Cheap Furniture Planner</PageTitle>
+
+<MudStack Spacing="6">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6">Sellers</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddSellerAsync())">
+            Add seller
+        </MudButton>
+        <MudTable Items="@_sellers" Hover="true" Striped="true" Dense="true" Elevation="2" T="Seller">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Multiplier</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Multiplier">@context.Multiplier</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAsync(context))">Edit</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSellerAsync(context))">Delete</MudButton>
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudStack>
+
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6">Consumers</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddConsumerAsync())">
+            Add consumer
+        </MudButton>
+        <MudTable Items="@_consumers" Hover="true" Striped="true" Dense="true" Elevation="2" T="Consumer">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Contact</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Contact">@context.Contact</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditConsumerAsync(context))">Edit</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteConsumerAsync(context))">Delete</MudButton>
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudStack>
+</MudStack>
+
+@code {
+    private List<Seller> _sellers = [];
+    private List<Consumer> _consumers = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _sellers = await PartyService.SellersAsync();
+        _consumers = await PartyService.ConsumersAsync();
+    }
+
+    private async Task AddSellerAsync()
+    {
+        var parameters = new DialogParameters<SellerDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<SellerDialog>("Add seller", parameters);
+        await ApplySellerAsync(dialogRef, seller => PartyService.AddSellerAsync(seller.Name, seller.Multiplier));
+    }
+
+    private async Task EditSellerAsync(Seller existing)
+    {
+        var parameters = new DialogParameters<SellerDialog> { { d => d.Seller, existing }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<SellerDialog>("Edit seller", parameters);
+        await ApplySellerAsync(dialogRef, seller => PartyService.UpdateSellerAsync(existing.Id, seller.Name, seller.Multiplier));
+    }
+
+    private async Task DeleteSellerAsync(Seller existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete seller", $"Delete '{existing.Name}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try
+        {
+            await PartyService.DeleteSellerAsync(existing.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ApplySellerAsync(IDialogReference dialogRef, Func<Seller, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not Seller seller) { return; }
+        try
+        {
+            await apply(seller);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task AddConsumerAsync()
+    {
+        var parameters = new DialogParameters<ConsumerDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<ConsumerDialog>("Add consumer", parameters);
+        await ApplyConsumerAsync(dialogRef, consumer => PartyService.AddConsumerAsync(consumer.Name, consumer.Contact));
+    }
+
+    private async Task EditConsumerAsync(Consumer existing)
+    {
+        var parameters = new DialogParameters<ConsumerDialog> { { d => d.Consumer, existing }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<ConsumerDialog>("Edit consumer", parameters);
+        await ApplyConsumerAsync(dialogRef, consumer => PartyService.UpdateConsumerAsync(existing.Id, consumer.Name, consumer.Contact));
+    }
+
+    private async Task DeleteConsumerAsync(Consumer existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete consumer", $"Delete '{existing.Name}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try
+        {
+            await PartyService.DeleteConsumerAsync(existing.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyConsumerAsync(IDialogReference dialogRef, Func<Consumer, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not Consumer consumer) { return; }
+        try
+        {
+            await apply(consumer);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+}

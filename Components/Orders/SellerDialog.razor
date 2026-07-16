@@ -1,0 +1,37 @@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" />
+            <MudNumericField T="decimal" Label="Multiplier" @bind-Value="_multiplier" Min="0.01m" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Seller? Seller { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _name = string.Empty;
+    private decimal _multiplier = 1m;
+
+    protected override void OnInitialized()
+    {
+        if (Seller is not null)
+        {
+            _name = Seller.Name;
+            _multiplier = Seller.Multiplier;
+        }
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new Seller { Name = _name.Trim(), Multiplier = _multiplier }));
+}
