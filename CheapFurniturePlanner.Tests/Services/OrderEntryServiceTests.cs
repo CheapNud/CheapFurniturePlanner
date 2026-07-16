@@ -76,7 +76,7 @@ public class OrderEntryServiceTests
         return new Harness(publish, store, articles, parties, orders, seller, consumer);
     }
 
-    private static async Task<Article> StandaloneArticleAsync(Harness harness, IDbContextFactory<FurniturePlannerContext> factory)
+    private static async Task<Article> StandaloneArticleAsync(Harness harness)
     {
         var articles = await harness.Store.LoadArticlesAsync();
         return articles.Single(a => a.AssignedCode == "ART-DROP");
@@ -105,7 +105,7 @@ public class OrderEntryServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await NewOrderHarnessAsync(factory);
-        var article = await StandaloneArticleAsync(harness, factory);
+        var article = await StandaloneArticleAsync(harness);
         var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
         var current = await new DbCatalogueSource(factory).GetCurrentAsync();
 
@@ -128,7 +128,7 @@ public class OrderEntryServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await NewOrderHarnessAsync(factory);
-        var article = await StandaloneArticleAsync(harness, factory);
+        var article = await StandaloneArticleAsync(harness);
         var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
 
         await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1);
@@ -157,7 +157,7 @@ public class OrderEntryServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await NewOrderHarnessAsync(factory);
-        var article = await StandaloneArticleAsync(harness, factory);
+        var article = await StandaloneArticleAsync(harness);
         var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
         await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1);
         var line = (await harness.Orders.GetOrderAsync(order.Id))!.Lines.Single();
@@ -176,7 +176,7 @@ public class OrderEntryServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await NewOrderHarnessAsync(factory);
-        var article = await StandaloneArticleAsync(harness, factory);
+        var article = await StandaloneArticleAsync(harness);
         var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
         await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1);
         var pinnedVersion = (await harness.Orders.GetOrderAsync(order.Id))!.PinnedCatalogueVersion;
@@ -195,7 +195,7 @@ public class OrderEntryServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await NewOrderHarnessAsync(factory);
-        var article = await StandaloneArticleAsync(harness, factory);
+        var article = await StandaloneArticleAsync(harness);
         var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 0));
@@ -370,7 +370,7 @@ public class OrderEntryServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await NewOrderHarnessAsync(factory);
-        var article = await StandaloneArticleAsync(harness, factory);
+        var article = await StandaloneArticleAsync(harness);
         var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
         await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1);
         var line = (await harness.Orders.GetOrderAsync(order.Id))!.Lines.Single();
@@ -427,7 +427,7 @@ public class OrderEntryServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await NewOrderHarnessAsync(factory);
-        var article = await StandaloneArticleAsync(harness, factory);
+        var article = await StandaloneArticleAsync(harness);
 
         var draftOrder = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
         await harness.Orders.CancelAsync(draftOrder.Id);

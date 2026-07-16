@@ -171,9 +171,20 @@
 
     private async Task RepriceAsync()
     {
-        _pricingResult = _modelCode is null || _elementCode is null
-            ? null
-            : await OrderEntryService.PriceConfigurationAsync(Order, _modelCode, _elementCode, _selections, _fabricColorCode);
+        if (_modelCode is null || _elementCode is null)
+        {
+            _pricingResult = null;
+            return;
+        }
+        try
+        {
+            _pricingResult = await OrderEntryService.PriceConfigurationAsync(Order, _modelCode, _elementCode, _selections, _fabricColorCode);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _pricingResult = null;
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private async Task AddAsync()
