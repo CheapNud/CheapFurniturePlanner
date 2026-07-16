@@ -43,6 +43,7 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<VariantNaming> VariantNamings => Set<VariantNaming>();
     public DbSet<AuthoringModelDocument> AuthoringModels => Set<AuthoringModelDocument>();
     public DbSet<AuthoringMastersDocument> AuthoringMasters => Set<AuthoringMastersDocument>();
+    public DbSet<AuthoringArticlesDocument> AuthoringArticles => Set<AuthoringArticlesDocument>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
