@@ -1,0 +1,203 @@
+@page "/orders/{OrderId:int}"
+@using CheapFurniturePlanner.Components.Orders
+@using CheapFurniturePlanner.Domain.Catalog
+@using CheapFurniturePlanner.Domain.Serialization
+@inject OrderEntryService OrderEntryService
+@inject ISnackbar Snackbar
+
+<PageTitle>Order - Cheap Furniture Planner</PageTitle>
+
+@if (_order is null)
+{
+    <MudAlert Severity="Severity.Error">Order not found.</MudAlert>
+}
+else
+{
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudStack Spacing="2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h5">@_order.OrderNumber</MudText>
+                <MudChip T="string" Color="@StateColor(_order.State)">@_order.State</MudChip>
+            </MudStack>
+            <MudText Typo="Typo.body2">Seller: @_order.Seller?.Name — Consumer: @_order.Consumer?.Name — Market: @_order.MarketCode</MudText>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudChip T="string" Size="Size.Small">@(_order.PinnedCatalogueVersion ?? "not pinned yet")</MudChip>
+                <MudText Typo="Typo.subtitle1">Total: @OrderEntryService.OrderTotal(_order).ToString("C2")</MudText>
+            </MudStack>
+            @if (_order.State == OrderState.Draft)
+            {
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="PlaceAsync">Place order</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="CancelAsync">Cancel order</MudButton>
+                </MudStack>
+            }
+        </MudStack>
+    </MudPaper>
+
+    @if (_order.State == OrderState.Draft)
+    {
+        <MudTabs @ref="_tabs" Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4" Class="mb-4">
+            <MudTabPanel Text="Element">
+                <ElementEntryTab @ref="_elementTab" Order="_order" OnChanged="ReloadAsync" />
+            </MudTabPanel>
+            <MudTabPanel Text="Article">
+                <ArticleEntryTab Order="_order" OnChanged="ReloadAsync" OnConfigureArticle="OnConfigureArticle" />
+            </MudTabPanel>
+        </MudTabs>
+    }
+
+    <MudTable Items="@_order.Lines" Hover="true" Striped="true" Dense="true" Elevation="2" T="OrderLine">
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Kind</MudTh>
+            <MudTh>Quantity</MudTh>
+            <MudTh>Unit price</MudTh>
+            <MudTh>Line total</MudTh>
+            <MudTh>Supplier ref</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Code">
+                @if (context.Kind == OrderLineKind.ConfiguredElement && context.AssignedCode is null)
+                {
+                    <MudTooltip Text="unnamed variant">
+                        <MudText>@(context.VariantCode ?? "")</MudText>
+                    </MudTooltip>
+                }
+                else
+                {
+                    @(context.AssignedCode ?? context.VariantCode ?? "")
+                }
+            </MudTd>
+            <MudTd DataLabel="Kind">@(context.Kind == OrderLineKind.StandaloneArticle ? "Standalone" : "Configured")</MudTd>
+            <MudTd DataLabel="Quantity">
+                @if (_order.State == OrderState.Draft)
+                {
+                    <MudNumericField T="int" Value="@context.Quantity" Min="1" ValueChanged="@(qty => UpdateQuantityAsync(context, qty))" />
+                }
+                else
+                {
+                    @context.Quantity
+                }
+            </MudTd>
+            <MudTd DataLabel="Unit price">@context.UnitPrice.ToString("C2")</MudTd>
+            <MudTd DataLabel="Line total">@context.LineTotal.ToString("C2")</MudTd>
+            <MudTd DataLabel="Supplier ref">@context.SupplierRef</MudTd>
+            <MudTd DataLabel="Actions">
+                @if (_order.State == OrderState.Draft)
+                {
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => RemoveLineAsync(context))">Remove</MudButton>
+                        @if (context.Kind == OrderLineKind.ConfiguredElement)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => CopyToConfigurator(context))">Copy to configurator</MudButton>
+                        }
+                    </MudStack>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [Parameter]
+    public int OrderId { get; set; }
+
+    private Order? _order;
+    private MudTabs? _tabs;
+    private ElementEntryTab? _elementTab;
+
+    protected override async Task OnParametersSetAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _order = await OrderEntryService.GetOrderAsync(OrderId);
+
+    private static Color StateColor(OrderState state) => state switch
+    {
+        OrderState.Draft => Color.Default,
+        OrderState.Placed => Color.Success,
+        OrderState.Cancelled => Color.Error,
+        _ => Color.Default,
+    };
+
+    private async Task PlaceAsync()
+    {
+        try
+        {
+            await OrderEntryService.PlaceAsync(OrderId);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task CancelAsync()
+    {
+        try
+        {
+            await OrderEntryService.CancelAsync(OrderId);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task UpdateQuantityAsync(OrderLine line, int quantity)
+    {
+        try
+        {
+            await OrderEntryService.UpdateQuantityAsync(OrderId, line.Id, quantity);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task RemoveLineAsync(OrderLine line)
+    {
+        try
+        {
+            await OrderEntryService.RemoveLineAsync(OrderId, line.Id);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    // SIMPLIFICATION (per Task 6 dispatch): rather than an in-place Reconfigure-on-Add flow, this
+    // prefills the Element tab with the line's configuration so the user reviews/adjusts and Adds a
+    // fresh line, then Removes the old one themselves. Avoids a stateful "editing line N" mode.
+    private void CopyToConfigurator(OrderLine line)
+    {
+        if (line.ModelCode is null || line.ElementCode is null)
+        {
+            return;
+        }
+        var selections = CanonicalJson.Deserialize<Dictionary<string, string>>(line.SelectionsJson) ?? [];
+        _elementTab?.Prefill(line.ModelCode, line.ElementCode, selections);
+        if (_tabs is not null)
+        {
+            _tabs.ActivePanelIndex = 0;
+        }
+    }
+
+    private void OnConfigureArticle(Article article)
+    {
+        if (article.ModelCode is null || article.ElementCode is null)
+        {
+            return;
+        }
+        _elementTab?.Prefill(article.ModelCode, article.ElementCode, article.Selections);
+        if (_tabs is not null)
+        {
+            _tabs.ActivePanelIndex = 0;
+        }
+    }
+}

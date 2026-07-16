@@ -1,0 +1,59 @@
+@using CheapFurniturePlanner.Catalogue
+@inject PartyService PartyService
+@inject ICatalogueSource CatalogueSource
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudSelect T="int" Label="Seller" Value="_sellerId" ValueChanged="@((int id) => _sellerId = id)">
+                @foreach (var seller in _sellers)
+                {
+                    <MudSelectItem T="int" Value="@seller.Id">@seller.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="int" Label="Consumer" Value="_consumerId" ValueChanged="@((int id) => _consumerId = id)">
+                @foreach (var consumer in _consumers)
+                {
+                    <MudSelectItem T="int" Value="@consumer.Id">@consumer.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" Label="Market" Value="_marketCode" ValueChanged="@((string marketCode) => _marketCode = marketCode)">
+                @foreach (var marketCode in _marketCodes)
+                {
+                    <MudSelectItem T="string" Value="@marketCode">@marketCode</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!CanCreate)" OnClick="Submit">Create</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    // Returned via DialogResult.Ok — the page creates the order and navigates.
+    public record NewOrderResult(int SellerId, int ConsumerId, string MarketCode);
+
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private List<Seller> _sellers = [];
+    private List<Consumer> _consumers = [];
+    private List<string> _marketCodes = [];
+    private int _sellerId;
+    private int _consumerId;
+    private string _marketCode = string.Empty;
+
+    private bool CanCreate => _sellerId > 0 && _consumerId > 0 && !string.IsNullOrEmpty(_marketCode);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _sellers = await PartyService.SellersAsync();
+        _consumers = await PartyService.ConsumersAsync();
+        var snapshot = await CatalogueSource.GetCurrentAsync();
+        _marketCodes = snapshot.Markets.Select(m => m.Code).ToList();
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new NewOrderResult(_sellerId, _consumerId, _marketCode)));
+}

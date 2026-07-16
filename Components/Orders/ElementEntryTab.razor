@@ -1,0 +1,217 @@
+@using CheapFurniturePlanner.Configurator
+@using CheapFurniturePlanner.Domain.Catalog
+@using CheapFurniturePlanner.Domain.Fabrics
+@using CheapFurniturePlanner.Domain.Options
+@using CheapFurniturePlanner.Domain.Pricing
+@inject OrderEntryService OrderEntryService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudSelect T="string" Label="Model" Value="_modelCode" ValueChanged="@(modelCode => OnModelChanged(modelCode))">
+        @foreach (var model in _snapshot?.Models ?? [])
+        {
+            <MudSelectItem T="string" Value="@model.Code">@model.Code</MudSelectItem>
+        }
+    </MudSelect>
+
+    @if (_modelCode is not null)
+    {
+        <MudSelect T="string" Label="Element" Value="_elementCode" ValueChanged="@(elementCode => OnElementChangedAsync(elementCode))">
+            @foreach (var element in CurrentModel?.Elements ?? [])
+            {
+                <MudSelectItem T="string" Value="@element.Code">@element.Code</MudSelectItem>
+            }
+        </MudSelect>
+    }
+
+    @if (_element is not null)
+    {
+        @foreach (var option in VisibleOptions)
+        {
+            <MudSelect T="string"
+                       Label="@option.OptionDefinitionCode"
+                       Value="@_selections.GetValueOrDefault(option.OptionDefinitionCode)"
+                       ValueChanged="@(choice => OnOptionChangedAsync(option.OptionDefinitionCode, choice))">
+                @foreach (var value in option.Values.OrderBy(v => v.DisplayIndex))
+                {
+                    <MudSelectItem T="string" Value="@value.OptionChoiceCode">@value.OptionChoiceCode</MudSelectItem>
+                }
+            </MudSelect>
+        }
+
+        @if (_fabricGroups.Count > 0)
+        {
+            <MudSelect T="string" Label="Fabric group" Value="_fabricGroupCode" ValueChanged="@(groupCode => OnFabricGroupChangedAsync(groupCode))">
+                @foreach (var group in _fabricGroups)
+                {
+                    <MudSelectItem T="string" Value="@group.Code">@group.Code</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSelect T="string" Label="Fabric colour" Value="_fabricColorCode" ValueChanged="@(colorCode => OnFabricColorChangedAsync(colorCode))">
+                @foreach (var color in CurrentFabricGroup?.Colors ?? [])
+                {
+                    <MudSelectItem T="string" Value="@color.Code">@color.Code</MudSelectItem>
+                }
+            </MudSelect>
+        }
+
+        @if (_pricingResult is not null)
+        {
+            @if (_pricingResult.IsSuccess)
+            {
+                var elementBreakdown = _pricingResult.Breakdown!.Elements[0];
+                <MudText Typo="Typo.subtitle1">Unit price: @elementBreakdown.ElementTotal.ToString("C2")</MudText>
+                <MudSimpleTable Elevation="0" Dense="true">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in elementBreakdown.Lines)
+                        {
+                            <tr>
+                                <td>@line.Description</td>
+                                <td>@line.LineTotal.ToString("C2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning">
+                    @string.Join("; ", _pricingResult.Errors.Select(e => $"{e.Kind}: {e.Subject}"))
+                </MudAlert>
+            }
+        }
+
+        <MudNumericField T="int" Label="Quantity" Value="_quantity" Min="1" ValueChanged="@(qty => _quantity = qty)" />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAsync">Add to order</MudButton>
+    }
+</MudStack>
+
+@code {
+    [Parameter]
+    public Order Order { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private CatalogueSnapshot? _snapshot;
+    private string? _modelCode;
+    private string? _elementCode;
+    private Element? _element;
+    private Dictionary<string, string> _selections = [];
+    private IReadOnlyList<FabricGroup> _fabricGroups = [];
+    private string? _fabricGroupCode;
+    private string? _fabricColorCode;
+    private int _quantity = 1;
+    private PricingResult? _pricingResult;
+
+    private FurnitureModel? CurrentModel => _snapshot?.Models.FirstOrDefault(m => m.Code == _modelCode);
+    private FabricGroup? CurrentFabricGroup => _fabricGroups.FirstOrDefault(g => g.Code == _fabricGroupCode);
+    private IReadOnlyList<ChoiceOption> VisibleOptions => _element is null ? [] : ConfigurationResolver.VisibleOptions(_element, _selections);
+
+    protected override async Task OnInitializedAsync() => _snapshot = await OrderEntryService.SnapshotForAsync(Order);
+
+    private void OnModelChanged(string modelCode)
+    {
+        _modelCode = modelCode;
+        _elementCode = null;
+        _element = null;
+        _selections = [];
+        _fabricGroups = [];
+        _fabricGroupCode = null;
+        _fabricColorCode = null;
+        _pricingResult = null;
+    }
+
+    private async Task OnElementChangedAsync(string elementCode)
+    {
+        _elementCode = elementCode;
+        _element = CurrentModel?.Elements.FirstOrDefault(e => e.Code == elementCode);
+        if (_element is not null && _snapshot is not null)
+        {
+            _selections = ConfigurationResolver.DefaultSelections(_element);
+            _fabricGroups = ConfigurationResolver.FabricGroupsFor(_element, _snapshot);
+            _fabricColorCode = ConfigurationResolver.DefaultFabricColorCode(_element, _snapshot);
+            _fabricGroupCode = _fabricGroups.FirstOrDefault(g => g.Colors.Any(c => c.Code == _fabricColorCode))?.Code;
+        }
+        else
+        {
+            _selections = [];
+            _fabricGroups = [];
+            _fabricGroupCode = null;
+            _fabricColorCode = null;
+        }
+        await RepriceAsync();
+    }
+
+    private async Task OnOptionChangedAsync(string optionDefinitionCode, string choice)
+    {
+        _selections[optionDefinitionCode] = choice;
+        await RepriceAsync();
+    }
+
+    private async Task OnFabricGroupChangedAsync(string groupCode)
+    {
+        _fabricGroupCode = groupCode;
+        _fabricColorCode = CurrentFabricGroup?.Colors.FirstOrDefault()?.Code;
+        await RepriceAsync();
+    }
+
+    private async Task OnFabricColorChangedAsync(string colorCode)
+    {
+        _fabricColorCode = colorCode;
+        await RepriceAsync();
+    }
+
+    private async Task RepriceAsync()
+    {
+        _pricingResult = _modelCode is null || _elementCode is null
+            ? null
+            : await OrderEntryService.PriceConfigurationAsync(Order, _modelCode, _elementCode, _selections, _fabricColorCode);
+    }
+
+    private async Task AddAsync()
+    {
+        if (_modelCode is null || _elementCode is null)
+        {
+            return;
+        }
+        try
+        {
+            await OrderEntryService.AddConfiguredLineAsync(Order.Id, _modelCode, _elementCode, _selections, _fabricColorCode, _quantity);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await OnChanged.InvokeAsync();
+    }
+
+    // Reverse direction from ArticleEntryTab's "Configure": prefills model/element/selections so the
+    // user can review/adjust and Add — the fabric colour is intentionally left for the user to pick.
+    public void Prefill(string modelCode, string elementCode, IReadOnlyDictionary<string, string> selections)
+    {
+        _modelCode = modelCode;
+        _elementCode = elementCode;
+        _element = CurrentModel?.Elements.FirstOrDefault(e => e.Code == elementCode);
+        _selections = new Dictionary<string, string>(selections);
+        _fabricGroups = _element is not null && _snapshot is not null ? ConfigurationResolver.FabricGroupsFor(_element, _snapshot) : [];
+        _fabricGroupCode = null;
+        _fabricColorCode = null;
+        _pricingResult = null;
+        StateHasChanged();
+        _ = RepriceAndRenderAsync();
+    }
+
+    private async Task RepriceAndRenderAsync()
+    {
+        await RepriceAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+}

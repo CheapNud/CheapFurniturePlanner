@@ -1,0 +1,75 @@
+@using CheapFurniturePlanner.Domain.Catalog
+@using CheapFurniturePlanner.Domain.Pricing
+@inject OrderEntryService OrderEntryService
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="3">
+    <MudTextField T="string" Label="Search" Value="_search" ValueChanged="@((string value) => _search = value)" />
+    <MudTable Items="@FilteredArticles" Hover="true" Striped="true" Dense="true" Elevation="0" T="Article">
+        <HeaderContent>
+            <MudTh>Code</MudTh>
+            <MudTh>Type</MudTh>
+            <MudTh>Details</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Code">@context.AssignedCode</MudTd>
+            <MudTd DataLabel="Type">@(context.IsCatalogueBacked() ? "configured" : "standalone")</MudTd>
+            <MudTd DataLabel="Details">
+                @if (context.IsCatalogueBacked())
+                {
+                    @($"{context.ModelCode} / {context.ElementCode}")
+                }
+                else
+                {
+                    @($"{context.ManualPrice?.ToString("C2")} — {context.SupplierRef}")
+                }
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                @if (context.IsCatalogueBacked())
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => OnConfigureArticle.InvokeAsync(context))">Configure</MudButton>
+                }
+                else
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary" OnClick="@(() => AddStandaloneAsync(context))">Add</MudButton>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    [Parameter]
+    public Order Order { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<Article> OnConfigureArticle { get; set; }
+
+    private CatalogueSnapshot? _snapshot;
+    private string _search = string.Empty;
+
+    private IEnumerable<Article> FilteredArticles =>
+        (_snapshot?.Articles ?? [])
+        .Where(a => string.IsNullOrWhiteSpace(_search)
+            || a.AssignedCode.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || (a.Name?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync() => _snapshot = await OrderEntryService.SnapshotForAsync(Order);
+
+    private async Task AddStandaloneAsync(Article article)
+    {
+        try
+        {
+            await OrderEntryService.AddStandaloneLineAsync(Order.Id, article.Id, 1);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await OnChanged.InvokeAsync();
+    }
+}
