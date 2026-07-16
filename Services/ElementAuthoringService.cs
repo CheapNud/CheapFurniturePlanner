@@ -11,8 +11,8 @@ public sealed class StructureFrozenException(string modelCode)
 // Draft-only authoring of a model's element list, persisted through the authoring document store.
 // Never republishes: structure edits are gated to Draft, and Draft models are absent from the
 // published (Active-only) snapshot the planner reads. Renaming/removing an element prunes its now-
-// stranded VariantNaming rows, whose VariantCode is prefixed with the element's code.
-public sealed class ElementAuthoringService(IDbContextFactory<FurniturePlannerContext> factory, AuthoringCatalogueStore store, ModelPublishService publish)
+// stranded catalogue-backed articles, whose VariantCode is prefixed with the element's code.
+public sealed class ElementAuthoringService(IDbContextFactory<FurniturePlannerContext> factory, AuthoringCatalogueStore store, ModelPublishService publish, ArticleAuthoringService articles)
 {
     public async Task AddElementAsync(string modelCode, Element element, CancellationToken ct = default)
     {
@@ -94,13 +94,7 @@ public sealed class ElementAuthoringService(IDbContextFactory<FurniturePlannerCo
     }
 
     private async Task PruneNamingRowsAsync(string modelCode, string elementCode, CancellationToken ct)
-    {
-        await using var db = await factory.CreateDbContextAsync(ct);
-        var prefix = elementCode + "-";
-        await db.VariantNamings
-            .Where(n => n.ModelCode == modelCode && (n.VariantCode == elementCode || n.VariantCode.StartsWith(prefix)))
-            .ExecuteDeleteAsync(ct);
-    }
+        => await articles.PruneForElementAsync(modelCode, elementCode, ct);
 
     private static void Renumber(FurnitureModel model)
     {

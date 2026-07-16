@@ -14,7 +14,7 @@ namespace CheapFurniturePlanner.Tests.Services;
 
 // ProductionIdentityService is a thin resolve-only bridge between a placement and the Domain
 // ProductionIdentityResolver: it locates the owning model, pulls the studio's released
-// variant names (VariantNamingService), and resolves the variant code against the always-published
+// variant names (ArticleAuthoringService), and resolves the variant code against the always-published
 // (Active) state - a placement is Released if its variant was named, else Composed.
 public class ProductionIdentityServiceTests
 {
@@ -47,18 +47,18 @@ public class ProductionIdentityServiceTests
     }
 
     // FJORD is never seeded into ModelStates here, so ModelPublishService.GetStateAsync defaults it
-    // to Draft - which is exactly what VariantNamingService.AssignAsync requires to accept a naming.
+    // to Draft - which is exactly what ArticleAuthoringService.AssignAsync requires to accept a naming.
     // That default-Draft gate is unrelated to the Active state ProductionIdentityService itself passes
     // to the resolver, so seeding a name this way does not contradict FJORD being released.
     // ModelPublishService's ctor now takes an AuthoringCatalogueStore, but this suite only ever
-    // exercises VariantNamingService.AssignAsync's GetStateAsync gate check (never
+    // exercises ArticleAuthoringService.AssignAsync's GetStateAsync gate check (never
     // RepublishAsync/GetAuthoringModelsAsync), so the store is wired but never needs seeding here.
-    private static VariantNamingService NewNaming(IDbContextFactory<FurniturePlannerContext> factory)
+    private static ArticleAuthoringService NewNaming(IDbContextFactory<FurniturePlannerContext> factory)
     {
         var source = new DbCatalogueSource(factory);
         var store = new AuthoringCatalogueStore(factory);
         var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
-        return new VariantNamingService(factory, publish);
+        return new ArticleAuthoringService(store, publish);
     }
 
     private static CatalogueSnapshot LoadFjordSnapshot()
@@ -115,7 +115,7 @@ public class ProductionIdentityServiceTests
 
         var composed = await service.ResolveForPlacementAsync(placement);
         Assert.NotNull(composed);
-        await naming.AssignAsync("FJORD", composed!.VariantCode, "STUDIO-A");
+        await naming.AssignAsync("FJORD", "FJ2", composed!.VariantCode, placement.Selections, "STUDIO-A");
 
         var identity = await service.ResolveForPlacementAsync(placement);
 

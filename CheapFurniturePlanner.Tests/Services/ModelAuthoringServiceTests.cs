@@ -37,7 +37,7 @@ public class ModelAuthoringServiceTests
         public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
     }
 
-    private sealed record Harness(ModelAuthoringService Authoring, AuthoringCatalogueStore Store, ModelPublishService Publish, DbCatalogueSource Source);
+    private sealed record Harness(ModelAuthoringService Authoring, AuthoringCatalogueStore Store, ModelPublishService Publish, DbCatalogueSource Source, ArticleAuthoringService Articles);
 
     // RepublishAsync/GetAuthoringModelsAsync read the authoring store rather than the embedded seed
     // directly, so the store must be seeded from that same embedded seed for the harness to have
@@ -48,8 +48,9 @@ public class ModelAuthoringServiceTests
         await store.SeedFromAsync(SeedCatalogue.Load());
         var source = new DbCatalogueSource(factory);
         var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
-        var authoring = new ModelAuthoringService(factory, store, publish);
-        return new Harness(authoring, store, publish, source);
+        var articles = new ArticleAuthoringService(store, publish);
+        var authoring = new ModelAuthoringService(factory, store, publish, articles);
+        return new Harness(authoring, store, publish, source, articles);
     }
 
     [Fact]
@@ -175,19 +176,18 @@ public class ModelAuthoringServiceTests
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await NewHarnessAsync(factory);
-        var now = DateTime.UtcNow;
         await using (var db = factory.CreateDbContext())
         {
             db.ModelStates.Add(new ModelStateRecord { ModelCode = Studio, State = TradeItemState.Draft });
-            db.VariantNamings.Add(new VariantNaming { ModelCode = Studio, VariantCode = "V1", AssignedCode = "STUDIO-A", CreatedAt = now, UpdatedAt = now });
             await db.SaveChangesAsync();
         }
+        await harness.Store.SaveArticlesAsync([new Article { Id = 1, AssignedCode = "STUDIO-A", ModelCode = Studio, ElementCode = "FS2", VariantCode = "V1" }]);
 
         await harness.Authoring.DeleteAsync(Studio);
 
         Assert.DoesNotContain(Studio, await harness.Store.ModelCodesAsync());
         await using var verify = factory.CreateDbContext();
         Assert.False(await verify.ModelStates.AnyAsync(s => s.ModelCode == Studio));
-        Assert.False(await verify.VariantNamings.AnyAsync(n => n.ModelCode == Studio));
+        Assert.DoesNotContain(await harness.Store.LoadArticlesAsync(), a => a.ModelCode == Studio);
     }
 }

@@ -6,7 +6,7 @@ using CheapFurniturePlanner.ViewModels;
 
 namespace CheapFurniturePlanner.Services;
 
-public sealed class ProductionIdentityService(ICatalogueSource catalogue, VariantNamingService naming)
+public sealed class ProductionIdentityService(ICatalogueSource catalogue, ArticleAuthoringService articles)
 {
     public async Task<ProductionIdentity?> ResolveForPlacementAsync(FurniturePlannerViewModel placement, CancellationToken ct = default)
     {
@@ -18,7 +18,7 @@ public sealed class ProductionIdentityService(ICatalogueSource catalogue, Varian
             [new ElementSelection(placement.ElementCode, 1, placement.Selections, placement.FabricColorCode)]);
         // Placed models are always published (Active); a variant is Released if the studio
         // named it, otherwise it falls back to the composed code.
-        var suggestions = await naming.NamesForModelAsync(model.Code, ct);
+        var suggestions = await articles.NamesForModelAsync(model.Code, ct);
         return ProductionIdentityResolver.Resolve(snapshot, config, suggestions, TradeItemState.Active).FirstOrDefault();
     }
 }

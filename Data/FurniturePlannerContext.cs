@@ -40,7 +40,6 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<PlannerFurnitureItem> PlannerFurnitureItems { get; set; }
     public DbSet<PublishedCatalogue> PublishedCatalogues { get; set; }
     public DbSet<ModelStateRecord> ModelStates => Set<ModelStateRecord>();
-    public DbSet<VariantNaming> VariantNamings => Set<VariantNaming>();
     public DbSet<AuthoringModelDocument> AuthoringModels => Set<AuthoringModelDocument>();
     public DbSet<AuthoringMastersDocument> AuthoringMasters => Set<AuthoringMastersDocument>();
     public DbSet<AuthoringArticlesDocument> AuthoringArticles => Set<AuthoringArticlesDocument>();
@@ -146,8 +145,6 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
 
         modelBuilder.Entity<ModelStateRecord>().HasIndex(s => s.ModelCode).IsUnique();
         modelBuilder.Entity<ModelStateRecord>().Property(s => s.State).HasConversion<string>();
-
-        modelBuilder.Entity<VariantNaming>().HasIndex(n => new { n.ModelCode, n.VariantCode }).IsUnique();
 
         modelBuilder.Entity<AuthoringModelDocument>().HasIndex(m => m.ModelCode).IsUnique();
     }

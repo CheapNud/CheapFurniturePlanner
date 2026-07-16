@@ -17,9 +17,9 @@ namespace CheapFurniturePlanner.Tests.Components;
 
 // Exercises the studio's per-model naming drill-in: for a Draft model it lists the
 // enumerator's BOM-significant variants per element with editable code fields whose commits persist
-// through the real VariantNamingService; for a released (Active) model, editing is frozen (Disabled
-// fields + the frozen alert). Runs against a real VariantNamingService + ModelPublishService over
-// in-memory SQLite, following the StudioPageTests/VariantNamingServiceTests harness pattern.
+// through the real ArticleAuthoringService; for a released (Active) model, editing is frozen (Disabled
+// fields + the frozen alert). Runs against a real ArticleAuthoringService + ModelPublishService over
+// in-memory SQLite, following the StudioPageTests/ArticleAuthoringServiceTests harness pattern.
 public class StudioNamingPageTests : TestContext
 {
     private const string Studio = "FJORD-STUDIO";
@@ -57,13 +57,13 @@ public class StudioNamingPageTests : TestContext
     // The page now loads the model/elements from the authoring store rather than the embedded seed
     // directly, so the store must be seeded from that same embedded seed for the page to find
     // FJORD/FJORD-STUDIO.
-    private async Task<VariantNamingService> ConfigureServicesAsync(IDbContextFactory<FurniturePlannerContext> factory)
+    private async Task<ArticleAuthoringService> ConfigureServicesAsync(IDbContextFactory<FurniturePlannerContext> factory)
     {
         var store = new AuthoringCatalogueStore(factory);
         await store.SeedFromAsync(SeedCatalogue.Load());
         var source = new DbCatalogueSource(factory);
         var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
-        var naming = new VariantNamingService(factory, publish);
+        var naming = new ArticleAuthoringService(store, publish);
 
         Services.AddMudServices();
         Services.AddSingleton(factory);
@@ -100,7 +100,7 @@ public class StudioNamingPageTests : TestContext
     }
 
     [Fact]
-    public async Task EnteringCode_OnDraftModel_PersistsThroughVariantNamingService()
+    public async Task EnteringCode_OnDraftModel_PersistsThroughArticleAuthoringService()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;

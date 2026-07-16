@@ -112,16 +112,17 @@ public class PlannerPagePanelTests : TestContext
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(LoadFjordSnapshot()));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
 
-        // ProductionIdentityService now consults VariantNamingService, which needs a real (migrated)
+        // ProductionIdentityService now consults ArticleAuthoringService, which needs a real (migrated)
         // DB; it shares the same in-memory SQLite connection as the room-plan repository above. None
-        // of these tests seed a VariantNaming row, so it always resolves an empty map and the
+        // of these tests seed a naming article, so it always resolves an empty map and the
         // Composed-status behavior these tests assert on is unchanged.
         // ModelPublishService's ctor now takes an AuthoringCatalogueStore, but this panel only ever
-        // consults VariantNamingService.AssignAsync's GetStateAsync gate check (never
+        // consults ArticleAuthoringService.AssignAsync's GetStateAsync gate check (never
         // RepublishAsync/GetAuthoringModelsAsync), so the store is wired but never needs seeding here.
-        Services.AddSingleton(sp => new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory), new AuthoringCatalogueStore(factory)));
-        Services.AddSingleton(sp => new VariantNamingService(factory, sp.GetRequiredService<ModelPublishService>()));
-        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<VariantNamingService>()));
+        var configStore = new AuthoringCatalogueStore(factory);
+        Services.AddSingleton(sp => new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory), configStore));
+        Services.AddSingleton(sp => new ArticleAuthoringService(configStore, sp.GetRequiredService<ModelPublishService>()));
+        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<ArticleAuthoringService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // MudSelect (used by both the room-settings dialog and the config panel's option dropdowns)

@@ -71,6 +71,7 @@ public class StudioPageTests : TestContext
         Services.AddSingleton<ICatalogueSource, DbCatalogueSource>();
         Services.AddSingleton(sp => new CataloguePublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<ICatalogueSource>()));
         Services.AddSingleton(sp => new ModelPublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<CataloguePublishService>(), sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<AuthoringCatalogueStore>()));
+        Services.AddSingleton(sp => new ArticleAuthoringService(sp.GetRequiredService<AuthoringCatalogueStore>(), sp.GetRequiredService<ModelPublishService>()));
         Services.AddSingleton<ModelAuthoringService>();
         JSInterop.Mode = JSRuntimeMode.Loose;
 
@@ -204,7 +205,9 @@ public class StudioPageTests : TestContext
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedAuthoringStoreAsync(factory);
-        var authoring = new ModelAuthoringService(factory, new AuthoringCatalogueStore(factory), NewPublishService(factory));
+        var authoringStore = new AuthoringCatalogueStore(factory);
+        var authoringPublish = NewPublishService(factory);
+        var authoring = new ModelAuthoringService(factory, authoringStore, authoringPublish, new ArticleAuthoringService(authoringStore, authoringPublish));
         await authoring.CreateBlankAsync("NOEL", "No Elements", null);
         ConfigureServices(factory);
 
@@ -262,7 +265,9 @@ public class StudioPageTests : TestContext
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedAuthoringStoreAsync(factory);
-        var authoring = new ModelAuthoringService(factory, new AuthoringCatalogueStore(factory), NewPublishService(factory));
+        var authoringStore = new AuthoringCatalogueStore(factory);
+        var authoringPublish = NewPublishService(factory);
+        var authoring = new ModelAuthoringService(factory, authoringStore, authoringPublish, new ArticleAuthoringService(authoringStore, authoringPublish));
         await authoring.CreateBlankAsync("NEWM", "Existing", null);
         var dialogProvider = ConfigureServices(factory);
 

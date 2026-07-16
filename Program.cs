@@ -47,6 +47,7 @@ class Program
             var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>();
             using var migrateContext = factory.CreateDbContext();
             migrateContext.Database.Migrate();
+            scope.ServiceProvider.GetRequiredService<VariantNamingAbsorber>().AbsorbAsync().GetAwaiter().GetResult();
 
             // Seed the authoring store from the embedded demo catalogue if it hasn't been seeded
             // already - the store is the sole authoring source from here on. This runs regardless
@@ -105,7 +106,8 @@ class Program
         builder.Services.AddScoped<ModelPublishService>();
         builder.Services.AddScoped<PriceVersionService>();
         builder.Services.AddScoped<ModelAuthoringService>();
-        builder.Services.AddScoped<VariantNamingService>();
+        builder.Services.AddScoped<ArticleAuthoringService>();
+        builder.Services.AddScoped<VariantNamingAbsorber>();
         builder.Services.AddScoped<ElementAuthoringService>();
         builder.Services.AddScoped<OptionAuthoringService>();
         builder.Services.AddScoped<BomAuthoringService>();

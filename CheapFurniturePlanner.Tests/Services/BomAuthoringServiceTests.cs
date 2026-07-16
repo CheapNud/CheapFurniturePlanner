@@ -36,7 +36,7 @@ public class BomAuthoringServiceTests
         return (new TestDbContextFactory(options), connection);
     }
 
-    private sealed record Harness(BomAuthoringService Bom, ModelPublishService Publish, VariantNamingService Naming, AuthoringCatalogueStore Store);
+    private sealed record Harness(BomAuthoringService Bom, ModelPublishService Publish, ArticleAuthoringService Naming, AuthoringCatalogueStore Store);
 
     private static async Task<Harness> NewHarnessAsync(IDbContextFactory<FurniturePlannerContext> factory)
     {
@@ -44,7 +44,8 @@ public class BomAuthoringServiceTests
         await store.SeedFromAsync(SeedCatalogue.Load());
         var source = new DbCatalogueSource(factory);
         var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
-        return new Harness(new BomAuthoringService(factory, store, publish), publish, new VariantNamingService(factory, publish), store);
+        var naming = new ArticleAuthoringService(store, publish);
+        return new Harness(new BomAuthoringService(factory, store, publish), publish, naming, store);
     }
 
     private static async Task SeedModelStatesAsync(IDbContextFactory<FurniturePlannerContext> factory)
@@ -309,7 +310,7 @@ public class BomAuthoringServiceTests
         var (factory, conn) = NewFactory(); using var _ = conn;
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
-        await harness.Naming.AssignAsync(Studio, "FS2-DEPTH:STD", "STUDIO-A");
+        await harness.Naming.AssignAsync(Studio, Element, "FS2-DEPTH:STD", new Dictionary<string, string> { ["DEPTH"] = "STD" }, "STUDIO-A");
         Assert.Single(await harness.Naming.NamesForModelAsync(Studio));
 
         await harness.Bom.AddLineAsync(Studio, Element, BomSectionKind.Misc, new MiscBomLine { LineKey = "MI-NEW", MaterialCode = "GLUE" });

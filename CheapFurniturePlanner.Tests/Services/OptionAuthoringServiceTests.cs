@@ -37,7 +37,7 @@ public class OptionAuthoringServiceTests
         return (new TestDbContextFactory(options), connection);
     }
 
-    private sealed record Harness(OptionAuthoringService Options, ModelPublishService Publish, VariantNamingService Naming, AuthoringCatalogueStore Store);
+    private sealed record Harness(OptionAuthoringService Options, ModelPublishService Publish, ArticleAuthoringService Naming, AuthoringCatalogueStore Store);
 
     private static async Task<Harness> NewHarnessAsync(IDbContextFactory<FurniturePlannerContext> factory)
     {
@@ -45,7 +45,8 @@ public class OptionAuthoringServiceTests
         await store.SeedFromAsync(SeedCatalogue.Load());
         var source = new DbCatalogueSource(factory);
         var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
-        return new Harness(new OptionAuthoringService(factory, store, publish), publish, new VariantNamingService(factory, publish), store);
+        var naming = new ArticleAuthoringService(store, publish);
+        return new Harness(new OptionAuthoringService(factory, store, publish, naming), publish, naming, store);
     }
 
     private static async Task SeedModelStatesAsync(IDbContextFactory<FurniturePlannerContext> factory)
@@ -67,7 +68,7 @@ public class OptionAuthoringServiceTests
         => (await harness.Store.LoadModelAsync(Studio))!.Elements.Single(e => e.Code == Element).Options.Single(o => o.OptionDefinitionCode == defCode);
 
     private static async Task NameAVariantAsync(Harness harness)
-        => await harness.Naming.AssignAsync(Studio, "FS2-DEPTH:STD", "STUDIO-A");
+        => await harness.Naming.AssignAsync(Studio, Element, "FS2-DEPTH:STD", new Dictionary<string, string> { ["DEPTH"] = "STD" }, "STUDIO-A");
 
     [Fact]
     public async Task AddChoiceOption_Appends()
