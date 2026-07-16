@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapFurniturePlanner project work tracker
-  Last updated: 2026-07-05
+  Last updated: 2026-07-13
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -41,7 +41,8 @@ _Nothing blocking._
 
 ## Future
 
-_Nothing in future._
+- [ ] (2026-07-13) article bridge: config→article lookup uses variant-code string equality; if one article must cover several configs, migrate to explicit value-set matching [user]
+- [ ] (2026-07-13) order entry: cross-catalogue orders (an order locks to one catalogue on first item for now) [user]
 
 ## Done
 
