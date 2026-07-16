@@ -361,4 +361,86 @@ public class OrderEntryServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", element.Code, selections, fabricColorCode, 1));
     }
+
+    // -- Task 4: lifecycle (place + cancel) --
+
+    [Fact]
+    public async Task Place_FreezesOrder()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var article = await StandaloneArticleAsync(harness, factory);
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+        await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1);
+        var line = (await harness.Orders.GetOrderAsync(order.Id))!.Lines.Single();
+
+        await harness.Orders.PlaceAsync(order.Id);
+
+        var placed = await harness.Orders.GetOrderAsync(order.Id);
+        Assert.Equal(OrderState.Placed, placed!.State);
+        Assert.NotNull(placed.PlacedAt);
+
+        await Assert.ThrowsAsync<OrderPlacedException>(() => harness.Orders.UpdateQuantityAsync(order.Id, line.Id, 2));
+        await Assert.ThrowsAsync<OrderPlacedException>(() => harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1));
+        await Assert.ThrowsAsync<OrderPlacedException>(() => harness.Orders.RemoveLineAsync(order.Id, line.Id));
+        await Assert.ThrowsAsync<OrderPlacedException>(() =>
+            harness.Orders.ReconfigureLineAsync(order.Id, line.Id, new Dictionary<string, string>(), null));
+    }
+
+    [Fact]
+    public async Task Place_EmptyOrder_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Orders.PlaceAsync(order.Id));
+    }
+
+    [Fact]
+    public async Task Place_RevalidatesLinesAgainstPin()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+        var line = (await harness.Orders.GetOrderAsync(order.Id))!.Lines.Single();
+
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var corrupted = await db.OrderLines.SingleAsync(l => l.Id == line.Id);
+            corrupted.ElementCode = "NOPE-DOES-NOT-EXIST";
+            await db.SaveChangesAsync();
+        }
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Orders.PlaceAsync(order.Id));
+        Assert.Contains(line.DisplayIndex.ToString(), ex.Message);
+    }
+
+    [Fact]
+    public async Task Cancel_FromDraftAndPlaced_TerminalFromCancelled()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var article = await StandaloneArticleAsync(harness, factory);
+
+        var draftOrder = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+        await harness.Orders.CancelAsync(draftOrder.Id);
+        var cancelledFromDraft = await harness.Orders.GetOrderAsync(draftOrder.Id);
+        Assert.Equal(OrderState.Cancelled, cancelledFromDraft!.State);
+
+        var placedOrder = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+        await harness.Orders.AddStandaloneLineAsync(placedOrder.Id, article.Id, 1);
+        await harness.Orders.PlaceAsync(placedOrder.Id);
+        await harness.Orders.CancelAsync(placedOrder.Id);
+        var cancelledFromPlaced = await harness.Orders.GetOrderAsync(placedOrder.Id);
+        Assert.Equal(OrderState.Cancelled, cancelledFromPlaced!.State);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Orders.CancelAsync(placedOrder.Id));
+    }
 }

@@ -189,6 +189,49 @@ public sealed class OrderEntryService(
         await db.SaveChangesAsync(ct);
     }
 
+    // Validates every line still resolves against the pin, then freezes the order. A corrupted pin
+    // (a line whose model/element/article vanished from the catalogue) is a hard error — never
+    // re-priced or silently dropped, since that would change what the party agreed to.
+    public async Task PlaceAsync(int orderId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var order = await RequireDraftAsync(db, orderId, ct);
+        if (order.Lines.Count < 1) { throw new InvalidOperationException($"Order {order.OrderNumber} has no lines."); }
+        if (order.PinnedCatalogueVersion is null) { throw new InvalidOperationException($"Order {order.OrderNumber} is not pinned to a catalogue version."); }
+        var snapshot = await pinned.GetAsync(order.PinnedCatalogueVersion, ct);
+        foreach (var line in order.Lines)
+        {
+            if (line.Kind == OrderLineKind.ConfiguredElement)
+            {
+                var model = snapshot.Models.FirstOrDefault(m => m.Code == line.ModelCode)
+                    ?? throw new InvalidOperationException($"Order line {line.DisplayIndex}: model '{line.ModelCode}' is no longer in the pinned catalogue.");
+                if (!model.Elements.Any(e => e.Code == line.ElementCode))
+                {
+                    throw new InvalidOperationException($"Order line {line.DisplayIndex}: element '{line.ElementCode}' is no longer in model '{line.ModelCode}'.");
+                }
+            }
+            else if (!snapshot.Articles.Any(a => a.Id == line.ArticleId))
+            {
+                throw new InvalidOperationException($"Order line {line.DisplayIndex}: article {line.ArticleId} is no longer in the pinned catalogue.");
+            }
+        }
+        order.State = OrderState.Placed;
+        order.PlacedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+    }
+
+    // Terminal from Draft or Placed; cancelling a Cancelled order is a no-op-that-throws — callers
+    // should never treat a second cancel as success.
+    public async Task CancelAsync(int orderId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var order = await db.Orders.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == orderId, ct)
+            ?? throw new InvalidOperationException($"Order {orderId} not found.");
+        if (order.State == OrderState.Cancelled) { throw new InvalidOperationException($"Order {order.OrderNumber} is already cancelled."); }
+        order.State = OrderState.Cancelled;
+        await db.SaveChangesAsync(ct);
+    }
+
     // Shared pricing core for PriceConfigurationAsync/AddConfiguredLineAsync/ReconfigureLineAsync: prices
     // exactly one unit of a single-element configuration.
     private static PricingResult Price(CatalogueSnapshot snapshot, Order order, decimal sellerMultiplier,
