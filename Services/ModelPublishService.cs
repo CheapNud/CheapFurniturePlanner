@@ -61,6 +61,19 @@ public sealed class ModelPublishService(IDbContextFactory<FurniturePlannerContex
         var active = (await db.ModelStates.AsNoTracking().Where(s => s.State == TradeItemState.Active).Select(s => s.ModelCode).ToListAsync(ct)).ToHashSet();
         var snapshot = await store.LoadAsync(ct);
         snapshot.Models = snapshot.Models.Where(m => active.Contains(m.Code)).ToList();
+        // Articles publish under the same gate as their provenance: catalogue-backed ones follow
+        // their model's Active state; standalone ones (no model) gate on their own State.
+        snapshot.Articles = snapshot.Articles
+            .Where(a => a.IsCatalogueBacked() ? active.Contains(a.ModelCode!) : a.State == TradeItemState.Active)
+            .ToList();
+        // A backed article only survives the filter above because its model is Active, but its own
+        // stored State is stamped once at creation and never refreshed - re-stamp it here so the
+        // published bundle is truthful. The stored State is authoritative only for standalone
+        // articles (already filtered on above); leave those untouched.
+        foreach (var article in snapshot.Articles.Where(a => a.IsCatalogueBacked()))
+        {
+            article.State = TradeItemState.Active;
+        }
         return snapshot;
     }
 

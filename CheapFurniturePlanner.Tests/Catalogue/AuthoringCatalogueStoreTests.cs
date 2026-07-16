@@ -192,6 +192,50 @@ public class AuthoringCatalogueStoreTests
         }
     }
 
+    [Fact]
+    public async Task Articles_RoundTripThroughStoreAndLoadAsync()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
+
+        Assert.Empty(await store.LoadArticlesAsync());
+        Assert.Empty((await store.LoadAsync()).Articles);
+
+        var articles = new List<Article>
+        {
+            new() { Id = 1, AssignedCode = "K7E", ModelCode = "M-A", ElementCode = "E-A", VariantCode = "E-A-FEET:ELEC", Selections = new() { ["FEET"] = "ELEC" } },
+            new() { Id = 2, AssignedCode = "ART-DROP", Name = "Dropship pouf", ManualPrice = 79m, SupplierRef = "SUP-X" },
+        };
+        await store.SaveArticlesAsync(articles);
+
+        var loaded = await store.LoadArticlesAsync();
+        Assert.Equal(2, loaded.Count);
+        Assert.Equal("ELEC", loaded.Single(a => a.Id == 1).Selections["FEET"]);
+        Assert.Equal(79m, loaded.Single(a => a.Id == 2).ManualPrice);
+        Assert.Equal(2, (await store.LoadAsync()).Articles.Count);
+    }
+
+    [Fact]
+    public async Task SaveMastersAsync_DoesNotLeakArticlesIntoMastersDoc()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
+        await store.SaveArticlesAsync([new() { Id = 1, AssignedCode = "K7E", ModelCode = "M-A", ElementCode = "E-A", VariantCode = "E-A" }]);
+
+        var snapshot = await store.LoadAsync();
+        await store.SaveMastersAsync(snapshot);
+
+        // The caller's instance is untouched and the articles doc still holds the article; the
+        // masters doc itself must not have swallowed the list (reload keeps exactly one article,
+        // not two copies from two docs).
+        Assert.Single(snapshot.Articles);
+        Assert.Single((await store.LoadAsync()).Articles);
+    }
+
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
     {
         public FurniturePlannerContext CreateDbContext() => new(options);

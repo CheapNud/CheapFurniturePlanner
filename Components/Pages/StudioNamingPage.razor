@@ -4,7 +4,7 @@
 @using CheapFurniturePlanner.Domain.Pricing
 @using CheapFurniturePlanner.Domain.Production
 
-@inject VariantNamingService VariantNamingService
+@inject ArticleAuthoringService ArticleAuthoringService
 @inject ModelPublishService ModelPublishService
 @inject AuthoringCatalogueStore AuthoringCatalogueStore
 @inject ISnackbar Snackbar
@@ -69,7 +69,7 @@ else
                         <MudTd DataLabel="Assigned code">
                             <MudTextField T="string"
                                           Value="@AssignedCodeFor(context.VariantCode)"
-                                          ValueChanged="@((string code) => AssignAsync(context.VariantCode, code))"
+                                          ValueChanged="@((string assigned) => AssignAsync(elementRows.Element.Code, context, assigned))"
                                           Disabled="@(_state != TradeItemState.Draft)" />
                         </MudTd>
                         <MudTd DataLabel="Status">
@@ -110,18 +110,18 @@ else
             .ToList();
 
         _state = await ModelPublishService.GetStateAsync(ModelCode);
-        _names = await VariantNamingService.NamesForModelAsync(ModelCode);
+        _names = await ArticleAuthoringService.NamesForModelAsync(ModelCode);
     }
 
     private string AssignedCodeFor(string variantCode) =>
         _names.TryGetValue(variantCode, out var code) ? code : string.Empty;
 
-    private async Task AssignAsync(string variantCode, string code)
+    private async Task AssignAsync(string elementCode, VariantDescriptor descriptor, string code)
     {
         try
         {
-            await VariantNamingService.AssignAsync(ModelCode, variantCode, code);
-            _names = await VariantNamingService.NamesForModelAsync(ModelCode);
+            await ArticleAuthoringService.AssignAsync(ModelCode, elementCode, descriptor.VariantCode, descriptor.BomSignificantSelections, code);
+            _names = await ArticleAuthoringService.NamesForModelAsync(ModelCode);
         }
         catch (NamingFrozenException ex)
         {

@@ -1,21 +1,19 @@
 using CheapFurniturePlanner.Catalogue;
-using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Domain.Pricing;
-using Microsoft.EntityFrameworkCore;
 
 namespace CheapFurniturePlanner.Services;
 
 // Draft-only authoring of an element's option list (ChoiceOption/FabricOption) and their visibility
 // rules, persisted through the authoring store. Never republishes (Draft models are absent from the
 // Active-only published snapshot).
-// Prunes the element's stranded VariantNaming rows only when a BOM-significant change alters the
-// element's enumerated variant space: VariantCode depends solely on which AffectsBom ChoiceOptions
+// Prunes the element's stranded catalogue-backed articles only when a BOM-significant change alters
+// the element's enumerated variant space: VariantCode depends solely on which AffectsBom ChoiceOptions
 // exist and their choice codes (it sorts segments, so option/value order, defaults, Required, and
 // FabricOptions never affect it).
-public sealed class OptionAuthoringService(IDbContextFactory<FurniturePlannerContext> factory, AuthoringCatalogueStore store, ModelPublishService publish)
+public sealed class OptionAuthoringService(AuthoringCatalogueStore store, ModelPublishService publish, ArticleAuthoringService articles)
 {
     private static readonly char[] ForbiddenCodeChars = [':', '-'];   // VariantCode delimiters
 
@@ -183,13 +181,7 @@ public sealed class OptionAuthoringService(IDbContextFactory<FurniturePlannerCon
     }
 
     private async Task PruneNamingRowsAsync(string modelCode, string elementCode, CancellationToken ct)
-    {
-        await using var db = await factory.CreateDbContextAsync(ct);
-        var prefix = elementCode + "-";
-        await db.VariantNamings
-            .Where(n => n.ModelCode == modelCode && (n.VariantCode == elementCode || n.VariantCode.StartsWith(prefix)))
-            .ExecuteDeleteAsync(ct);
-    }
+        => await articles.PruneForElementAsync(modelCode, elementCode, ct);
 
     // Keeps visibility rules consistent after an option is renamed or removed. Step 1 migrates any
     // rule referencing the old code (as trigger OR revealed) to the new code, so a rename preserves

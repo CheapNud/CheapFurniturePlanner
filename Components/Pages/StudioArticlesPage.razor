@@ -1,0 +1,143 @@
+@page "/studio/articles"
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Components.Studio
+@using CheapFurniturePlanner.Domain.Catalog
+@using CheapFurniturePlanner.Services
+
+@inject AuthoringCatalogueStore AuthoringCatalogueStore
+@inject ArticleAuthoringService ArticleAuthoringService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Articles - Cheap Furniture Planner</PageTitle>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudText Typo="Typo.h5">Articles</MudText>
+</MudPaper>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h6">Standalone articles</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
+                Add article
+            </MudButton>
+        </MudStack>
+        <MudTable Items="@_standalone" Hover="true" Striped="true" Dense="true" Elevation="0" T="Article">
+            <HeaderContent>
+                <MudTh>Code</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Manual price</MudTh>
+                <MudTh>Supplier</MudTh>
+                <MudTh>State</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Code">@context.AssignedCode</MudTd>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Manual price">@context.ManualPrice</MudTd>
+                <MudTd DataLabel="Supplier">@context.SupplierRef</MudTd>
+                <MudTd DataLabel="State">
+                    <MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudStack>
+</MudPaper>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6">Catalogue articles</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Authored by naming variants in the Studio — edit through a model's naming page, not here.
+        </MudText>
+        <MudTable Items="@_catalogueBacked" Hover="true" Striped="true" Dense="true" Elevation="0" T="Article">
+            <HeaderContent>
+                <MudTh>Code</MudTh>
+                <MudTh>Model</MudTh>
+                <MudTh>Element</MudTh>
+                <MudTh>Variant code</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Code">@context.AssignedCode</MudTd>
+                <MudTd DataLabel="Model">
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Href="@($"/studio/{context.ModelCode}")">@context.ModelCode</MudButton>
+                </MudTd>
+                <MudTd DataLabel="Element">@context.ElementCode</MudTd>
+                <MudTd DataLabel="Variant code">@context.VariantCode</MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private List<Article> _standalone = [];
+    private List<Article> _catalogueBacked = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        var articles = await AuthoringCatalogueStore.LoadArticlesAsync();
+        _standalone = articles.Where(a => !a.IsCatalogueBacked()).ToList();
+        _catalogueBacked = articles.Where(a => a.IsCatalogueBacked()).ToList();
+    }
+
+    private static Color StateColor(TradeItemState state) => state switch
+    {
+        TradeItemState.Active => Color.Success,
+        TradeItemState.Discontinued => Color.Error,
+        TradeItemState.PhasingOut => Color.Warning,
+        _ => Color.Default
+    };
+
+    private async Task AddAsync()
+    {
+        var parameters = new DialogParameters<StandaloneArticleDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<StandaloneArticleDialog>("Add article", parameters);
+        await ApplyAsync(dialogRef, article => ArticleAuthoringService.AddStandaloneAsync(article));
+    }
+
+    private async Task EditAsync(Article existing)
+    {
+        var parameters = new DialogParameters<StandaloneArticleDialog> { { d => d.Article, existing }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<StandaloneArticleDialog>("Edit article", parameters);
+        await ApplyAsync(dialogRef, article => ArticleAuthoringService.UpdateStandaloneAsync(existing.Id, article));
+    }
+
+    private async Task DeleteAsync(Article existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete article", $"Delete '{existing.AssignedCode}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try
+        {
+            await ArticleAuthoringService.DeleteStandaloneAsync(existing.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task ApplyAsync(IDialogReference dialogRef, Func<Article, Task> apply)
+    {
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not Article article) { return; }
+        try
+        {
+            await apply(article);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+}

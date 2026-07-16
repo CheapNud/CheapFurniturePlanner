@@ -103,4 +103,24 @@ public class PriceVersionServiceTests
         await using var db = factory.CreateDbContext();
         Assert.Contains(db.PublishedCatalogues, c => c.EffectiveDate == effective);
     }
+
+    // Task 4 (P1 integration): article edits are working-catalogue edits too, so they flip the same
+    // pending-changes banner masters edits do, and clear the same way once republished.
+    [Fact]
+    public async Task ArticleEdit_FlagsPendingChanges()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewHarnessAsync(factory);
+        Assert.False(await harness.PriceVersions.HasPendingChangesAsync());
+
+        var articles = new ArticleAuthoringService(harness.Store, harness.Publish);
+        await articles.AddStandaloneAsync(new Article { AssignedCode = "DROP-PEND", ManualPrice = 10m, State = TradeItemState.Active });
+
+        Assert.True(await harness.PriceVersions.HasPendingChangesAsync());
+
+        await harness.PriceVersions.PublishNewVersionAsync(DateTime.UtcNow);
+
+        Assert.False(await harness.PriceVersions.HasPendingChangesAsync());
+    }
 }

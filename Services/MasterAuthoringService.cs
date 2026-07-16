@@ -111,6 +111,7 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
         RequireNonEmpty(code, "Price group code");
         RequireUnique(s.PriceGroups.Select(p => p.Code), code, "Price group");
         RequireNonNegative(priceGroup.RatePerMeter, "Rate per meter");
+        RequireNoColon(priceGroup.MaterialTypeCode);
         priceGroup.Code = code;
         s.PriceGroups.Add(priceGroup);
     }, ct);
@@ -120,6 +121,7 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
         var existing = s.PriceGroups.FirstOrDefault(p => p.Code == code)
             ?? throw new InvalidOperationException($"Price group '{code}' not found.");
         RequireNonNegative(priceGroup.RatePerMeter, "Rate per meter");
+        RequireNoColon(priceGroup.MaterialTypeCode);
         existing.Kind = priceGroup.Kind;
         existing.RatePerMeter = priceGroup.RatePerMeter;
         existing.MaterialTypeCode = priceGroup.MaterialTypeCode;
@@ -265,6 +267,15 @@ public sealed class MasterAuthoringService(AuthoringCatalogueStore store)
     private static void RequireNonEmpty(string identity, string label)
     {
         if (string.IsNullOrWhiteSpace(identity)) { throw new InvalidOperationException($"{label} is required."); }
+    }
+
+    // MaterialTypeCode becomes the VALUE of the composed variant code's __MATERIAL__ segment
+    // ("KEY:VALUE"), which is split on the FIRST ':' — a colon in the value would make that split
+    // ambiguous. Hyphens are fine (the VariantNamingAbsorber parser splits only before "KEY:", not on
+    // every '-').
+    private static void RequireNoColon(string? materialTypeCode)
+    {
+        if (materialTypeCode?.Contains(':') == true) { throw new InvalidOperationException("Material type code cannot contain ':'."); }
     }
 
     private static void RequireUnique(IEnumerable<string> existing, string code, string label)

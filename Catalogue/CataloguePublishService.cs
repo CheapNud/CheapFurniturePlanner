@@ -149,6 +149,21 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
                 }
             }
         }
+        foreach (var article in snapshot.Articles)
+        {
+            if (article.IsCatalogueBacked())
+            {
+                var model = snapshot.Models.FirstOrDefault(m => m.Code == article.ModelCode);
+                if (model is null) { errors.Add($"Article '{article.AssignedCode}' references missing model '{article.ModelCode}'."); continue; }
+                if (model.Elements.All(e => e.Code != article.ElementCode)) { errors.Add($"Article '{article.AssignedCode}' references missing element '{article.ElementCode}'."); }
+                if (string.IsNullOrWhiteSpace(article.VariantCode)) { errors.Add($"Article '{article.AssignedCode}' has an empty variant code."); }
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(article.AssignedCode)) { errors.Add("A standalone article has an empty code."); }
+                if (article.ManualPrice is null or < 0) { errors.Add($"Standalone article '{article.AssignedCode}' needs a non-negative manual price."); }
+            }
+        }
         return errors;
     }
 

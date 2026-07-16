@@ -166,6 +166,34 @@ public class MasterAuthoringServiceTests
         Assert.Equal(original.RatePerMeter + 5m, updated.RatePerMeter);
     }
 
+    // M2: a ':' in MaterialTypeCode would collide with the "KEY:VALUE" delimiter the composed variant
+    // code uses for the __MATERIAL__ segment. Hyphens are fine (VariantNamingAbsorber now parses those
+    // correctly); only ':' is rejected.
+    [Fact]
+    public async Task AddAndUpdatePriceGroup_MaterialTypeCodeWithColon_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (service, store) = await NewAsync(factory);
+        var existingCode = (await store.LoadAsync()).PriceGroups[0].Code;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.AddPriceGroupAsync(new PriceGroup
+        {
+            Code = "PG-BAD",
+            Kind = MaterialKind.Leather,
+            RatePerMeter = 10m,
+            MaterialTypeCode = "LEATHER:THICK",
+        }));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdatePriceGroupAsync(existingCode, new PriceGroup
+        {
+            Code = "IGNORED",
+            Kind = MaterialKind.Leather,
+            RatePerMeter = 10m,
+            MaterialTypeCode = "LEATHER:THICK",
+        }));
+    }
+
     [Fact]
     public async Task ServiceEdit_DoesNotChangeGoldenEngineOutput()
     {

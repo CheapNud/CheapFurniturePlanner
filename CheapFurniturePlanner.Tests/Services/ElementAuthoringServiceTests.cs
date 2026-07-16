@@ -34,7 +34,7 @@ public class ElementAuthoringServiceTests
         return (new TestDbContextFactory(options), connection);
     }
 
-    private sealed record Harness(ElementAuthoringService Elements, ModelPublishService Publish, VariantNamingService Naming, AuthoringCatalogueStore Store);
+    private sealed record Harness(ElementAuthoringService Elements, ModelPublishService Publish, ArticleAuthoringService Naming, AuthoringCatalogueStore Store);
 
     private static async Task<Harness> NewHarnessAsync(IDbContextFactory<FurniturePlannerContext> factory)
     {
@@ -42,7 +42,8 @@ public class ElementAuthoringServiceTests
         await store.SeedFromAsync(SeedCatalogue.Load());
         var source = new DbCatalogueSource(factory);
         var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
-        return new Harness(new ElementAuthoringService(factory, store, publish), publish, new VariantNamingService(factory, publish), store);
+        var naming = new ArticleAuthoringService(store, publish);
+        return new Harness(new ElementAuthoringService(store, publish, naming), publish, naming, store);
     }
 
     private static async Task SeedModelStatesAsync(IDbContextFactory<FurniturePlannerContext> factory)
@@ -140,7 +141,7 @@ public class ElementAuthoringServiceTests
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
         // Name a real variant of element FS2 while the model is Draft.
-        await harness.Naming.AssignAsync(Studio, "FS2-__MATERIAL__:Fabric", "STUDIO-A");
+        await harness.Naming.AssignAsync(Studio, "FS2", "FS2-__MATERIAL__:Fabric", new Dictionary<string, string> { ["__MATERIAL__"] = "Fabric" }, "STUDIO-A");
         Assert.Single(await harness.Naming.NamesForModelAsync(Studio));
 
         await harness.Elements.UpdateElementAsync(Studio, "FS2", new Element { Code = "SEAT2", Name = "Seat 2" });
@@ -158,7 +159,7 @@ public class ElementAuthoringServiceTests
         using var _ = conn;
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
-        await harness.Naming.AssignAsync(Studio, "FS2-__MATERIAL__:Fabric", "STUDIO-A");
+        await harness.Naming.AssignAsync(Studio, "FS2", "FS2-__MATERIAL__:Fabric", new Dictionary<string, string> { ["__MATERIAL__"] = "Fabric" }, "STUDIO-A");
 
         await harness.Elements.RemoveElementAsync(Studio, "FS2");
 
@@ -177,8 +178,8 @@ public class ElementAuthoringServiceTests
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
         // Name a real variant of FS2 and a real variant of FS3 while the model is Draft.
-        await harness.Naming.AssignAsync(Studio, "FS2-__MATERIAL__:Fabric", "STUDIO-A");
-        await harness.Naming.AssignAsync(Studio, "FS3-__MATERIAL__:Fabric", "STUDIO-B");
+        await harness.Naming.AssignAsync(Studio, "FS2", "FS2-__MATERIAL__:Fabric", new Dictionary<string, string> { ["__MATERIAL__"] = "Fabric" }, "STUDIO-A");
+        await harness.Naming.AssignAsync(Studio, "FS3", "FS3-__MATERIAL__:Fabric", new Dictionary<string, string> { ["__MATERIAL__"] = "Fabric" }, "STUDIO-B");
         Assert.Equal(2, (await harness.Naming.NamesForModelAsync(Studio)).Count);
 
         await harness.Elements.RemoveElementAsync(Studio, "FS2");

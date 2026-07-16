@@ -62,6 +62,7 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
         snapshot.Models = modelRows
             .Select(r => DeserializeModel(r.ModelCode, r.BundleJson))
             .ToList();
+        snapshot.Articles = await LoadArticlesAsync(ct);
         return snapshot;
     }
 
@@ -111,20 +112,23 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
     }
 
     // Upserts the single working-masters document. The masters doc holds only master lists, so Models
-    // is cleared before serialization (model docs live in AuthoringModels); Version/ContentHash are
-    // publish-time metadata and are zeroed too, matching SeedFromAsync's masters write, so a caller
-    // passing a stamped snapshot can't persist stale metadata. This is the working-copy write P2's
-    // price editor uses; publishing snapshots the working copy into a versioned catalogue.
+    // is cleared before serialization (model docs live in AuthoringModels); Articles is cleared too
+    // (its own document, AuthoringArticles); Version/ContentHash are publish-time metadata and are
+    // zeroed too, matching SeedFromAsync's masters write, so a caller passing a stamped snapshot can't
+    // persist stale metadata. This is the working-copy write P2's price editor uses; publishing
+    // snapshots the working copy into a versioned catalogue.
     public async Task SaveMastersAsync(CatalogueSnapshot masters, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         // Persist a masters-only view without mutating the caller's instance: snapshot the fields we
         // zero for storage, serialize, then restore — so a caller that reuses `masters` afterward
-        // still has its Models/Version/ContentHash intact.
+        // still has its Models/Articles/Version/ContentHash intact.
         var savedModels = masters.Models;
+        var savedArticles = masters.Articles;
         var savedVersion = masters.Version;
         var savedHash = masters.ContentHash;
         masters.Models = [];
+        masters.Articles = [];
         masters.Version = "";
         masters.ContentHash = "";
         string json;
@@ -132,11 +136,34 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
         finally
         {
             masters.Models = savedModels;
+            masters.Articles = savedArticles;
             masters.Version = savedVersion;
             masters.ContentHash = savedHash;
         }
         var row = await db.AuthoringMasters.FirstOrDefaultAsync(ct);
         if (row is null) { db.AuthoringMasters.Add(new AuthoringMastersDocument { BundleJson = json }); }
+        else { row.BundleJson = json; }
+        await db.SaveChangesAsync(ct);
+    }
+
+    // The single articles document: all Articles (catalogue-backed + standalone) as one JSON list,
+    // mirroring the masters doc. Absent doc == empty catalogue (SeedFromAsync does not create it;
+    // the first SaveArticlesAsync does).
+    public async Task<List<Article>> LoadArticlesAsync(CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var row = await db.AuthoringArticles.AsNoTracking().FirstOrDefaultAsync(ct);
+        if (row is null) { return []; }
+        return CanonicalJson.Deserialize<List<Article>>(row.BundleJson)
+            ?? throw new InvalidOperationException("Corrupt authoring articles document.");
+    }
+
+    public async Task SaveArticlesAsync(List<Article> articles, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var json = CanonicalJson.Serialize(articles);
+        var row = await db.AuthoringArticles.FirstOrDefaultAsync(ct);
+        if (row is null) { db.AuthoringArticles.Add(new AuthoringArticlesDocument { BundleJson = json }); }
         else { row.BundleJson = json; }
         await db.SaveChangesAsync(ct);
     }

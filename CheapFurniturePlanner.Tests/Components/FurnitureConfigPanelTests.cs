@@ -38,8 +38,8 @@ public class FurnitureConfigPanelTests : TestContext
         public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
     }
 
-    // ProductionIdentityService now consults VariantNamingService, which needs a real (migrated) DB;
-    // none of these tests seed a VariantNaming row, so it always resolves an empty map and the
+    // ProductionIdentityService now consults ArticleAuthoringService, which needs a real (migrated) DB;
+    // none of these tests seed a naming article, so it always resolves an empty map and the
     // Composed-status behavior these tests assert on is unchanged.
     private static (IDbContextFactory<FurniturePlannerContext> Factory, SqliteConnection Connection) NewFactory()
     {
@@ -80,11 +80,12 @@ public class FurnitureConfigPanelTests : TestContext
         Services.AddSingleton<ICatalogueSource>(new FakeCatalogueSource(snapshot));
         Services.AddSingleton(sp => new PricingService(sp.GetRequiredService<ICatalogueSource>()));
         // ModelPublishService's ctor now takes an AuthoringCatalogueStore, but this panel only ever
-        // consults VariantNamingService.AssignAsync's GetStateAsync gate check (never
+        // consults ArticleAuthoringService.AssignAsync's GetStateAsync gate check (never
         // RepublishAsync/GetAuthoringModelsAsync), so the store is wired but never needs seeding here.
-        Services.AddSingleton(sp => new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory), new AuthoringCatalogueStore(factory)));
-        Services.AddSingleton(sp => new VariantNamingService(factory, sp.GetRequiredService<ModelPublishService>()));
-        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<VariantNamingService>()));
+        var configStore = new AuthoringCatalogueStore(factory);
+        Services.AddSingleton(sp => new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory), configStore));
+        Services.AddSingleton(sp => new ArticleAuthoringService(configStore, sp.GetRequiredService<ModelPublishService>()));
+        Services.AddSingleton(sp => new ProductionIdentityService(sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<ArticleAuthoringService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         // MudSelect renders its options into an overlay managed by MudBlazor's popover service, which
@@ -300,10 +301,11 @@ public class FurnitureConfigPanelTests : TestContext
         var composed = ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), Domain.Catalog.TradeItemState.Active)[0];
 
         // Out-of-band naming, as a second operator/tab (the studio) would perform it, against
-        // the same DB the panel's own VariantNamingService reads from.
-        var namingPublish = new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory), new AuthoringCatalogueStore(factory));
-        var naming = new VariantNamingService(factory, namingPublish);
-        await naming.AssignAsync("FJORD", composed.VariantCode, "STUDIO-A");
+        // the same DB the panel's own ArticleAuthoringService reads from.
+        var namingStore = new AuthoringCatalogueStore(factory);
+        var namingPublish = new ModelPublishService(factory, new CataloguePublishService(factory, new DbCatalogueSource(factory)), new DbCatalogueSource(factory), namingStore);
+        var naming = new ArticleAuthoringService(namingStore, namingPublish);
+        await naming.AssignAsync("FJORD", "FJ3", composed.VariantCode, placement.Selections, "STUDIO-A");
 
         var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
 

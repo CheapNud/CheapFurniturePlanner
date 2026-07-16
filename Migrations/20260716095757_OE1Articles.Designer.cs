@@ -3,6 +3,7 @@ using System;
 using CheapFurniturePlanner.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CheapFurniturePlanner.Migrations
 {
     [DbContext(typeof(FurniturePlannerContext))]
-    partial class FurniturePlannerContextModelSnapshot : ModelSnapshot
+    [Migration("20260716095757_OE1Articles")]
+    partial class OE1Articles
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -579,6 +582,38 @@ namespace CheapFurniturePlanner.Migrations
                             Unit = "cm",
                             Width = 500.0
                         });
+                });
+
+            modelBuilder.Entity("CheapFurniturePlanner.Models.VariantNaming", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AssignedCode")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ModelCode")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VariantCode")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModelCode", "VariantCode")
+                        .IsUnique();
+
+                    b.ToTable("VariantNamings");
                 });
 
             modelBuilder.Entity("CheapHelpers.Models.Entities.UserNotificationPreference", b =>
