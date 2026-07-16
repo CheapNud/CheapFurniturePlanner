@@ -1,0 +1,60 @@
+@using CheapFurniturePlanner.Domain.Catalog
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Code" @bind-Value="_assignedCode" Required="true" Disabled="@(Article is not null)" />
+            <MudTextField T="string" Label="Name" @bind-Value="_name" />
+            <MudNumericField T="decimal" Label="Manual price" @bind-Value="_manualPrice" Min="0" />
+            <MudTextField T="string" Label="Supplier ref" @bind-Value="_supplierRef" />
+            <MudSelect T="TradeItemState" Label="State" @bind-Value="_state">
+                @foreach (var state in Enum.GetValues<TradeItemState>())
+                {
+                    <MudSelectItem T="TradeItemState" Value="@state">@state</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Article? Article { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _assignedCode = string.Empty;
+    private string _name = string.Empty;
+    private decimal _manualPrice;
+    private string _supplierRef = string.Empty;
+    private TradeItemState _state = TradeItemState.Draft;
+
+    protected override void OnInitialized()
+    {
+        if (Article is not null)
+        {
+            _assignedCode = Article.AssignedCode;
+            _name = Article.Name ?? string.Empty;
+            _manualPrice = Article.ManualPrice ?? 0;
+            _supplierRef = Article.SupplierRef ?? string.Empty;
+            _state = Article.State;
+        }
+    }
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new Article
+    {
+        AssignedCode = _assignedCode.Trim(),
+        Name = string.IsNullOrWhiteSpace(_name) ? null : _name.Trim(),
+        ManualPrice = _manualPrice,
+        SupplierRef = string.IsNullOrWhiteSpace(_supplierRef) ? null : _supplierRef.Trim(),
+        State = _state,
+    }));
+}
