@@ -69,14 +69,14 @@ public class ArticleAuthoringServiceTests
         var harness = await NewHarnessAsync(factory);
         var selections = new Dictionary<string, string> { ["DEPTH"] = "STD" };
 
-        await harness.Articles.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "18E");
+        await harness.Articles.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "K7E");
 
         var names = await harness.Articles.NamesForModelAsync(Studio);
-        Assert.Equal("18E", names["FS2-DEPTH:STD"]);
+        Assert.Equal("K7E", names["FS2-DEPTH:STD"]);
 
         var articles = await harness.Store.LoadArticlesAsync();
         var article = Assert.Single(articles);
-        Assert.Equal("18E", article.AssignedCode);
+        Assert.Equal("K7E", article.AssignedCode);
         Assert.Equal(Studio, article.ModelCode);
         Assert.Equal("FS2", article.ElementCode);
         Assert.Equal("FS2-DEPTH:STD", article.VariantCode);
@@ -92,7 +92,7 @@ public class ArticleAuthoringServiceTests
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
         var selections = new Dictionary<string, string> { ["DEPTH"] = "STD" };
-        await harness.Articles.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "18E");
+        await harness.Articles.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "K7E");
 
         await harness.Articles.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "   ");
 
@@ -109,7 +109,7 @@ public class ArticleAuthoringServiceTests
         var harness = await NewHarnessAsync(factory);
 
         await Assert.ThrowsAsync<NamingFrozenException>(() =>
-            harness.Articles.AssignAsync(Active, "FJ2", "FJ2-DEPTH:STD", new Dictionary<string, string> { ["DEPTH"] = "STD" }, "18E"));
+            harness.Articles.AssignAsync(Active, "FJ2", "FJ2-DEPTH:STD", new Dictionary<string, string> { ["DEPTH"] = "STD" }, "K7E"));
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class ArticleAuthoringServiceTests
         await SeedModelStatesAsync(factory);
         var harness = await NewHarnessAsync(factory);
         var selections = new Dictionary<string, string> { ["DEPTH"] = "STD" };
-        await harness.Articles.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "18E");
+        await harness.Articles.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "K7E");
 
         await harness.Articles.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "18F");
 
@@ -277,7 +277,7 @@ public class VariantNamingAbsorberTests
         await using (var db = await factory.CreateDbContextAsync())
         {
             await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO LegacyVariantNamings (ModelCode, VariantCode, AssignedCode, CreatedAt, UpdatedAt) VALUES ('M-A', 'EA-FEET:ELEC-__MATERIAL__:LEATHER', '18E', '2026-01-01', '2026-01-01');");
+                "INSERT INTO LegacyVariantNamings (ModelCode, VariantCode, AssignedCode, CreatedAt, UpdatedAt) VALUES ('M-A', 'EA-FEET:ELEC-__MATERIAL__:LEATHER', 'K7E', '2026-01-01', '2026-01-01');");
             await db.Database.ExecuteSqlRawAsync(
                 "INSERT INTO LegacyVariantNamings (ModelCode, VariantCode, AssignedCode, CreatedAt, UpdatedAt) VALUES ('M-A', 'EB', 'PLAIN', '2026-01-01', '2026-01-01');");
             db.ModelStates.Add(new ModelStateRecord { ModelCode = "M-A", State = TradeItemState.Active });
@@ -295,7 +295,7 @@ public class VariantNamingAbsorberTests
         Assert.Equal("EA", first.ElementCode);
         Assert.Equal(new Dictionary<string, string> { ["FEET"] = "ELEC", ["__MATERIAL__"] = "LEATHER" }, first.Selections);
         Assert.Equal(TradeItemState.Active, first.State);
-        Assert.Equal("18E", first.AssignedCode);
+        Assert.Equal("K7E", first.AssignedCode);
         Assert.Equal("M-A", first.ModelCode);
 
         var second = Assert.Single(articles, a => a.VariantCode == "EB");
@@ -310,6 +310,34 @@ public class VariantNamingAbsorberTests
         await using var check = connection.CreateCommand();
         check.CommandText = "SELECT count(*) FROM sqlite_master WHERE name='LegacyVariantNamings';";
         Assert.Equal(0, Convert.ToInt32(await check.ExecuteScalarAsync()));
+    }
+
+    // C1: a KEY's VALUE is free text (PriceGroup.MaterialTypeCode for the synthetic __MATERIAL__
+    // selection) and may itself contain a hyphen ("LEATHER-THICK" in the seed). The parser must split
+    // only immediately before a "KEY:" segment, not on every '-', or the value gets truncated and a
+    // phantom key appears.
+    [Fact]
+    public async Task Absorb_MaterialTypeCodeWithHyphen_ParsesValueIntact()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO LegacyVariantNamings (ModelCode, VariantCode, AssignedCode, CreatedAt, UpdatedAt) VALUES ('M-A', 'FJCH-DEPTH:STD-__MATERIAL__:LEATHER-THICK', 'K7E', '2026-01-01', '2026-01-01');");
+            db.ModelStates.Add(new ModelStateRecord { ModelCode = "M-A", State = TradeItemState.Active });
+            await db.SaveChangesAsync();
+        }
+        var store = new AuthoringCatalogueStore(factory);
+        var absorber = new VariantNamingAbsorber(factory, store);
+
+        await absorber.AbsorbAsync();
+
+        var article = Assert.Single(await store.LoadArticlesAsync());
+        Assert.Equal("FJCH", article.ElementCode);
+        Assert.Equal(
+            new Dictionary<string, string> { ["DEPTH"] = "STD", ["__MATERIAL__"] = "LEATHER-THICK" },
+            article.Selections);
     }
 
     // A freshly-migrated DB always has LegacyVariantNamings (the rename runs unconditionally in Up()),

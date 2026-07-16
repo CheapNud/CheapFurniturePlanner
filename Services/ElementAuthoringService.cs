@@ -1,7 +1,5 @@
 using CheapFurniturePlanner.Catalogue;
-using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
-using Microsoft.EntityFrameworkCore;
 
 namespace CheapFurniturePlanner.Services;
 
@@ -12,7 +10,7 @@ public sealed class StructureFrozenException(string modelCode)
 // Never republishes: structure edits are gated to Draft, and Draft models are absent from the
 // published (Active-only) snapshot the planner reads. Renaming/removing an element prunes its now-
 // stranded catalogue-backed articles, whose VariantCode is prefixed with the element's code.
-public sealed class ElementAuthoringService(IDbContextFactory<FurniturePlannerContext> factory, AuthoringCatalogueStore store, ModelPublishService publish, ArticleAuthoringService articles)
+public sealed class ElementAuthoringService(AuthoringCatalogueStore store, ModelPublishService publish, ArticleAuthoringService articles)
 {
     public async Task AddElementAsync(string modelCode, Element element, CancellationToken ct = default)
     {

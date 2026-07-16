@@ -63,7 +63,6 @@
                 <MudTh>Model</MudTh>
                 <MudTh>Element</MudTh>
                 <MudTh>Variant code</MudTh>
-                <MudTh>State</MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Code">@context.AssignedCode</MudTd>
@@ -72,9 +71,6 @@
                 </MudTd>
                 <MudTd DataLabel="Element">@context.ElementCode</MudTd>
                 <MudTd DataLabel="Variant code">@context.VariantCode</MudTd>
-                <MudTd DataLabel="State">
-                    <MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>
-                </MudTd>
             </RowTemplate>
         </MudTable>
     </MudStack>

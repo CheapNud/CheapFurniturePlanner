@@ -46,7 +46,7 @@ public class OptionAuthoringServiceTests
         var source = new DbCatalogueSource(factory);
         var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
         var naming = new ArticleAuthoringService(store, publish);
-        return new Harness(new OptionAuthoringService(factory, store, publish, naming), publish, naming, store);
+        return new Harness(new OptionAuthoringService(store, publish, naming), publish, naming, store);
     }
 
     private static async Task SeedModelStatesAsync(IDbContextFactory<FurniturePlannerContext> factory)

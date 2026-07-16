@@ -116,14 +116,14 @@ public class StudioArticlesPageTests : TestContext
             store);
         var service = new ArticleAuthoringService(store, publish);
         var selections = new Dictionary<string, string> { ["DEPTH"] = "STD" };
-        await service.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "18E");
+        await service.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "K7E");
         ConfigureServices(factory);
 
         var cut = RenderComponent<StudioArticlesPage>();
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("18E", cut.Markup);
+            Assert.Contains("K7E", cut.Markup);
             Assert.Contains($"href=\"/studio/{Studio}\"", cut.Markup);
         });
     }

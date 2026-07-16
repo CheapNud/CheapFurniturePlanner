@@ -107,6 +107,12 @@ public class AuthoringPublishIntegrationTests
         var published = await source.GetCurrentAsync();
         Assert.Contains(published.Articles, a => a.AssignedCode == "ACTIVE-CODE");
         Assert.DoesNotContain(published.Articles, a => a.AssignedCode == "DRAFT-CODE");
+
+        // I1: the backed article was created Draft (AssignAsync always stamps Draft at creation) but
+        // only survived the filter because its model FJORD is Active — the published bundle must
+        // re-stamp it, not ship the stale Draft it was created with.
+        var activeArticle = published.Articles.Single(a => a.AssignedCode == "ACTIVE-CODE");
+        Assert.Equal(TradeItemState.Active, activeArticle.State);
     }
 
     [Fact]

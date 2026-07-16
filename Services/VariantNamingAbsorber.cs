@@ -2,6 +2,7 @@ using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 
 namespace CheapFurniturePlanner.Services;
 
@@ -40,9 +41,14 @@ public sealed class VariantNamingAbsorber(IDbContextFactory<FurniturePlannerCont
             foreach (var (modelCode, variantCode, assignedCode) in staged)
             {
                 if (articles.Any(a => a.ModelCode == modelCode && a.VariantCode == variantCode)) { continue; }
-                // Variant codes are "elementCode" or "elementCode-DEF:CHOICE-..."; element codes
-                // cannot contain '-', and option/choice codes cannot contain '-' or ':'.
-                var segments = variantCode.Split('-');
+                // Variant codes are "elementCode" or "elementCode-KEY:VALUE-KEY:VALUE-...". Element
+                // codes and KEY segments (option/choice def codes) cannot contain '-' or ':', but a
+                // KEY's VALUE can: the synthetic __MATERIAL__ selection's value comes straight from
+                // PriceGroup.MaterialTypeCode, free text that may itself contain a hyphen (e.g. the
+                // seed's "LEATHER-THICK"). So split only immediately before a "KEY:" segment, not on
+                // every '-', and split each segment on its FIRST ':' only so a hyphenated value
+                // survives intact.
+                var segments = Regex.Split(variantCode, "-(?=[^-:]+:)");
                 articles.Add(new Article
                 {
                     Id = nextId++,

@@ -30,18 +30,18 @@ public class ArticleResolverTests
     [Fact]
     public void ResolveByConfiguration_Hit_ReturnsArticle()
     {
-        var snapshot = SnapshotWith(Backed("18E", "M-A", "E-A", "E-A-FEET:ELEC"));
+        var snapshot = SnapshotWith(Backed("K7E", "M-A", "E-A", "E-A-FEET:ELEC"));
 
         var article = ArticleResolver.ResolveByConfiguration(snapshot, "E-A", "E-A-FEET:ELEC");
 
         Assert.NotNull(article);
-        Assert.Equal("18E", article!.AssignedCode);
+        Assert.Equal("K7E", article!.AssignedCode);
     }
 
     [Fact]
     public void ResolveByConfiguration_Miss_ReturnsNull()
     {
-        var snapshot = SnapshotWith(Backed("18E", "M-A", "E-A", "E-A-FEET:ELEC"));
+        var snapshot = SnapshotWith(Backed("K7E", "M-A", "E-A", "E-A-FEET:ELEC"));
 
         Assert.Null(ArticleResolver.ResolveByConfiguration(snapshot, "E-A", "E-A-FEET:MAN"));
         Assert.Null(ArticleResolver.ResolveByConfiguration(snapshot, "E-B", "E-A-FEET:ELEC"));

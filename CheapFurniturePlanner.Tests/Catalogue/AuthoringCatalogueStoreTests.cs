@@ -205,7 +205,7 @@ public class AuthoringCatalogueStoreTests
 
         var articles = new List<Article>
         {
-            new() { Id = 1, AssignedCode = "18E", ModelCode = "M-A", ElementCode = "E-A", VariantCode = "E-A-FEET:ELEC", Selections = new() { ["FEET"] = "ELEC" } },
+            new() { Id = 1, AssignedCode = "K7E", ModelCode = "M-A", ElementCode = "E-A", VariantCode = "E-A-FEET:ELEC", Selections = new() { ["FEET"] = "ELEC" } },
             new() { Id = 2, AssignedCode = "ART-DROP", Name = "Dropship pouf", ManualPrice = 79m, SupplierRef = "SUP-X" },
         };
         await store.SaveArticlesAsync(articles);
@@ -224,7 +224,7 @@ public class AuthoringCatalogueStoreTests
         using var _ = conn;
         var store = new AuthoringCatalogueStore(factory);
         await store.SeedFromAsync(SeedCatalogue.Load());
-        await store.SaveArticlesAsync([new() { Id = 1, AssignedCode = "18E", ModelCode = "M-A", ElementCode = "E-A", VariantCode = "E-A" }]);
+        await store.SaveArticlesAsync([new() { Id = 1, AssignedCode = "K7E", ModelCode = "M-A", ElementCode = "E-A", VariantCode = "E-A" }]);
 
         var snapshot = await store.LoadAsync();
         await store.SaveMastersAsync(snapshot);

@@ -79,7 +79,7 @@ public class StudioElementsPageTests : TestContext
         Services.AddSingleton(sp => new ModelPublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<CataloguePublishService>(), sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<AuthoringCatalogueStore>()));
         Services.AddSingleton(sp => new ArticleAuthoringService(sp.GetRequiredService<AuthoringCatalogueStore>(), sp.GetRequiredService<ModelPublishService>()));
         Services.AddSingleton<ModelAuthoringService>();
-        Services.AddSingleton(sp => new ElementAuthoringService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<AuthoringCatalogueStore>(), sp.GetRequiredService<ModelPublishService>(), sp.GetRequiredService<ArticleAuthoringService>()));
+        Services.AddSingleton(sp => new ElementAuthoringService(sp.GetRequiredService<AuthoringCatalogueStore>(), sp.GetRequiredService<ModelPublishService>(), sp.GetRequiredService<ArticleAuthoringService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         var dialogProvider = RenderComponent<MudDialogProvider>();

@@ -1,10 +1,8 @@
 using CheapFurniturePlanner.Catalogue;
-using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Domain.Pricing;
-using Microsoft.EntityFrameworkCore;
 
 namespace CheapFurniturePlanner.Services;
 
@@ -15,7 +13,7 @@ namespace CheapFurniturePlanner.Services;
 // the element's enumerated variant space: VariantCode depends solely on which AffectsBom ChoiceOptions
 // exist and their choice codes (it sorts segments, so option/value order, defaults, Required, and
 // FabricOptions never affect it).
-public sealed class OptionAuthoringService(IDbContextFactory<FurniturePlannerContext> factory, AuthoringCatalogueStore store, ModelPublishService publish, ArticleAuthoringService articles)
+public sealed class OptionAuthoringService(AuthoringCatalogueStore store, ModelPublishService publish, ArticleAuthoringService articles)
 {
     private static readonly char[] ForbiddenCodeChars = [':', '-'];   // VariantCode delimiters
 

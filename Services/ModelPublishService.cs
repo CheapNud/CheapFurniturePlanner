@@ -66,6 +66,14 @@ public sealed class ModelPublishService(IDbContextFactory<FurniturePlannerContex
         snapshot.Articles = snapshot.Articles
             .Where(a => a.IsCatalogueBacked() ? active.Contains(a.ModelCode!) : a.State == TradeItemState.Active)
             .ToList();
+        // A backed article only survives the filter above because its model is Active, but its own
+        // stored State is stamped once at creation and never refreshed - re-stamp it here so the
+        // published bundle is truthful. The stored State is authoritative only for standalone
+        // articles (already filtered on above); leave those untouched.
+        foreach (var article in snapshot.Articles.Where(a => a.IsCatalogueBacked()))
+        {
+            article.State = TradeItemState.Active;
+        }
         return snapshot;
     }
 

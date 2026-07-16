@@ -6,7 +6,7 @@ namespace CheapFurniturePlanner.Domain.Catalog;
 //    the engine through its provenance; created by naming a variant in the Studio.
 //  - standalone (legacy/dropship): provenance null; carries its own ManualPrice and optional
 //    SupplierRef (free text — no Supplier entity yet); no production info by definition.
-// AssignedCode is curated human vocabulary (18E-style) with NO global uniqueness — order lines
+// AssignedCode is curated human vocabulary (K7E-style) with NO global uniqueness — order lines
 // reference Id + provenance, never the raw code. Selections stores the BOM-significant choices
 // (incl. the __MATERIAL__ entry) explicitly, for the reverse direction (article -> configurator)
 // and a future migration from variant-code string equality to value-set matching.
