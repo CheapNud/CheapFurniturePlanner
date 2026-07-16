@@ -61,6 +61,11 @@ public sealed class ModelPublishService(IDbContextFactory<FurniturePlannerContex
         var active = (await db.ModelStates.AsNoTracking().Where(s => s.State == TradeItemState.Active).Select(s => s.ModelCode).ToListAsync(ct)).ToHashSet();
         var snapshot = await store.LoadAsync(ct);
         snapshot.Models = snapshot.Models.Where(m => active.Contains(m.Code)).ToList();
+        // Articles publish under the same gate as their provenance: catalogue-backed ones follow
+        // their model's Active state; standalone ones (no model) gate on their own State.
+        snapshot.Articles = snapshot.Articles
+            .Where(a => a.IsCatalogueBacked() ? active.Contains(a.ModelCode!) : a.State == TradeItemState.Active)
+            .ToList();
         return snapshot;
     }
 

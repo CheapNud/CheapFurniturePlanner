@@ -72,4 +72,92 @@ public class AuthoringPublishIntegrationTests
 
         Assert.Equal(directPublished.ContentHash, storePublished.ContentHash);
     }
+
+    // Task 4: articles publish under the same gate as their provenance - catalogue-backed articles
+    // follow their model's Active state, standalone articles gate on their own State. FJORD is the
+    // seed's Active-able model (elements FJ2/FJ3/FJCH), FJORD-STUDIO is its Draft sibling (FS2/FS3/FSCH).
+    [Fact]
+    public async Task Publish_IncludesArticlesOfActiveModels_ExcludesDraftModels()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.ModelStates.Add(new ModelStateRecord { ModelCode = "FJORD", State = TradeItemState.Active });
+            db.ModelStates.Add(new ModelStateRecord { ModelCode = "FJORD-STUDIO", State = TradeItemState.Draft });
+            await db.SaveChangesAsync();
+        }
+        var source = new DbCatalogueSource(factory);
+        var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
+        var articles = new ArticleAuthoringService(store, publish);
+
+        // Draft model: assign directly (Draft-gated, so this is allowed while it's Draft).
+        await articles.AssignAsync("FJORD-STUDIO", "FS2", "FS2-DEPTH:STD",
+            new Dictionary<string, string> { ["DEPTH"] = "STD" }, "DRAFT-CODE");
+
+        // Active model: free-flow back to Draft to assign, then release again.
+        await publish.SetStateAsync("FJORD", TradeItemState.Draft);
+        await articles.AssignAsync("FJORD", "FJ2", "FJ2-DEPTH:STD",
+            new Dictionary<string, string> { ["DEPTH"] = "STD" }, "ACTIVE-CODE");
+        await publish.SetStateAsync("FJORD", TradeItemState.Active);
+        await publish.RepublishAsync();
+
+        var published = await source.GetCurrentAsync();
+        Assert.Contains(published.Articles, a => a.AssignedCode == "ACTIVE-CODE");
+        Assert.DoesNotContain(published.Articles, a => a.AssignedCode == "DRAFT-CODE");
+    }
+
+    [Fact]
+    public async Task Publish_IncludesActiveStandalone_ExcludesDraftStandalone()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
+        var source = new DbCatalogueSource(factory);
+        var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
+        var articles = new ArticleAuthoringService(store, publish);
+
+        await articles.AddStandaloneAsync(new Article { AssignedCode = "STANDALONE-ACTIVE", ManualPrice = 10m, State = TradeItemState.Active });
+        await articles.AddStandaloneAsync(new Article { AssignedCode = "STANDALONE-DRAFT", ManualPrice = 10m, State = TradeItemState.Draft });
+        await publish.RepublishAsync();
+
+        var published = await source.GetCurrentAsync();
+        Assert.Contains(published.Articles, a => a.AssignedCode == "STANDALONE-ACTIVE");
+        Assert.DoesNotContain(published.Articles, a => a.AssignedCode == "STANDALONE-DRAFT");
+    }
+
+    [Fact]
+    public async Task Validate_RejectsBackedArticleWithMissingElement()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var source = new DbCatalogueSource(factory);
+        var publish = new CataloguePublishService(factory, source);
+        var snapshot = SeedCatalogue.Load();
+        snapshot.Articles = [new Article { AssignedCode = "BAD-1", ModelCode = "FJORD", ElementCode = "NOPE", VariantCode = "NOPE-DEPTH:STD" }];
+
+        var result = await publish.PublishAsync(snapshot);
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, e => e.Contains("BAD-1"));
+    }
+
+    [Fact]
+    public async Task Validate_RejectsStandaloneWithoutManualPrice()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var source = new DbCatalogueSource(factory);
+        var publish = new CataloguePublishService(factory, source);
+        var snapshot = SeedCatalogue.Load();
+        snapshot.Articles = [new Article { AssignedCode = "DROP-X", ManualPrice = null }];
+
+        var result = await publish.PublishAsync(snapshot);
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, e => e.Contains("DROP-X"));
+    }
 }
