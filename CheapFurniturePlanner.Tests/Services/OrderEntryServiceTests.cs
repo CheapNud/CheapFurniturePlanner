@@ -276,6 +276,23 @@ public class OrderEntryServiceTests
         Assert.Equal(variantCode, line.VariantCode);
     }
 
+    [Fact]
+    public async Task AddConfiguredLine_QuantityBelowOne_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 0));
+
+        var reloaded = await harness.Orders.GetOrderAsync(order.Id);
+        Assert.Empty(reloaded!.Lines);
+        Assert.Null(reloaded.PinnedCatalogueVersion);
+    }
+
     // The headline: a mid-flight price change never moves a pinned order — not on the original add,
     // not on a reconfigure against the same configuration, only a brand-new order sees the new price.
     [Fact]

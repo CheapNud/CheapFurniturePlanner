@@ -1,5 +1,6 @@
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Domain.Production;
 using CheapFurniturePlanner.Domain.Serialization;
@@ -103,6 +104,7 @@ public sealed class OrderEntryService(
     public async Task AddConfiguredLineAsync(int orderId, string modelCode, string elementCode,
         IReadOnlyDictionary<string, string> selections, string? fabricColorCode, int quantity, CancellationToken ct = default)
     {
+        if (quantity < 1) { throw new InvalidOperationException("Quantity must be at least 1."); }
         await using var db = await factory.CreateDbContextAsync(ct);
         var order = await RequireDraftAsync(db, orderId, ct);
         var snapshot = await SnapshotForAsync(order, ct);
@@ -206,15 +208,17 @@ public sealed class OrderEntryService(
         CatalogueSnapshot snapshot, string modelCode, string elementCode,
         IReadOnlyDictionary<string, string> selections, string? fabricColorCode)
     {
-        var model = snapshot.Models.First(m => m.Code == modelCode);
-        var element = model.Elements.First(e => e.Code == elementCode);
-        var selection = new ElementSelection(elementCode, 1, selections, fabricColorCode);
-        List<PricingError> ignored = [];
-        var priceGroup = MaterialResolution.ResolveFabricPriceGroup(snapshot, element, selection, ignored);
-        var materialTypeCode = MaterialResolution.MaterialTypeCode(priceGroup);
-        var variantCode = VariantCode.From(element, selection, materialTypeCode);
-        var article = ArticleResolver.ResolveByConfiguration(snapshot, elementCode, variantCode);
-        return (variantCode, article?.Id, article?.AssignedCode);
+        // ProductionIdentityResolver performs the canonical price-group -> material-type ->
+        // VariantCode derivation; an empty suggestions map means the composed code comes back
+        // unmodified (model state is irrelevant to composition). One source of truth for identity.
+        var configuration = new ProductConfiguration(modelCode,
+            [new ElementSelection(elementCode, 1, selections, fabricColorCode)]);
+        var identity = ProductionIdentityResolver
+            .Resolve(snapshot, configuration, new Dictionary<string, string>(), TradeItemState.Active)
+            .FirstOrDefault()
+            ?? throw new InvalidOperationException($"Element '{elementCode}' not found in model '{modelCode}'.");
+        var article = ArticleResolver.ResolveByConfiguration(snapshot, elementCode, identity.VariantCode);
+        return (identity.VariantCode, article?.Id, article?.AssignedCode);
     }
 
     // The pin: stamped by the first line, immutable afterwards (removing the last line keeps it).
