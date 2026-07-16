@@ -1,6 +1,10 @@
 using CheapFurniturePlanner.Catalogue;
+using CheapFurniturePlanner.Configurator;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Pricing;
+using CheapFurniturePlanner.Domain.Production;
+using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
 using Microsoft.Data.Sqlite;
@@ -206,5 +210,138 @@ public class OrderEntryServiceTests
         await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Parties.DeleteSellerAsync(harness.Seller.Id));
+    }
+
+    // -- Task 3: configured-element lines --
+
+    // FJ2's default configuration (DEPTH:STD, MECH:NONE, STITCH:PLAIN, default AQUA fabric colour) — the
+    // same seed element ProductionIdentityServiceTests/ConfigurationResolverTests exercise.
+    private static (Element Element, Dictionary<string, string> Selections, string? FabricColorCode) Fj2Default(CatalogueSnapshot snapshot)
+    {
+        var element = snapshot.Models.SelectMany(m => m.Elements).Single(e => e.Code == "FJ2");
+        var selections = ConfigurationResolver.DefaultSelections(element);
+        var fabricColorCode = ConfigurationResolver.DefaultFabricColorCode(element, snapshot);
+        return (element, selections, fabricColorCode);
+    }
+
+    // Computes the exact composed variant code the service's own ResolveIdentity will produce, via the
+    // public ProductionIdentityResolver (same MaterialResolution + VariantCode.From derivation), so a
+    // naming assigned under this code is guaranteed to be the one the bridge hits.
+    private static string ComposedVariantCode(CatalogueSnapshot snapshot, string modelCode, Dictionary<string, string> selections, string? fabricColorCode)
+    {
+        var config = new ProductConfiguration(modelCode, [new ElementSelection("FJ2", 1, selections, fabricColorCode)]);
+        return ProductionIdentityResolver.Resolve(snapshot, config, new Dictionary<string, string>(), TradeItemState.Active)[0].VariantCode;
+    }
+
+    [Fact]
+    public async Task AddConfiguredLine_PricesAndStampsBridge()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var variantCode = ComposedVariantCode(SeedCatalogue.Load(), "FJORD", selections, fabricColorCode);
+
+        await harness.Publish.SetStateAsync("FJORD", TradeItemState.Draft);
+        await harness.Articles.AssignAsync("FJORD", "FJ2", variantCode, selections, "K7E");
+        await harness.Publish.SetStateAsync("FJORD", TradeItemState.Active);
+
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+
+        var line = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        Assert.Equal("K7E", line.AssignedCode);
+        Assert.NotNull(line.ArticleId);
+        Assert.True(line.UnitPrice > 0);
+        Assert.False(string.IsNullOrEmpty(line.VariantCode));
+        Assert.Equal(OrderLineKind.ConfiguredElement, line.Kind);
+        Assert.Equal(selections, CanonicalJson.Deserialize<Dictionary<string, string>>(line.SelectionsJson));
+    }
+
+    [Fact]
+    public async Task AddConfiguredLine_UnnamedVariant_FallsBackToComposedCode()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var variantCode = ComposedVariantCode(SeedCatalogue.Load(), "FJORD", selections, fabricColorCode);
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+
+        var line = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        Assert.Null(line.AssignedCode);
+        Assert.Null(line.ArticleId);
+        Assert.Equal(variantCode, line.VariantCode);
+    }
+
+    // The headline: a mid-flight price change never moves a pinned order — not on the original add,
+    // not on a reconfigure against the same configuration, only a brand-new order sees the new price.
+    [Fact]
+    public async Task PinnedOrder_DoesNotMoveWhenPricesChange()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+        var originalLine = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        var originalPrice = originalLine.UnitPrice;
+
+        var masters = new MasterAuthoringService(harness.Store);
+        var glue = (await harness.Store.LoadAsync()).Materials.Single(m => m.Code == "GLUE");
+        await masters.UpdateMaterialAsync("GLUE", glue with { UnitCost = glue.UnitCost + 10m });
+        await harness.Publish.RepublishAsync();
+
+        var stillLine = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        Assert.Equal(originalPrice, stillLine.UnitPrice);
+
+        await harness.Orders.ReconfigureLineAsync(order.Id, stillLine.Id, selections, fabricColorCode);
+        var afterReconfigure = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        Assert.Equal(originalPrice, afterReconfigure.UnitPrice);
+
+        var newOrder = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+        await harness.Orders.AddConfiguredLineAsync(newOrder.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+        var newLine = Assert.Single((await harness.Orders.GetOrderAsync(newOrder.Id))!.Lines);
+        Assert.NotEqual(originalPrice, newLine.UnitPrice);
+    }
+
+    // EUN's rounding (2 final decimals) happens to double cleanly for FJ2's default configuration, so
+    // an exact 2x assertion on the stored preview price is reliable here (verified against the real
+    // engine, not assumed).
+    [Fact]
+    public async Task PriceConfiguration_AppliesSellerMultiplier()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var (element, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var sellerOne = await harness.Parties.AddSellerAsync("Base Reseller", 1m);
+        var sellerTwo = await harness.Parties.AddSellerAsync("Double Reseller", 2m);
+        var orderOne = await harness.Orders.CreateOrderAsync(sellerOne.Id, harness.Consumer.Id, "EUN");
+        var orderTwo = await harness.Orders.CreateOrderAsync(sellerTwo.Id, harness.Consumer.Id, "EUN");
+
+        var priceOne = await harness.Orders.PriceConfigurationAsync(orderOne, "FJORD", element.Code, selections, fabricColorCode);
+        var priceTwo = await harness.Orders.PriceConfigurationAsync(orderTwo, "FJORD", element.Code, selections, fabricColorCode);
+
+        Assert.True(priceOne.IsSuccess);
+        Assert.True(priceTwo.IsSuccess);
+        Assert.Equal(priceOne.Breakdown!.Elements[0].ElementTotal * 2m, priceTwo.Breakdown!.Elements[0].ElementTotal);
+    }
+
+    [Fact]
+    public async Task AddConfiguredLine_InvalidConfiguration_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var (element, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE"); // not a catalogue market
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", element.Code, selections, fabricColorCode, 1));
     }
 }

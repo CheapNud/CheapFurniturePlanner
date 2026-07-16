@@ -1,6 +1,8 @@
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Pricing;
+using CheapFurniturePlanner.Domain.Production;
+using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -87,6 +89,81 @@ public sealed class OrderEntryService(
         await db.SaveChangesAsync(ct);
     }
 
+    // Pure preview: prices ONE unit of a configuration against the order's (possibly still-unpinned)
+    // snapshot and the order's seller multiplier. Never mutates — callers add/reconfigure separately.
+    public async Task<PricingResult> PriceConfigurationAsync(Order order, string modelCode, string elementCode,
+        IReadOnlyDictionary<string, string> selections, string? fabricColorCode, CancellationToken ct = default)
+    {
+        var snapshot = await SnapshotForAsync(order, ct);
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var sellerMultiplier = await db.Sellers.Where(s => s.Id == order.SellerId).Select(s => s.Multiplier).SingleAsync(ct);
+        return Price(snapshot, order, sellerMultiplier, modelCode, elementCode, selections, fabricColorCode);
+    }
+
+    public async Task AddConfiguredLineAsync(int orderId, string modelCode, string elementCode,
+        IReadOnlyDictionary<string, string> selections, string? fabricColorCode, int quantity, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var order = await RequireDraftAsync(db, orderId, ct);
+        var snapshot = await SnapshotForAsync(order, ct);
+        var sellerMultiplier = await db.Sellers.Where(s => s.Id == order.SellerId).Select(s => s.Multiplier).SingleAsync(ct);
+        var result = Price(snapshot, order, sellerMultiplier, modelCode, elementCode, selections, fabricColorCode);
+        if (!result.IsSuccess)
+        {
+            throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => $"{e.Kind}: {e.Subject}")));
+        }
+        Pin(order, snapshot);
+        var (variantCode, articleId, assignedCode) = ResolveIdentity(snapshot, modelCode, elementCode, selections, fabricColorCode);
+        var unitPrice = result.Breakdown!.Elements[0].ElementTotal;
+        order.Lines.Add(new OrderLine
+        {
+            DisplayIndex = order.Lines.Count,
+            Kind = OrderLineKind.ConfiguredElement,
+            ArticleId = articleId,
+            AssignedCode = assignedCode,
+            ModelCode = modelCode,
+            ElementCode = elementCode,
+            VariantCode = variantCode,
+            SelectionsJson = CanonicalJson.Serialize(selections),
+            FabricColorCode = fabricColorCode,
+            Quantity = quantity,
+            UnitPrice = unitPrice,
+            LineTotal = unitPrice * quantity,
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
+    // Re-prices the EXISTING line against the order's PIN (never "current") with a new configuration —
+    // a line always implies a pin, so GetAsync(order.PinnedCatalogueVersion!) is safe here.
+    public async Task ReconfigureLineAsync(int orderId, int lineId, IReadOnlyDictionary<string, string> selections,
+        string? fabricColorCode, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var order = await RequireDraftAsync(db, orderId, ct);
+        var line = order.Lines.FirstOrDefault(l => l.Id == lineId)
+            ?? throw new InvalidOperationException($"Order line {lineId} not found.");
+        if (line.Kind != OrderLineKind.ConfiguredElement)
+        {
+            throw new InvalidOperationException($"Order line {lineId} is not a configured-element line.");
+        }
+        var snapshot = await pinned.GetAsync(order.PinnedCatalogueVersion!, ct);
+        var sellerMultiplier = await db.Sellers.Where(s => s.Id == order.SellerId).Select(s => s.Multiplier).SingleAsync(ct);
+        var result = Price(snapshot, order, sellerMultiplier, line.ModelCode!, line.ElementCode!, selections, fabricColorCode);
+        if (!result.IsSuccess)
+        {
+            throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => $"{e.Kind}: {e.Subject}")));
+        }
+        var (variantCode, articleId, assignedCode) = ResolveIdentity(snapshot, line.ModelCode!, line.ElementCode!, selections, fabricColorCode);
+        line.VariantCode = variantCode;
+        line.ArticleId = articleId;
+        line.AssignedCode = assignedCode;
+        line.SelectionsJson = CanonicalJson.Serialize(selections);
+        line.FabricColorCode = fabricColorCode;
+        line.UnitPrice = result.Breakdown!.Elements[0].ElementTotal;
+        line.LineTotal = line.UnitPrice * line.Quantity;
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task UpdateQuantityAsync(int orderId, int lineId, int quantity, CancellationToken ct = default)
     {
         if (quantity < 1) { throw new InvalidOperationException("Quantity must be at least 1."); }
@@ -108,6 +185,36 @@ public sealed class OrderEntryService(
         order.Lines.Remove(line);
         for (var index = 0; index < order.Lines.Count; index++) { order.Lines[index].DisplayIndex = index; }
         await db.SaveChangesAsync(ct);
+    }
+
+    // Shared pricing core for PriceConfigurationAsync/AddConfiguredLineAsync/ReconfigureLineAsync: prices
+    // exactly one unit of a single-element configuration.
+    private static PricingResult Price(CatalogueSnapshot snapshot, Order order, decimal sellerMultiplier,
+        string modelCode, string elementCode, IReadOnlyDictionary<string, string> selections, string? fabricColorCode)
+    {
+        var market = snapshot.Markets.FirstOrDefault(m => m.Code == order.MarketCode)
+            ?? throw new InvalidOperationException($"Market '{order.MarketCode}' is not in this order's catalogue.");
+        var configuration = new ProductConfiguration(modelCode,
+            [new ElementSelection(elementCode, 1, selections, fabricColorCode)]);
+        return PricingEngine.Calculate(new PricingRequest(snapshot, configuration, new PricingContext(market, sellerMultiplier)));
+    }
+
+    // The OE-1 bridge stamp shared by Add + Reconfigure: composes the variant code exactly as the
+    // Studio's naming flow does (price group -> material type -> VariantCode.From), then resolves it
+    // against the catalogue's named articles. A miss keeps the composed code as the production identity.
+    private static (string VariantCode, int? ArticleId, string? AssignedCode) ResolveIdentity(
+        CatalogueSnapshot snapshot, string modelCode, string elementCode,
+        IReadOnlyDictionary<string, string> selections, string? fabricColorCode)
+    {
+        var model = snapshot.Models.First(m => m.Code == modelCode);
+        var element = model.Elements.First(e => e.Code == elementCode);
+        var selection = new ElementSelection(elementCode, 1, selections, fabricColorCode);
+        List<PricingError> ignored = [];
+        var priceGroup = MaterialResolution.ResolveFabricPriceGroup(snapshot, element, selection, ignored);
+        var materialTypeCode = MaterialResolution.MaterialTypeCode(priceGroup);
+        var variantCode = VariantCode.From(element, selection, materialTypeCode);
+        var article = ArticleResolver.ResolveByConfiguration(snapshot, elementCode, variantCode);
+        return (variantCode, article?.Id, article?.AssignedCode);
     }
 
     // The pin: stamped by the first line, immutable afterwards (removing the last line keeps it).
