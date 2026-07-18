@@ -362,6 +362,217 @@ public class OrderEntryServiceTests
             harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", element.Code, selections, fabricColorCode, 1));
     }
 
+    // -- Task 3: discount suggestion + money formula + overrides --
+
+    [Fact]
+    public async Task AddConfiguredLine_SuggestsFromLadder()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var discounts = new DiscountService(factory);
+        await discounts.AddRuleAsync(new DiscountRule { SellerId = harness.Seller.Id, Scope = DiscountScope.Model, ModelCode = "FJORD", RatePercent = 10m });
+        await discounts.AddRuleAsync(new DiscountRule { SellerId = harness.Seller.Id, Scope = DiscountScope.Everything, RatePercent = 5m });
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 2);
+
+        var line = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        Assert.Equal(10m, line.DiscountPercent);
+        Assert.Equal("Model", line.DiscountSource);
+        Assert.False(line.DiscountIsManual);
+        Assert.Equal(line.UnitPrice * 0.9m * 2, line.LineTotal);
+    }
+
+    [Fact]
+    public async Task AddConfiguredLine_FixedPriceOverridesUnit()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var snapshot = SeedCatalogue.Load();
+        var (element, selections, fabricColorCode) = Fj2Default(snapshot);
+        var priceGroupCode = ConfigurationResolver.ResolvedPriceGroupCode(element, snapshot, fabricColorCode);
+        var discounts = new DiscountService(factory);
+        await discounts.AddRuleAsync(new DiscountRule
+        {
+            SellerId = harness.Seller.Id,
+            Scope = DiscountScope.ElementPriceGroup,
+            ElementCode = "FJ2",
+            PriceGroupCode = priceGroupCode,
+            FixedPrice = 111.50m,
+        });
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+
+        var line = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        Assert.Equal(111.50m, line.UnitPrice);
+        Assert.Equal(0m, line.DiscountPercent);
+        Assert.Equal("ElementPriceGroup (fixed)", line.DiscountSource);
+        Assert.False(line.DiscountIsManual);
+        Assert.Equal(111.50m, line.LineTotal);
+    }
+
+    [Fact]
+    public async Task AddConfiguredLine_CollectionSpecificBeatsWildcard()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var discounts = new DiscountService(factory);
+        await discounts.AddRuleAsync(new DiscountRule { SellerId = harness.Seller.Id, Scope = DiscountScope.Everything, RatePercent = 5m });
+        await discounts.AddRuleAsync(new DiscountRule { SellerId = harness.Seller.Id, Scope = DiscountScope.Everything, CollectionCode = "SCANDI", RatePercent = 15m });
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+
+        var line = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        Assert.Equal(15m, line.DiscountPercent);
+        Assert.Equal("Everything", line.DiscountSource);
+    }
+
+    [Fact]
+    public async Task RuleEditAfterAdd_DoesNotTouchLine()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var discounts = new DiscountService(factory);
+        await discounts.AddRuleAsync(new DiscountRule { SellerId = harness.Seller.Id, Scope = DiscountScope.Everything, RatePercent = 5m });
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+        var line = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        Assert.Equal(5m, line.DiscountPercent);
+
+        var seededRule = (await discounts.RulesForSellerAsync(harness.Seller.Id)).Single();
+        await discounts.UpdateRuleAsync(seededRule.Id, 40m, null);
+
+        var reloaded = (await harness.Orders.GetOrderAsync(order.Id))!.Lines.Single();
+        Assert.Equal(5m, reloaded.DiscountPercent);
+        Assert.Equal(line.LineTotal, reloaded.LineTotal);
+    }
+
+    [Fact]
+    public async Task SetLineDiscount_ManualStopsResuggest()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var discounts = new DiscountService(factory);
+        await discounts.AddRuleAsync(new DiscountRule { SellerId = harness.Seller.Id, Scope = DiscountScope.Everything, RatePercent = 5m });
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+        var line = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+
+        await harness.Orders.SetLineDiscountAsync(order.Id, line.Id, 25m);
+        await harness.Orders.ReconfigureLineAsync(order.Id, line.Id, selections, fabricColorCode);
+
+        var reloaded = (await harness.Orders.GetOrderAsync(order.Id))!.Lines.Single();
+        Assert.Equal(25m, reloaded.DiscountPercent);
+        Assert.Null(reloaded.DiscountSource);
+        Assert.True(reloaded.DiscountIsManual);
+    }
+
+    [Fact]
+    public async Task Reconfigure_ResuggestsWhenNotManual()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var discounts = new DiscountService(factory);
+        await discounts.AddRuleAsync(new DiscountRule { SellerId = harness.Seller.Id, Scope = DiscountScope.Everything, RatePercent = 5m });
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+        var line = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        Assert.Equal(5m, line.DiscountPercent);
+
+        var seededRule = (await discounts.RulesForSellerAsync(harness.Seller.Id)).Single();
+        await discounts.UpdateRuleAsync(seededRule.Id, 20m, null);
+
+        await harness.Orders.ReconfigureLineAsync(order.Id, line.Id, selections, fabricColorCode);
+
+        var reloaded = (await harness.Orders.GetOrderAsync(order.Id))!.Lines.Single();
+        Assert.Equal(20m, reloaded.DiscountPercent);
+        Assert.False(reloaded.DiscountIsManual);
+    }
+
+    [Fact]
+    public async Task SetOrderDiscount_FactorsIntoTotal()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var article = await StandaloneArticleAsync(harness);
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+        await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 2);
+
+        await harness.Orders.SetOrderDiscountAsync(order.Id, 10m);
+
+        var reloaded = await harness.Orders.GetOrderAsync(order.Id);
+        var expected = reloaded!.Lines.Sum(l => l.LineTotal) * 0.9m;
+        Assert.Equal(expected, harness.Orders.OrderTotal(reloaded));
+    }
+
+    [Fact]
+    public async Task SetLineDiscount_Validation_AndDraftGate()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var article = await StandaloneArticleAsync(harness);
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+        await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1);
+        var line = (await harness.Orders.GetOrderAsync(order.Id))!.Lines.Single();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Orders.SetLineDiscountAsync(order.Id, line.Id, 101m));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Orders.SetLineDiscountAsync(order.Id, line.Id, -1m));
+
+        await harness.Orders.PlaceAsync(order.Id);
+        await Assert.ThrowsAsync<OrderPlacedException>(() => harness.Orders.SetLineDiscountAsync(order.Id, line.Id, 10m));
+    }
+
+    [Fact]
+    public async Task StandaloneLine_GetsNoSuggestion_ButAcceptsManual()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var discounts = new DiscountService(factory);
+        await discounts.AddRuleAsync(new DiscountRule { SellerId = harness.Seller.Id, Scope = DiscountScope.Everything, RatePercent = 5m });
+        var article = await StandaloneArticleAsync(harness);
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+
+        await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1);
+
+        var line = Assert.Single((await harness.Orders.GetOrderAsync(order.Id))!.Lines);
+        Assert.Equal(0m, line.DiscountPercent);
+        Assert.Null(line.DiscountSource);
+        Assert.False(line.DiscountIsManual);
+
+        await harness.Orders.SetLineDiscountAsync(order.Id, line.Id, 20m);
+        var reloaded = (await harness.Orders.GetOrderAsync(order.Id))!.Lines.Single();
+        Assert.Equal(20m, reloaded.DiscountPercent);
+        Assert.True(reloaded.DiscountIsManual);
+    }
+
+    [Fact]
+    public void ResolvedPriceGroupCode_ResolvesSeedColour()
+    {
+        var snapshot = SeedCatalogue.Load();
+        var (element, _, fabricColorCode) = Fj2Default(snapshot);
+
+        var priceGroupCode = ConfigurationResolver.ResolvedPriceGroupCode(element, snapshot, fabricColorCode);
+
+        Assert.Equal("PGA", priceGroupCode);
+        Assert.Null(ConfigurationResolver.ResolvedPriceGroupCode(element, snapshot, null));
+    }
+
     // -- Task 4: lifecycle (place + cancel) --
 
     [Fact]
