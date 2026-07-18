@@ -47,6 +47,7 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<OrderLine> OrderLines => Set<OrderLine>();
     public DbSet<Seller> Sellers => Set<Seller>();
     public DbSet<Consumer> Consumers => Set<Consumer>();
+    public DbSet<DiscountRule> DiscountRules => Set<DiscountRule>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

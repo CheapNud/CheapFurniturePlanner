@@ -22,5 +22,8 @@ public class OrderLine
     public int Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; }
     public decimal LineTotal { get; set; }
+    public decimal DiscountPercent { get; set; }
+    public string? DiscountSource { get; set; }
+    public bool DiscountIsManual { get; set; }
     public string? SupplierRef { get; set; }
 }

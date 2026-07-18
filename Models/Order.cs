@@ -20,5 +20,6 @@ public class Order
     public OrderState State { get; set; } = OrderState.Draft;
     public DateTime CreatedAt { get; set; }
     public DateTime? PlacedAt { get; set; }
+    public decimal OrderDiscountPercent { get; set; }
     public List<OrderLine> Lines { get; set; } = [];
 }
