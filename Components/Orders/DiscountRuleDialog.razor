@@ -3,7 +3,7 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
-            <MudSelect T="DiscountScope" Label="Scope" @bind-Value="_scope" Disabled="@(Rule is not null)">
+            <MudSelect T="DiscountScope" Label="Scope" Value="_scope" ValueChanged="OnScopeChanged" Disabled="@(Rule is not null)">
                 @foreach (var scope in Enum.GetValues<DiscountScope>())
                 {
                     <MudSelectItem T="DiscountScope" Value="@scope">@scope</MudSelectItem>
@@ -85,6 +85,15 @@
             _collectionCode = Rule.CollectionCode;
             _ratePercent = Rule.RatePercent;
             _fixedPrice = Rule.FixedPrice;
+        }
+    }
+
+    private void OnScopeChanged(DiscountScope scope)
+    {
+        _scope = scope;
+        if (_scope != DiscountScope.ElementPriceGroup)
+        {
+            _fixedPrice = null;
         }
     }
 

@@ -129,6 +129,21 @@ public class DiscountResolverTests
     }
 
     [Fact]
+    public void WildcardWins_WhenSpecificRuleIsForDifferentCollection()
+    {
+        var rules = new List<DiscountRule>
+        {
+            Rule(DiscountScope.Everything, collectionCode: "COL-OTHER", ratePercent: 20m),
+            Rule(DiscountScope.Everything, ratePercent: 5m),
+        };
+
+        var result = DiscountResolver.Suggest(rules, "COL-MINE", "M1", null, "EA", null, null);
+
+        Assert.NotNull(result);
+        Assert.Equal(5m, result!.RatePercent);
+    }
+
+    [Fact]
     public void FixedPriceRule_Surfaces_WithElementPriceGroupScope()
     {
         var rules = new List<DiscountRule>
