@@ -1,4 +1,5 @@
 using CheapFurniturePlanner.Catalogue;
+using CheapFurniturePlanner.Configurator;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Pricing;
@@ -56,7 +57,7 @@ public sealed class OrderEntryService(
             .OrderByDescending(o => o.CreatedAt).ToListAsync(ct);
     }
 
-    public decimal OrderTotal(Order order) => order.Lines.Sum(l => l.LineTotal);
+    public decimal OrderTotal(Order order) => order.Lines.Sum(l => l.LineTotal) * (1 - order.OrderDiscountPercent / 100m);
 
     // Resolves the snapshot this order works against: the pinned version once one exists, else the
     // currently effective one (which the first AddLine will pin).
@@ -76,7 +77,7 @@ public sealed class OrderEntryService(
         if (quantity < 1) { throw new InvalidOperationException("Quantity must be at least 1."); }
         Pin(order, snapshot);
         var unitPrice = article.ManualPrice.Value;
-        order.Lines.Add(new OrderLine
+        var line = new OrderLine
         {
             DisplayIndex = order.Lines.Count,
             Kind = OrderLineKind.StandaloneArticle,
@@ -84,9 +85,12 @@ public sealed class OrderEntryService(
             AssignedCode = article.AssignedCode,
             Quantity = quantity,
             UnitPrice = unitPrice,
-            LineTotal = unitPrice * quantity,
             SupplierRef = article.SupplierRef,
-        });
+        };
+        // Standalone lines never carry a catalogue element/price group, so no suggestion applies —
+        // fields stay at their defaults (percent 0, manual false); a seller can still override manually.
+        line.LineTotal = ComputeLineTotal(line);
+        order.Lines.Add(line);
         await db.SaveChangesAsync(ct);
     }
 
@@ -115,9 +119,9 @@ public sealed class OrderEntryService(
             throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => $"{e.Kind}: {e.Subject}")));
         }
         Pin(order, snapshot);
-        var (variantCode, articleId, assignedCode) = ResolveIdentity(snapshot, modelCode, elementCode, selections, fabricColorCode);
+        var (variantCode, articleId, assignedCode, materialTypeCode) = ResolveIdentity(snapshot, modelCode, elementCode, selections, fabricColorCode);
         var unitPrice = result.Breakdown!.Elements[0].ElementTotal;
-        order.Lines.Add(new OrderLine
+        var line = new OrderLine
         {
             DisplayIndex = order.Lines.Count,
             Kind = OrderLineKind.ConfiguredElement,
@@ -130,8 +134,11 @@ public sealed class OrderEntryService(
             FabricColorCode = fabricColorCode,
             Quantity = quantity,
             UnitPrice = unitPrice,
-            LineTotal = unitPrice * quantity,
-        });
+        };
+        var suggestion = await SuggestAsync(db, snapshot, order, modelCode, elementCode, fabricColorCode, materialTypeCode, ct);
+        Apply(line, suggestion);
+        line.LineTotal = ComputeLineTotal(line);
+        order.Lines.Add(line);
         await db.SaveChangesAsync(ct);
     }
 
@@ -155,14 +162,44 @@ public sealed class OrderEntryService(
         {
             throw new InvalidOperationException(string.Join("; ", result.Errors.Select(e => $"{e.Kind}: {e.Subject}")));
         }
-        var (variantCode, articleId, assignedCode) = ResolveIdentity(snapshot, line.ModelCode!, line.ElementCode!, selections, fabricColorCode);
+        var (variantCode, articleId, assignedCode, materialTypeCode) = ResolveIdentity(snapshot, line.ModelCode!, line.ElementCode!, selections, fabricColorCode);
         line.VariantCode = variantCode;
         line.ArticleId = articleId;
         line.AssignedCode = assignedCode;
         line.SelectionsJson = CanonicalJson.Serialize(selections);
         line.FabricColorCode = fabricColorCode;
         line.UnitPrice = result.Breakdown!.Elements[0].ElementTotal;
-        line.LineTotal = line.UnitPrice * line.Quantity;
+        // A manual override is a deliberate stored outcome — a reconfigure re-prices the unit but never
+        // silently re-guesses a discount the seller already pinned by hand.
+        if (!line.DiscountIsManual)
+        {
+            var suggestion = await SuggestAsync(db, snapshot, order, line.ModelCode!, line.ElementCode!, fabricColorCode, materialTypeCode, ct);
+            Apply(line, suggestion);
+        }
+        line.LineTotal = ComputeLineTotal(line);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task SetLineDiscountAsync(int orderId, int lineId, decimal percent, CancellationToken ct = default)
+    {
+        if (percent is < 0 or > 100) { throw new InvalidOperationException("Discount percent must be between 0 and 100."); }
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var order = await RequireDraftAsync(db, orderId, ct);
+        var line = order.Lines.FirstOrDefault(l => l.Id == lineId)
+            ?? throw new InvalidOperationException($"Order line {lineId} not found.");
+        line.DiscountPercent = percent;
+        line.DiscountIsManual = true;
+        line.DiscountSource = null;
+        line.LineTotal = ComputeLineTotal(line);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task SetOrderDiscountAsync(int orderId, decimal percent, CancellationToken ct = default)
+    {
+        if (percent is < 0 or > 100) { throw new InvalidOperationException("Discount percent must be between 0 and 100."); }
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var order = await RequireDraftAsync(db, orderId, ct);
+        order.OrderDiscountPercent = percent;
         await db.SaveChangesAsync(ct);
     }
 
@@ -174,7 +211,7 @@ public sealed class OrderEntryService(
         var line = order.Lines.FirstOrDefault(l => l.Id == lineId)
             ?? throw new InvalidOperationException($"Order line {lineId} not found.");
         line.Quantity = quantity;
-        line.LineTotal = line.UnitPrice * quantity;
+        line.LineTotal = ComputeLineTotal(line);
         await db.SaveChangesAsync(ct);
     }
 
@@ -247,7 +284,7 @@ public sealed class OrderEntryService(
     // The OE-1 bridge stamp shared by Add + Reconfigure: composes the variant code exactly as the
     // Studio's naming flow does (price group -> material type -> VariantCode.From), then resolves it
     // against the catalogue's named articles. A miss keeps the composed code as the production identity.
-    private static (string VariantCode, int? ArticleId, string? AssignedCode) ResolveIdentity(
+    private static (string VariantCode, int? ArticleId, string? AssignedCode, string? MaterialTypeCode) ResolveIdentity(
         CatalogueSnapshot snapshot, string modelCode, string elementCode,
         IReadOnlyDictionary<string, string> selections, string? fabricColorCode)
     {
@@ -261,7 +298,48 @@ public sealed class OrderEntryService(
             .FirstOrDefault()
             ?? throw new InvalidOperationException($"Element '{elementCode}' not found in model '{modelCode}'.");
         var article = ArticleResolver.ResolveByConfiguration(snapshot, elementCode, identity.VariantCode);
-        return (identity.VariantCode, article?.Id, article?.AssignedCode);
+        return (identity.VariantCode, article?.Id, article?.AssignedCode, identity.MaterialTypeCode);
+    }
+
+    // The ONE money formula: a line's stored total already bakes in its own discount, so every write
+    // site (add/reconfigure/quantity/manual override) routes through here — never hand-multiplied.
+    private static decimal ComputeLineTotal(OrderLine line) => line.UnitPrice * (1 - line.DiscountPercent / 100m) * line.Quantity;
+
+    // The suggestion block shared by AddConfiguredLineAsync and ReconfigureLineAsync (when the line
+    // isn't manually pinned): loads the seller's rule ladder and asks DiscountResolver for the
+    // best-matching outcome given this line's resolved context.
+    private static async Task<DiscountSuggestion?> SuggestAsync(FurniturePlannerContext db, CatalogueSnapshot snapshot,
+        Order order, string modelCode, string elementCode, string? fabricColorCode, string? materialTypeCode, CancellationToken ct)
+    {
+        var rules = await db.DiscountRules.AsNoTracking().Where(r => r.SellerId == order.SellerId).ToListAsync(ct);
+        var model = snapshot.Models.FirstOrDefault(m => m.Code == modelCode);
+        var element = model?.Elements.FirstOrDefault(e => e.Code == elementCode);
+        var priceGroupCode = element is null ? null : ConfigurationResolver.ResolvedPriceGroupCode(element, snapshot, fabricColorCode);
+        return DiscountResolver.Suggest(rules, model?.CollectionCode, modelCode, model?.ModelTypeCode, elementCode, priceGroupCode, materialTypeCode);
+    }
+
+    // Applies a suggestion outcome to the line: a fixed price replaces the unit price outright (percent
+    // resets to 0), a rate sets the percent, none clears both. Always marks the line as not manual —
+    // callers only reach here when the line isn't pinned by a manual override.
+    private static void Apply(OrderLine line, DiscountSuggestion? suggestion)
+    {
+        if (suggestion is null)
+        {
+            line.DiscountPercent = 0;
+            line.DiscountSource = null;
+        }
+        else if (suggestion.FixedPrice is not null)
+        {
+            line.UnitPrice = suggestion.FixedPrice.Value;
+            line.DiscountPercent = 0;
+            line.DiscountSource = "ElementPriceGroup (fixed)";
+        }
+        else
+        {
+            line.DiscountPercent = suggestion.RatePercent!.Value;
+            line.DiscountSource = suggestion.Scope.ToString();
+        }
+        line.DiscountIsManual = false;
     }
 
     // The pin: stamped by the first line, immutable afterwards (removing the last line keeps it).

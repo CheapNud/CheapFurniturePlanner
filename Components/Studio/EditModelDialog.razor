@@ -12,6 +12,7 @@
             <MudTextField T="string" Label="Code" Value="@Code" Disabled="true" />
             <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" />
             <MudTextField T="string" Label="Collection (optional)" @bind-Value="_collection" />
+            <MudTextField T="string" Label="Model type (optional)" @bind-Value="_modelType" />
         </MudStack>
     </DialogContent>
     <DialogActions>
@@ -33,13 +34,18 @@
     [Parameter]
     public string? Collection { get; set; }
 
+    [Parameter]
+    public string? ModelType { get; set; }
+
     private string _name = string.Empty;
     private string? _collection;
+    private string? _modelType;
 
     protected override void OnInitialized()
     {
         _name = Name;
         _collection = Collection;
+        _modelType = ModelType;
     }
 
     private void Cancel() => MudDialog.Cancel();
@@ -54,10 +60,11 @@
 
         var trimmedName = _name.Trim();
         var trimmedCollection = string.IsNullOrWhiteSpace(_collection) ? null : _collection.Trim();
+        var trimmedModelType = string.IsNullOrWhiteSpace(_modelType) ? null : _modelType.Trim();
 
         try
         {
-            await ModelAuthoringService.RenameAsync(Code, trimmedName, trimmedCollection);
+            await ModelAuthoringService.RenameAsync(Code, trimmedName, trimmedCollection, trimmedModelType);
             MudDialog.Close(DialogResult.Ok(true));
         }
         catch (InvalidOperationException ex)

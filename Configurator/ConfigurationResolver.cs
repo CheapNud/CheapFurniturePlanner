@@ -64,4 +64,18 @@ public static class ConfigurationResolver
         var pg = snapshot.PriceGroups.FirstOrDefault(p => p.Code == group.PriceGroupCode);
         return pg?.MaterialTypeCode ?? pg?.Kind.ToString();
     }
+
+    // The published price group behind a chosen fabric colour: the colour's fabric group among the
+    // element's PRIMARY fabric option's groups -> its PriceGroupCode. Null when no colour or no match.
+    // Mirrors the engine's MaterialResolution scoping (which only ever consults the first FabricOption),
+    // for discount-rule lookups.
+    public static string? ResolvedPriceGroupCode(Element element, CatalogueSnapshot snapshot, string? fabricColorCode)
+    {
+        if (fabricColorCode is null) { return null; }
+        var primaryFabricOption = element.Options.OfType<FabricOption>().FirstOrDefault();
+        if (primaryFabricOption is null) { return null; }
+        return snapshot.FabricGroups
+            .FirstOrDefault(g => primaryFabricOption.FabricGroupCodes.Contains(g.Code) && g.Colors.Any(c => c.Code == fabricColorCode))
+            ?.PriceGroupCode;
+    }
 }
