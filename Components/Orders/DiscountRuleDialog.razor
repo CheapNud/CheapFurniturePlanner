@@ -1,3 +1,4 @@
+@using CheapFurniturePlanner.Domain.Catalog
 @using CheapFurniturePlanner.Models
 
 <MudDialog>
@@ -21,7 +22,12 @@
             }
             else if (_scope == DiscountScope.ModelType)
             {
-                <MudTextField T="string" Label="Model type code" @bind-Value="_modelTypeCode" Disabled="@(Rule is not null)" Required="true" />
+                <MudSelect T="ModelType?" Label="Model type" Value="_modelType" ValueChanged="@((ModelType? modelType) => _modelType = modelType)" Disabled="@(Rule is not null)" Required="true">
+                    @foreach (var modelType in Enum.GetValues<ModelType>())
+                    {
+                        <MudSelectItem T="ModelType?" Value="@((ModelType?)modelType)">@modelType</MudSelectItem>
+                    }
+                </MudSelect>
             }
             else if (_scope == DiscountScope.MaterialType)
             {
@@ -65,7 +71,7 @@
     private string? _elementCode;
     private string? _priceGroupCode;
     private string? _modelCode;
-    private string? _modelTypeCode;
+    private ModelType? _modelType;
     private string? _materialTypeCode;
     private string? _collectionCode;
     private decimal? _ratePercent;
@@ -80,7 +86,7 @@
             _elementCode = Rule.ElementCode;
             _priceGroupCode = Rule.PriceGroupCode;
             _modelCode = Rule.ModelCode;
-            _modelTypeCode = Rule.ModelTypeCode;
+            _modelType = Rule.ModelType;
             _materialTypeCode = Rule.MaterialTypeCode;
             _collectionCode = Rule.CollectionCode;
             _ratePercent = Rule.RatePercent;
@@ -104,6 +110,11 @@
             _error = "Enter exactly one of rate percent or fixed price.";
             return;
         }
+        if (_scope == DiscountScope.ModelType && _modelType is null)
+        {
+            _error = "Select a model type.";
+            return;
+        }
         _error = null;
 
         var result = new DiscountRule
@@ -115,7 +126,7 @@
             ElementCode = _scope == DiscountScope.ElementPriceGroup ? (string.IsNullOrWhiteSpace(_elementCode) ? null : _elementCode.Trim()) : null,
             PriceGroupCode = _scope == DiscountScope.ElementPriceGroup ? (string.IsNullOrWhiteSpace(_priceGroupCode) ? null : _priceGroupCode.Trim()) : null,
             ModelCode = _scope == DiscountScope.Model ? (string.IsNullOrWhiteSpace(_modelCode) ? null : _modelCode.Trim()) : null,
-            ModelTypeCode = _scope == DiscountScope.ModelType ? (string.IsNullOrWhiteSpace(_modelTypeCode) ? null : _modelTypeCode.Trim()) : null,
+            ModelType = _scope == DiscountScope.ModelType ? _modelType : null,
             MaterialTypeCode = _scope == DiscountScope.MaterialType ? (string.IsNullOrWhiteSpace(_materialTypeCode) ? null : _materialTypeCode.Trim()) : null,
             RatePercent = _ratePercent,
             FixedPrice = _fixedPrice,

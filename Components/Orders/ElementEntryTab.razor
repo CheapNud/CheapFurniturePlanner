@@ -228,7 +228,7 @@
             var materialTypeCode = ProductionIdentityResolver
                 .Resolve(_snapshot, configuration, new Dictionary<string, string>(), TradeItemState.Active)
                 .FirstOrDefault()?.MaterialTypeCode;
-            _suggestion = DiscountResolver.Suggest(_rules, CurrentModel.CollectionCode, _modelCode, CurrentModel.ModelTypeCode, _elementCode, priceGroupCode, materialTypeCode);
+            _suggestion = DiscountResolver.Suggest(_rules, CurrentModel.CollectionCode, _modelCode, CurrentModel.ModelType, _elementCode, priceGroupCode, materialTypeCode);
         }
         catch (InvalidOperationException)
         {

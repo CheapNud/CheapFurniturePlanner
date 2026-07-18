@@ -1,4 +1,5 @@
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,7 +23,7 @@ public sealed class DiscountService(IDbContextFactory<FurniturePlannerContext> f
         var duplicate = await db.DiscountRules.AnyAsync(r => r.SellerId == rule.SellerId
             && r.CollectionCode == rule.CollectionCode && r.Scope == rule.Scope
             && r.ElementCode == rule.ElementCode && r.PriceGroupCode == rule.PriceGroupCode
-            && r.ModelCode == rule.ModelCode && r.ModelTypeCode == rule.ModelTypeCode
+            && r.ModelCode == rule.ModelCode && r.ModelType == rule.ModelType
             && r.MaterialTypeCode == rule.MaterialTypeCode, ct);
         if (duplicate) { throw new InvalidOperationException("An identical discount rule already exists for this seller."); }
         db.DiscountRules.Add(rule);
@@ -69,13 +70,19 @@ public sealed class DiscountService(IDbContextFactory<FurniturePlannerContext> f
         Require(needsElement, rule.ElementCode, "element code");
         Require(needsElement, rule.PriceGroupCode, "price group code");
         Require(needsModel, rule.ModelCode, "model code");
-        Require(needsModelType, rule.ModelTypeCode, "model type code");
+        RequireModelType(needsModelType, rule.ModelType);
         Require(needsMaterialType, rule.MaterialTypeCode, "material type code");
 
         static void Require(bool needed, string? key, string label)
         {
             if (needed && string.IsNullOrWhiteSpace(key)) { throw new InvalidOperationException($"This scope requires a {label}."); }
             if (!needed && key is not null) { throw new InvalidOperationException($"This scope must not carry a {label}."); }
+        }
+
+        static void RequireModelType(bool needed, ModelType? modelType)
+        {
+            if (needed && modelType is null) { throw new InvalidOperationException("This scope requires a model type."); }
+            if (!needed && modelType is not null) { throw new InvalidOperationException("This scope must not carry a model type."); }
         }
     }
 }
