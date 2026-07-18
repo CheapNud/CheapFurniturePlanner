@@ -25,6 +25,7 @@
                     <MudStack Row="true" Spacing="1">
                         <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAsync(context))">Edit</MudButton>
                         <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSellerAsync(context))">Delete</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Href="@($"/parties/{context.Id}/discounts")">Discounts</MudButton>
                     </MudStack>
                 </MudTd>
             </RowTemplate>

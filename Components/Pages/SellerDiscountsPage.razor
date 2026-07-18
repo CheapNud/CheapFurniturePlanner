@@ -1,0 +1,132 @@
+@page "/parties/{SellerId:int}/discounts"
+@using System.Globalization
+@using CheapFurniturePlanner.Components.Orders
+@using CheapFurniturePlanner.Models
+@inject PartyService PartyService
+@inject DiscountService DiscountService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Discounts - Cheap Furniture Planner</PageTitle>
+
+@if (_seller is null)
+{
+    <MudAlert Severity="Severity.Error">Seller not found.</MudAlert>
+}
+else
+{
+    <MudStack Spacing="4">
+        <MudPaper Elevation="2" Class="pa-4">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h6">Discounts — @_seller.Name</MudText>
+                <MudButton Variant="Variant.Outlined" Href="/parties">Back</MudButton>
+            </MudStack>
+        </MudPaper>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
+            Add discount rule
+        </MudButton>
+        <MudTable Items="@_rules" Hover="true" Striped="true" Dense="true" Elevation="2" T="DiscountRule">
+            <HeaderContent>
+                <MudTh>Scope</MudTh>
+                <MudTh>Collection</MudTh>
+                <MudTh>Keys</MudTh>
+                <MudTh>Value</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Scope">@context.Scope</MudTd>
+                <MudTd DataLabel="Collection">@(context.CollectionCode ?? "any")</MudTd>
+                <MudTd DataLabel="Keys">@Keys(context)</MudTd>
+                <MudTd DataLabel="Value">@FormatValue(context)</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudStack>
+}
+
+@code {
+    [Parameter]
+    public int SellerId { get; set; }
+
+    private Seller? _seller;
+    private List<DiscountRule> _rules = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _seller = (await PartyService.SellersAsync()).FirstOrDefault(s => s.Id == SellerId);
+        _rules = await DiscountService.RulesForSellerAsync(SellerId);
+    }
+
+    // ponytail: SQLite round-trips decimal through TEXT with a forced ".0" scale (10m -> 10.0m),
+    // so plain interpolation shows "10.0%" instead of "10%"; "0.##" trims that back down. Extend
+    // the format string if a future rate ever needs more than two decimal places.
+    private static string FormatValue(DiscountRule rule) => rule.RatePercent is not null
+        ? $"{rule.RatePercent.Value.ToString("0.##", CultureInfo.InvariantCulture)}%"
+        : rule.FixedPrice?.ToString("0.##", CultureInfo.InvariantCulture) ?? "";
+
+    private static string Keys(DiscountRule rule) => rule.Scope switch
+    {
+        DiscountScope.ElementPriceGroup => $"{rule.ElementCode} / {rule.PriceGroupCode}",
+        DiscountScope.Model => rule.ModelCode ?? "—",
+        DiscountScope.ModelType => rule.ModelTypeCode ?? "—",
+        DiscountScope.MaterialType => rule.MaterialTypeCode ?? "—",
+        _ => "—",
+    };
+
+    private async Task AddAsync()
+    {
+        var parameters = new DialogParameters<DiscountRuleDialog> { { d => d.SellerId, SellerId }, { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<DiscountRuleDialog>("Add discount rule", parameters);
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not DiscountRule rule) { return; }
+        try
+        {
+            await DiscountService.AddRuleAsync(rule);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task EditAsync(DiscountRule existing)
+    {
+        var parameters = new DialogParameters<DiscountRuleDialog> { { d => d.Rule, existing }, { d => d.SellerId, SellerId }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<DiscountRuleDialog>("Edit discount rule", parameters);
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not DiscountRule rule) { return; }
+        try
+        {
+            await DiscountService.UpdateRuleAsync(existing.Id, rule.RatePercent, rule.FixedPrice);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task DeleteAsync(DiscountRule existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete discount rule", "Delete this rule?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try
+        {
+            await DiscountService.DeleteRuleAsync(existing.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+}

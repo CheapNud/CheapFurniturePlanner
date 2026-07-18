@@ -1,0 +1,116 @@
+@using CheapFurniturePlanner.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudSelect T="DiscountScope" Label="Scope" @bind-Value="_scope" Disabled="@(Rule is not null)">
+                @foreach (var scope in Enum.GetValues<DiscountScope>())
+                {
+                    <MudSelectItem T="DiscountScope" Value="@scope">@scope</MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (_scope == DiscountScope.ElementPriceGroup)
+            {
+                <MudTextField T="string" Label="Element code" @bind-Value="_elementCode" Disabled="@(Rule is not null)" Required="true" />
+                <MudTextField T="string" Label="Price group code" @bind-Value="_priceGroupCode" Disabled="@(Rule is not null)" Required="true" />
+            }
+            else if (_scope == DiscountScope.Model)
+            {
+                <MudTextField T="string" Label="Model code" @bind-Value="_modelCode" Disabled="@(Rule is not null)" Required="true" />
+            }
+            else if (_scope == DiscountScope.ModelType)
+            {
+                <MudTextField T="string" Label="Model type code" @bind-Value="_modelTypeCode" Disabled="@(Rule is not null)" Required="true" />
+            }
+            else if (_scope == DiscountScope.MaterialType)
+            {
+                <MudTextField T="string" Label="Material type code" @bind-Value="_materialTypeCode" Disabled="@(Rule is not null)" Required="true" />
+            }
+
+            <MudTextField T="string" Label="Collection code (optional)" @bind-Value="_collectionCode" Disabled="@(Rule is not null)" />
+
+            <MudNumericField T="decimal?" Label="Rate %" @bind-Value="_ratePercent" Min="0" Max="100" />
+            @if (_scope == DiscountScope.ElementPriceGroup)
+            {
+                <MudNumericField T="decimal?" Label="Fixed price" @bind-Value="_fixedPrice" Min="0" />
+            }
+
+            @if (_error is not null)
+            {
+                <MudAlert Severity="Severity.Error">@_error</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public DiscountRule? Rule { get; set; }
+
+    [Parameter]
+    public int SellerId { get; set; }
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private DiscountScope _scope = DiscountScope.Everything;
+    private string? _elementCode;
+    private string? _priceGroupCode;
+    private string? _modelCode;
+    private string? _modelTypeCode;
+    private string? _materialTypeCode;
+    private string? _collectionCode;
+    private decimal? _ratePercent;
+    private decimal? _fixedPrice;
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        if (Rule is not null)
+        {
+            _scope = Rule.Scope;
+            _elementCode = Rule.ElementCode;
+            _priceGroupCode = Rule.PriceGroupCode;
+            _modelCode = Rule.ModelCode;
+            _modelTypeCode = Rule.ModelTypeCode;
+            _materialTypeCode = Rule.MaterialTypeCode;
+            _collectionCode = Rule.CollectionCode;
+            _ratePercent = Rule.RatePercent;
+            _fixedPrice = Rule.FixedPrice;
+        }
+    }
+
+    private void Submit()
+    {
+        if (_ratePercent is null == _fixedPrice is null)
+        {
+            _error = "Enter exactly one of rate percent or fixed price.";
+            return;
+        }
+        _error = null;
+
+        var result = new DiscountRule
+        {
+            Id = Rule?.Id ?? 0,
+            SellerId = SellerId,
+            CollectionCode = string.IsNullOrWhiteSpace(_collectionCode) ? null : _collectionCode.Trim(),
+            Scope = _scope,
+            ElementCode = _scope == DiscountScope.ElementPriceGroup ? _elementCode?.Trim() : null,
+            PriceGroupCode = _scope == DiscountScope.ElementPriceGroup ? _priceGroupCode?.Trim() : null,
+            ModelCode = _scope == DiscountScope.Model ? _modelCode?.Trim() : null,
+            ModelTypeCode = _scope == DiscountScope.ModelType ? _modelTypeCode?.Trim() : null,
+            MaterialTypeCode = _scope == DiscountScope.MaterialType ? _materialTypeCode?.Trim() : null,
+            RatePercent = _ratePercent,
+            FixedPrice = _fixedPrice,
+        };
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+}
