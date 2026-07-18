@@ -66,14 +66,16 @@ public static class ConfigurationResolver
     }
 
     // The published price group behind a chosen fabric colour: the colour's fabric group among the
-    // element's fabric option groups -> its PriceGroupCode. Null when no colour or no match. App-side
-    // mirror of the engine's internal material resolution, for discount-rule lookups.
+    // element's PRIMARY fabric option's groups -> its PriceGroupCode. Null when no colour or no match.
+    // Mirrors the engine's MaterialResolution scoping (which only ever consults the first FabricOption),
+    // for discount-rule lookups.
     public static string? ResolvedPriceGroupCode(Element element, CatalogueSnapshot snapshot, string? fabricColorCode)
     {
         if (fabricColorCode is null) { return null; }
-        var groupCodes = element.Options.OfType<FabricOption>().SelectMany(o => o.FabricGroupCodes).ToHashSet();
+        var primaryFabricOption = element.Options.OfType<FabricOption>().FirstOrDefault();
+        if (primaryFabricOption is null) { return null; }
         return snapshot.FabricGroups
-            .FirstOrDefault(g => groupCodes.Contains(g.Code) && g.Colors.Any(c => c.Code == fabricColorCode))
+            .FirstOrDefault(g => primaryFabricOption.FabricGroupCodes.Contains(g.Code) && g.Colors.Any(c => c.Code == fabricColorCode))
             ?.PriceGroupCode;
     }
 }

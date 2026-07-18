@@ -2,6 +2,8 @@ using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Configurator;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Fabrics;
+using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Domain.Production;
 using CheapFurniturePlanner.Domain.Serialization;
@@ -571,6 +573,37 @@ public class OrderEntryServiceTests
 
         Assert.Equal("PGA", priceGroupCode);
         Assert.Null(ConfigurationResolver.ResolvedPriceGroupCode(element, snapshot, null));
+    }
+
+    // A colour reachable only through a SECOND FabricOption (e.g. piping, on top of a main fabric option)
+    // must not resolve: the pricing engine's MaterialResolution.ResolveFabricPriceGroup only ever looks at
+    // the element's FIRST FabricOption, so a group the engine would never pick must not surface a price
+    // group here either - that would misroute ElementPriceGroup-scoped discount rules.
+    [Fact]
+    public void ResolvedPriceGroupCode_ScopesToFirstFabricOption()
+    {
+        var element = new Element
+        {
+            Code = "EL1",
+            Name = "Test Element",
+            Options =
+            [
+                new FabricOption { OptionDefinitionCode = "MAIN_FABRIC", FabricGroupCodes = ["FGMAIN"] },
+                new FabricOption { OptionDefinitionCode = "PIPING_FABRIC", FabricGroupCodes = ["FGPIPE"] },
+            ],
+        };
+        var snapshot = new CatalogueSnapshot
+        {
+            Version = "test",
+            FabricGroups =
+            [
+                new FabricGroup { Code = "FGMAIN", PriceGroupCode = "PGMAIN", Colors = [new FabricColor { Code = "COLM", Name = "Main Colour" }] },
+                new FabricGroup { Code = "FGPIPE", PriceGroupCode = "PGPIPE", Colors = [new FabricColor { Code = "COLP", Name = "Piping Colour" }] },
+            ],
+        };
+
+        Assert.Null(ConfigurationResolver.ResolvedPriceGroupCode(element, snapshot, "COLP"));
+        Assert.Equal("PGMAIN", ConfigurationResolver.ResolvedPriceGroupCode(element, snapshot, "COLM"));
     }
 
     // -- Task 4: lifecycle (place + cancel) --
