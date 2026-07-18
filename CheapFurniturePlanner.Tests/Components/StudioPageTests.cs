@@ -208,7 +208,7 @@ public class StudioPageTests : TestContext
         var authoringStore = new AuthoringCatalogueStore(factory);
         var authoringPublish = NewPublishService(factory);
         var authoring = new ModelAuthoringService(factory, authoringStore, authoringPublish, new ArticleAuthoringService(authoringStore, authoringPublish));
-        await authoring.CreateBlankAsync("NOEL", "No Elements", null);
+        await authoring.CreateBlankAsync("NOEL", "No Elements", null, null);
         ConfigureServices(factory);
 
         var cut = RenderComponent<StudioPage>();
@@ -268,7 +268,7 @@ public class StudioPageTests : TestContext
         var authoringStore = new AuthoringCatalogueStore(factory);
         var authoringPublish = NewPublishService(factory);
         var authoring = new ModelAuthoringService(factory, authoringStore, authoringPublish, new ArticleAuthoringService(authoringStore, authoringPublish));
-        await authoring.CreateBlankAsync("NEWM", "Existing", null);
+        await authoring.CreateBlankAsync("NEWM", "Existing", null, null);
         var dialogProvider = ConfigureServices(factory);
 
         var cut = RenderComponent<StudioPage>();

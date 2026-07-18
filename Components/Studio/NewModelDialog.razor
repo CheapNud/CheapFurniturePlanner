@@ -33,6 +33,7 @@
             @if (_mode == NewModelMode.Blank)
             {
                 <MudTextField T="string" Label="Collection (optional)" @bind-Value="_collection" />
+                <MudTextField T="string" Label="Model type (optional)" @bind-Value="_modelType" />
             }
         </MudStack>
     </DialogContent>
@@ -57,6 +58,7 @@
     private string _code = string.Empty;
     private string _name = string.Empty;
     private string? _collection;
+    private string? _modelType;
     private string? _sourceCode;
 
     private void Cancel() => MudDialog.Cancel();
@@ -72,12 +74,13 @@
         var trimmedCode = _code.Trim();
         var trimmedName = _name.Trim();
         var trimmedCollection = string.IsNullOrWhiteSpace(_collection) ? null : _collection.Trim();
+        var trimmedModelType = string.IsNullOrWhiteSpace(_modelType) ? null : _modelType.Trim();
 
         try
         {
             if (_mode == NewModelMode.Blank)
             {
-                await ModelAuthoringService.CreateBlankAsync(trimmedCode, trimmedName, trimmedCollection);
+                await ModelAuthoringService.CreateBlankAsync(trimmedCode, trimmedName, trimmedCollection, trimmedModelType);
             }
             else
             {

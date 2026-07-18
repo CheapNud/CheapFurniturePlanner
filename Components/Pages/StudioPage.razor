@@ -146,7 +146,8 @@ else
         {
             { dialog => dialog.Code, model.Code },
             { dialog => dialog.Name, model.Name },
-            { dialog => dialog.Collection, model.CollectionCode }
+            { dialog => dialog.Collection, model.CollectionCode },
+            { dialog => dialog.ModelType, model.ModelTypeCode }
         };
         var dialogRef = await DialogService.ShowAsync<EditModelDialog>("Edit model", parameters);
         var dialogResult = await dialogRef.Result;

@@ -11,10 +11,10 @@ public sealed class ModelActiveException(string modelCode)
 
 public sealed class ModelAuthoringService(IDbContextFactory<FurniturePlannerContext> factory, AuthoringCatalogueStore store, ModelPublishService publish, ArticleAuthoringService articles)
 {
-    public async Task CreateBlankAsync(string code, string name, string? collectionCode, CancellationToken ct = default)
+    public async Task CreateBlankAsync(string code, string name, string? collectionCode, string? modelTypeCode, CancellationToken ct = default)
     {
         await EnsureCodeAvailableAsync(code, ct);
-        await store.SaveModelAsync(new FurnitureModel { Code = code, Name = name, CollectionCode = collectionCode }, ct);
+        await store.SaveModelAsync(new FurnitureModel { Code = code, Name = name, CollectionCode = collectionCode, ModelTypeCode = modelTypeCode }, ct);
     }
 
     public async Task CreateFromCloneAsync(string sourceCode, string newCode, string newName, CancellationToken ct = default)
@@ -29,14 +29,16 @@ public sealed class ModelAuthoringService(IDbContextFactory<FurniturePlannerCont
         await store.SaveModelAsync(clone, ct);
     }
 
-    public async Task RenameAsync(string code, string name, string? collectionCode, CancellationToken ct = default)
+    public async Task RenameAsync(string code, string name, string? collectionCode, string? modelTypeCode, CancellationToken ct = default)
     {
         var model = await store.LoadModelAsync(code, ct)
             ?? throw new InvalidOperationException($"Model '{code}' not found.");
         var priorName = model.Name;
         var priorCollectionCode = model.CollectionCode;
+        var priorModelTypeCode = model.ModelTypeCode;
         model.Name = name;
         model.CollectionCode = collectionCode;
+        model.ModelTypeCode = modelTypeCode;
         await store.SaveModelAsync(model, ct);
         if (await publish.GetStateAsync(code, ct) == TradeItemState.Active)
         {
@@ -48,6 +50,7 @@ public sealed class ModelAuthoringService(IDbContextFactory<FurniturePlannerCont
             {
                 model.Name = priorName;
                 model.CollectionCode = priorCollectionCode;
+                model.ModelTypeCode = priorModelTypeCode;
                 await store.SaveModelAsync(model, ct);
                 throw;
             }

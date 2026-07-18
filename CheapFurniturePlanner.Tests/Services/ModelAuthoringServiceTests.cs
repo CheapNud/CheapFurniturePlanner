@@ -60,7 +60,7 @@ public class ModelAuthoringServiceTests
         using var _ = conn;
         var harness = await NewHarnessAsync(factory);
 
-        await harness.Authoring.CreateBlankAsync("NEWM", "New Model", null);
+        await harness.Authoring.CreateBlankAsync("NEWM", "New Model", null, null);
 
         Assert.Contains("NEWM", await harness.Store.ModelCodesAsync());
         var model = await harness.Store.LoadModelAsync("NEWM");
@@ -75,9 +75,23 @@ public class ModelAuthoringServiceTests
         using var _ = conn;
         var harness = await NewHarnessAsync(factory);
 
-        await harness.Authoring.CreateBlankAsync("NEWM", "New Model", null);
+        await harness.Authoring.CreateBlankAsync("NEWM", "New Model", null, null);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Authoring.CreateBlankAsync("NEWM", "Another", null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Authoring.CreateBlankAsync("NEWM", "Another", null, null));
+    }
+
+    [Fact]
+    public async Task CreateBlank_PersistsModelTypeCode()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Authoring.CreateBlankAsync("NEWM", "New Model", null, "MT-RELAX");
+
+        var model = await harness.Store.LoadModelAsync("NEWM");
+        Assert.NotNull(model);
+        Assert.Equal("MT-RELAX", model!.ModelTypeCode);
     }
 
     [Fact]
@@ -117,7 +131,7 @@ public class ModelAuthoringServiceTests
         using var _ = conn;
         var harness = await NewHarnessAsync(factory);
 
-        await harness.Authoring.RenameAsync(Studio, "Renamed", null);
+        await harness.Authoring.RenameAsync(Studio, "Renamed", null, null);
 
         var model = await harness.Store.LoadModelAsync(Studio);
         Assert.Equal("Renamed", model!.Name);
@@ -131,7 +145,7 @@ public class ModelAuthoringServiceTests
         var harness = await NewHarnessAsync(factory);
         await harness.Publish.SetStateAsync(Fjord, TradeItemState.Active);
 
-        await harness.Authoring.RenameAsync(Fjord, "Fjord Renamed", null);
+        await harness.Authoring.RenameAsync(Fjord, "Fjord Renamed", null, null);
 
         var snapshot = await harness.Source.GetCurrentAsync();
         var published = Assert.Single(snapshot.Models, m => m.Code == Fjord);
@@ -153,10 +167,28 @@ public class ModelAuthoringServiceTests
         original.Elements.Clear();
         await harness.Store.SaveModelAsync(original);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Authoring.RenameAsync(Fjord, "Fjord Renamed", null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Authoring.RenameAsync(Fjord, "Fjord Renamed", null, null));
 
         var reverted = await harness.Store.LoadModelAsync(Fjord);
         Assert.Equal(originalName, reverted!.Name);
+    }
+
+    [Fact]
+    public async Task Rename_UpdatesModelTypeCode()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewHarnessAsync(factory);
+
+        await harness.Authoring.RenameAsync(Studio, "Renamed", null, "MT-RELAX");
+
+        var withType = await harness.Store.LoadModelAsync(Studio);
+        Assert.Equal("MT-RELAX", withType!.ModelTypeCode);
+
+        await harness.Authoring.RenameAsync(Studio, "Renamed", null, null);
+
+        var cleared = await harness.Store.LoadModelAsync(Studio);
+        Assert.Null(cleared!.ModelTypeCode);
     }
 
     [Fact]
