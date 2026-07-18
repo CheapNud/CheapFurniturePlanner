@@ -23,6 +23,16 @@ else
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudChip T="string" Size="Size.Small">@(_order.PinnedCatalogueVersion ?? "not pinned yet")</MudChip>
                 <MudText Typo="Typo.subtitle1">Total: @OrderEntryService.OrderTotal(_order).ToString("C2")</MudText>
+                @if (_order.State == OrderState.Draft)
+                {
+                    <MudNumericField T="decimal" Label="Order discount %" Min="0" Max="100"
+                                      Value="@_order.OrderDiscountPercent"
+                                      ValueChanged="@((decimal pct) => SetOrderDiscountAsync(pct))" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">Order discount: @_order.OrderDiscountPercent.ToString("0.##")%</MudText>
+                }
             </MudStack>
             @if (_order.State == OrderState.Draft)
             {
@@ -52,6 +62,7 @@ else
             <MudTh>Kind</MudTh>
             <MudTh>Quantity</MudTh>
             <MudTh>Unit price</MudTh>
+            <MudTh>Discount</MudTh>
             <MudTh>Line total</MudTh>
             <MudTh>Supplier ref</MudTh>
             <MudTh>Actions</MudTh>
@@ -81,6 +92,28 @@ else
                 }
             </MudTd>
             <MudTd DataLabel="Unit price">@context.UnitPrice.ToString("C2")</MudTd>
+            <MudTd DataLabel="Discount">
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    @if (_order.State == OrderState.Draft)
+                    {
+                        <MudNumericField T="decimal" Min="0" Max="100"
+                                          Value="@context.DiscountPercent"
+                                          ValueChanged="@((decimal pct) => SetLineDiscountAsync(context, pct))" />
+                    }
+                    else
+                    {
+                        <MudText>@context.DiscountPercent.ToString("0.##")%</MudText>
+                    }
+                    @if (context.DiscountSource is not null)
+                    {
+                        <MudChip T="string" Size="Size.Small">@context.DiscountSource</MudChip>
+                    }
+                    else if (context.DiscountIsManual)
+                    {
+                        <MudChip T="string" Size="Size.Small">manual</MudChip>
+                    }
+                </MudStack>
+            </MudTd>
             <MudTd DataLabel="Line total">@context.LineTotal.ToString("C2")</MudTd>
             <MudTd DataLabel="Supplier ref">@context.SupplierRef</MudTd>
             <MudTd DataLabel="Actions">
@@ -150,6 +183,32 @@ else
         try
         {
             await OrderEntryService.UpdateQuantityAsync(OrderId, line.Id, quantity);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task SetLineDiscountAsync(OrderLine line, decimal percent)
+    {
+        try
+        {
+            await OrderEntryService.SetLineDiscountAsync(OrderId, line.Id, percent);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task SetOrderDiscountAsync(decimal percent)
+    {
+        try
+        {
+            await OrderEntryService.SetOrderDiscountAsync(OrderId, percent);
         }
         catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
         {

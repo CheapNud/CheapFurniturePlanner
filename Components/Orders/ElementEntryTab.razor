@@ -3,7 +3,9 @@
 @using CheapFurniturePlanner.Domain.Fabrics
 @using CheapFurniturePlanner.Domain.Options
 @using CheapFurniturePlanner.Domain.Pricing
+@using CheapFurniturePlanner.Domain.Production
 @inject OrderEntryService OrderEntryService
+@inject DiscountService DiscountService
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
@@ -88,6 +90,18 @@
             }
         }
 
+        @if (_suggestion is not null)
+        {
+            @if (_suggestion.FixedPrice is not null)
+            {
+                <MudText Typo="Typo.body2">Fixed price: @_suggestion.FixedPrice.Value.ToString("C2") (ElementPriceGroup)</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2">Suggested discount: @_suggestion.RatePercent!.Value.ToString("0.##")% (@_suggestion.Scope)</MudText>
+            }
+        }
+
         <MudNumericField T="int" Label="Quantity" Value="_quantity" Min="1" ValueChanged="@(qty => _quantity = qty)" />
         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AddAsync">Add to order</MudButton>
     }
@@ -110,12 +124,18 @@
     private string? _fabricColorCode;
     private int _quantity = 1;
     private PricingResult? _pricingResult;
+    private List<DiscountRule> _rules = [];
+    private DiscountSuggestion? _suggestion;
 
     private FurnitureModel? CurrentModel => _snapshot?.Models.FirstOrDefault(m => m.Code == _modelCode);
     private FabricGroup? CurrentFabricGroup => _fabricGroups.FirstOrDefault(g => g.Code == _fabricGroupCode);
     private IReadOnlyList<ChoiceOption> VisibleOptions => _element is null ? [] : ConfigurationResolver.VisibleOptions(_element, _selections);
 
-    protected override async Task OnInitializedAsync() => _snapshot = await OrderEntryService.SnapshotForAsync(Order);
+    protected override async Task OnInitializedAsync()
+    {
+        _snapshot = await OrderEntryService.SnapshotForAsync(Order);
+        _rules = await DiscountService.RulesForSellerAsync(Order.SellerId);
+    }
 
     private void OnModelChanged(string modelCode)
     {
@@ -127,6 +147,7 @@
         _fabricGroupCode = null;
         _fabricColorCode = null;
         _pricingResult = null;
+        _suggestion = null;
     }
 
     private async Task OnElementChangedAsync(string elementCode)
@@ -174,6 +195,7 @@
         if (_modelCode is null || _elementCode is null)
         {
             _pricingResult = null;
+            _suggestion = null;
             return;
         }
         try
@@ -184,6 +206,33 @@
         {
             _pricingResult = null;
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+        RefreshSuggestion();
+    }
+
+    // Mirrors OrderEntryService's own suggestion-context gathering (price group + model's
+    // collection/type + ProductionIdentityResolver-derived material type) so the preview shows
+    // exactly what AddConfiguredLineAsync would apply. A resolution miss (e.g. mid-edit invalid
+    // selections) just clears the preview — it must never crash the circuit.
+    private void RefreshSuggestion()
+    {
+        _suggestion = null;
+        if (_snapshot is null || _modelCode is null || _elementCode is null || _element is null || CurrentModel is null)
+        {
+            return;
+        }
+        try
+        {
+            var priceGroupCode = ConfigurationResolver.ResolvedPriceGroupCode(_element, _snapshot, _fabricColorCode);
+            var configuration = new ProductConfiguration(_modelCode, [new ElementSelection(_elementCode, 1, _selections, _fabricColorCode)]);
+            var materialTypeCode = ProductionIdentityResolver
+                .Resolve(_snapshot, configuration, new Dictionary<string, string>(), TradeItemState.Active)
+                .FirstOrDefault()?.MaterialTypeCode;
+            _suggestion = DiscountResolver.Suggest(_rules, CurrentModel.CollectionCode, _modelCode, CurrentModel.ModelTypeCode, _elementCode, priceGroupCode, materialTypeCode);
+        }
+        catch (InvalidOperationException)
+        {
+            _suggestion = null;
         }
     }
 
