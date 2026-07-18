@@ -1,3 +1,4 @@
+@using CheapFurniturePlanner.Domain.Catalog
 @using CheapFurniturePlanner.Services
 
 @inject ModelAuthoringService ModelAuthoringService
@@ -12,7 +13,13 @@
             <MudTextField T="string" Label="Code" Value="@Code" Disabled="true" />
             <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" />
             <MudTextField T="string" Label="Collection (optional)" @bind-Value="_collection" />
-            <MudTextField T="string" Label="Model type (optional)" @bind-Value="_modelType" />
+            <MudSelect T="ModelType?" Label="Model type (optional)" Value="_modelType" ValueChanged="@((ModelType? modelType) => _modelType = modelType)">
+                <MudSelectItem T="ModelType?" Value="@((ModelType?)null)">—</MudSelectItem>
+                @foreach (var modelType in Enum.GetValues<ModelType>())
+                {
+                    <MudSelectItem T="ModelType?" Value="@((ModelType?)modelType)">@modelType</MudSelectItem>
+                }
+            </MudSelect>
         </MudStack>
     </DialogContent>
     <DialogActions>
@@ -35,11 +42,11 @@
     public string? Collection { get; set; }
 
     [Parameter]
-    public string? ModelType { get; set; }
+    public ModelType? ModelType { get; set; }
 
     private string _name = string.Empty;
     private string? _collection;
-    private string? _modelType;
+    private ModelType? _modelType;
 
     protected override void OnInitialized()
     {
@@ -60,11 +67,10 @@
 
         var trimmedName = _name.Trim();
         var trimmedCollection = string.IsNullOrWhiteSpace(_collection) ? null : _collection.Trim();
-        var trimmedModelType = string.IsNullOrWhiteSpace(_modelType) ? null : _modelType.Trim();
 
         try
         {
-            await ModelAuthoringService.RenameAsync(Code, trimmedName, trimmedCollection, trimmedModelType);
+            await ModelAuthoringService.RenameAsync(Code, trimmedName, trimmedCollection, _modelType);
             MudDialog.Close(DialogResult.Ok(true));
         }
         catch (InvalidOperationException ex)

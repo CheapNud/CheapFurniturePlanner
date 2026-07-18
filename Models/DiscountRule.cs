@@ -1,3 +1,5 @@
+using CheapFurniturePlanner.Domain.Catalog;
+
 namespace CheapFurniturePlanner.Models;
 
 public enum DiscountScope { ElementPriceGroup, Model, ModelType, MaterialType, Everything }
@@ -16,7 +18,7 @@ public class DiscountRule
     public string? ElementCode { get; set; }
     public string? PriceGroupCode { get; set; }
     public string? ModelCode { get; set; }
-    public string? ModelTypeCode { get; set; }
+    public ModelType? ModelType { get; set; }
     public string? MaterialTypeCode { get; set; }
     public decimal? RatePercent { get; set; }
     public decimal? FixedPrice { get; set; }

@@ -315,7 +315,7 @@ public sealed class OrderEntryService(
         var model = snapshot.Models.FirstOrDefault(m => m.Code == modelCode);
         var element = model?.Elements.FirstOrDefault(e => e.Code == elementCode);
         var priceGroupCode = element is null ? null : ConfigurationResolver.ResolvedPriceGroupCode(element, snapshot, fabricColorCode);
-        return DiscountResolver.Suggest(rules, model?.CollectionCode, modelCode, model?.ModelTypeCode, elementCode, priceGroupCode, materialTypeCode);
+        return DiscountResolver.Suggest(rules, model?.CollectionCode, modelCode, model?.ModelType, elementCode, priceGroupCode, materialTypeCode);
     }
 
     // Applies a suggestion outcome to the line: a fixed price replaces the unit price outright (percent

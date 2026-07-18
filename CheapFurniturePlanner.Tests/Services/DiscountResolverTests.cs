@@ -1,3 +1,4 @@
+using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
 using Xunit;
@@ -9,7 +10,7 @@ public class DiscountResolverTests
 {
     private static DiscountRule Rule(DiscountScope scope, string? collectionCode = null,
         string? elementCode = null, string? priceGroupCode = null, string? modelCode = null,
-        string? modelTypeCode = null, string? materialTypeCode = null,
+        ModelType? modelType = null, string? materialTypeCode = null,
         decimal? ratePercent = null, decimal? fixedPrice = null) => new()
     {
         SellerId = 1,
@@ -18,7 +19,7 @@ public class DiscountResolverTests
         ElementCode = elementCode,
         PriceGroupCode = priceGroupCode,
         ModelCode = modelCode,
-        ModelTypeCode = modelTypeCode,
+        ModelType = modelType,
         MaterialTypeCode = materialTypeCode,
         RatePercent = ratePercent,
         FixedPrice = fixedPrice,
@@ -46,10 +47,10 @@ public class DiscountResolverTests
         var rules = new List<DiscountRule>
         {
             Rule(DiscountScope.Model, modelCode: "M1", ratePercent: 10m),
-            Rule(DiscountScope.ModelType, modelTypeCode: "MT-RELAX", ratePercent: 20m),
+            Rule(DiscountScope.ModelType, modelType: ModelType.Relax, ratePercent: 20m),
         };
 
-        var result = DiscountResolver.Suggest(rules, null, "M1", "MT-RELAX", "EA", "PGA", null);
+        var result = DiscountResolver.Suggest(rules, null, "M1", ModelType.Relax, "EA", "PGA", null);
 
         Assert.NotNull(result);
         Assert.Equal(DiscountScope.Model, result!.Scope);
@@ -60,11 +61,11 @@ public class DiscountResolverTests
     {
         var rules = new List<DiscountRule>
         {
-            Rule(DiscountScope.ModelType, modelTypeCode: "MT-RELAX", ratePercent: 10m),
+            Rule(DiscountScope.ModelType, modelType: ModelType.Relax, ratePercent: 10m),
             Rule(DiscountScope.MaterialType, materialTypeCode: "LEATHER-THICK", ratePercent: 20m),
         };
 
-        var result = DiscountResolver.Suggest(rules, null, "M1", "MT-RELAX", "EA", "PGA", "LEATHER-THICK");
+        var result = DiscountResolver.Suggest(rules, null, "M1", ModelType.Relax, "EA", "PGA", "LEATHER-THICK");
 
         Assert.NotNull(result);
         Assert.Equal(DiscountScope.ModelType, result!.Scope);
@@ -79,7 +80,7 @@ public class DiscountResolverTests
             Rule(DiscountScope.Everything, ratePercent: 20m),
         };
 
-        var result = DiscountResolver.Suggest(rules, null, "M1", "MT-RELAX", "EA", "PGA", "LEATHER-THICK");
+        var result = DiscountResolver.Suggest(rules, null, "M1", ModelType.Relax, "EA", "PGA", "LEATHER-THICK");
 
         Assert.NotNull(result);
         Assert.Equal(DiscountScope.MaterialType, result!.Scope);
@@ -105,7 +106,7 @@ public class DiscountResolverTests
     {
         var rules = new List<DiscountRule>
         {
-            Rule(DiscountScope.ModelType, modelTypeCode: "MT-RELAX", ratePercent: 10m),
+            Rule(DiscountScope.ModelType, modelType: ModelType.Relax, ratePercent: 10m),
             Rule(DiscountScope.MaterialType, materialTypeCode: "LEATHER-THICK", ratePercent: 20m),
         };
 

@@ -76,7 +76,7 @@ else
     {
         DiscountScope.ElementPriceGroup => $"{rule.ElementCode} / {rule.PriceGroupCode}",
         DiscountScope.Model => rule.ModelCode ?? "—",
-        DiscountScope.ModelType => rule.ModelTypeCode ?? "—",
+        DiscountScope.ModelType => rule.ModelType?.ToString() ?? "—",
         DiscountScope.MaterialType => rule.MaterialTypeCode ?? "—",
         _ => "—",
     };

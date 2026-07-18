@@ -1,3 +1,4 @@
+using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Models;
 
 namespace CheapFurniturePlanner.Services;
@@ -13,14 +14,14 @@ public static class DiscountResolver
         IReadOnlyList<DiscountRule> sellerRules,
         string? collectionCode,
         string modelCode,
-        string? modelTypeCode,
+        ModelType? modelType,
         string elementCode,
         string? priceGroupCode,
         string? materialTypeCode)
     {
         return Match(DiscountScope.ElementPriceGroup, r => priceGroupCode is not null && r.ElementCode == elementCode && r.PriceGroupCode == priceGroupCode)
             ?? Match(DiscountScope.Model, r => r.ModelCode == modelCode)
-            ?? Match(DiscountScope.ModelType, r => modelTypeCode is not null && r.ModelTypeCode == modelTypeCode)
+            ?? Match(DiscountScope.ModelType, r => modelType is not null && r.ModelType == modelType)
             ?? Match(DiscountScope.MaterialType, r => materialTypeCode is not null && r.MaterialTypeCode == materialTypeCode)
             ?? Match(DiscountScope.Everything, _ => true);
 

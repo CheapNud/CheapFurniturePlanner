@@ -81,17 +81,17 @@ public class ModelAuthoringServiceTests
     }
 
     [Fact]
-    public async Task CreateBlank_PersistsModelTypeCode()
+    public async Task CreateBlank_PersistsModelType()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await NewHarnessAsync(factory);
 
-        await harness.Authoring.CreateBlankAsync("NEWM", "New Model", null, "MT-RELAX");
+        await harness.Authoring.CreateBlankAsync("NEWM", "New Model", null, ModelType.Relax);
 
         var model = await harness.Store.LoadModelAsync("NEWM");
         Assert.NotNull(model);
-        Assert.Equal("MT-RELAX", model!.ModelTypeCode);
+        Assert.Equal(ModelType.Relax, model!.ModelType);
     }
 
     [Fact]
@@ -174,21 +174,21 @@ public class ModelAuthoringServiceTests
     }
 
     [Fact]
-    public async Task Rename_UpdatesModelTypeCode()
+    public async Task Rename_UpdatesModelType()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await NewHarnessAsync(factory);
 
-        await harness.Authoring.RenameAsync(Studio, "Renamed", null, "MT-RELAX");
+        await harness.Authoring.RenameAsync(Studio, "Renamed", null, ModelType.Relax);
 
         var withType = await harness.Store.LoadModelAsync(Studio);
-        Assert.Equal("MT-RELAX", withType!.ModelTypeCode);
+        Assert.Equal(ModelType.Relax, withType!.ModelType);
 
         await harness.Authoring.RenameAsync(Studio, "Renamed", null, null);
 
         var cleared = await harness.Store.LoadModelAsync(Studio);
-        Assert.Null(cleared!.ModelTypeCode);
+        Assert.Null(cleared!.ModelType);
     }
 
     [Fact]
