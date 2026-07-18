@@ -1,5 +1,4 @@
 @page "/parties/{SellerId:int}/discounts"
-@using System.Globalization
 @using CheapFurniturePlanner.Components.Orders
 @using CheapFurniturePlanner.Models
 @inject PartyService PartyService
@@ -66,11 +65,12 @@ else
     }
 
     // ponytail: SQLite round-trips decimal through TEXT with a forced ".0" scale (10m -> 10.0m),
-    // so plain interpolation shows "10.0%" instead of "10%"; "0.##" trims that back down. Extend
-    // the format string if a future rate ever needs more than two decimal places.
+    // so plain interpolation shows "10.0%" instead of "10%"; "0.##" alone trims that back down
+    // (current culture, matching the C2 money formatting used elsewhere). Extend the format
+    // string if a future rate ever needs more than two decimal places.
     private static string FormatValue(DiscountRule rule) => rule.RatePercent is not null
-        ? $"{rule.RatePercent.Value.ToString("0.##", CultureInfo.InvariantCulture)}%"
-        : rule.FixedPrice?.ToString("0.##", CultureInfo.InvariantCulture) ?? "";
+        ? $"{rule.RatePercent.Value.ToString("0.##")}%"
+        : rule.FixedPrice?.ToString("0.##") ?? "";
 
     private static string Keys(DiscountRule rule) => rule.Scope switch
     {
