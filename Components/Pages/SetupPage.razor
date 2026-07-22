@@ -1,0 +1,138 @@
+@page "/setup"
+@using CheapFurniturePlanner.Auth
+@inject SetupState SetupState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>First-run setup</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Elevation="2" Class="pa-6">
+        <MudText Typo="Typo.h4" Class="mb-4">Welcome - create the first Admin account</MudText>
+
+        <MudStack Spacing="3">
+            <MudTextField T="string" @bind-Value="_userName" Label="Username" Required="true" Variant="Variant.Outlined" />
+            <MudTextField T="string" @bind-Value="_firstName" Label="First name" Variant="Variant.Outlined" />
+            <MudTextField T="string" @bind-Value="_lastName" Label="Last name" Variant="Variant.Outlined" />
+            <MudTextField T="string" @bind-Value="_password" Label="Password" InputType="InputType.Password" Required="true" Variant="Variant.Outlined" />
+            <MudTextField T="string" @bind-Value="_confirmPassword" Label="Confirm password" InputType="InputType.Password" Required="true" Variant="Variant.Outlined" />
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <MudAlert Severity="Severity.Error">@_error</MudAlert>
+            }
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="CreateAdminAsync" Disabled="@_busy">
+                Create admin account
+            </MudButton>
+        </MudStack>
+
+        <MudDivider Class="my-6" />
+
+        <MudText Typo="Typo.body2" Class="mb-2">Just exploring? Create a throwaway demo admin instead.</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true" OnClick="CreateDemoAdminAsync" Disabled="@_busy">
+            Create demo admin
+        </MudButton>
+
+        @if (_demoPassword is not null)
+        {
+            <MudAlert Severity="Severity.Info" Class="mt-4">
+                Demo admin created - username <b>demo</b>, password <b>@_demoPassword</b>. Save it now, it will not be shown again.
+            </MudAlert>
+            <MudButton Variant="Variant.Text" Class="mt-2" OnClick="@(() => Nav.NavigateTo("/login"))">
+                Continue to login
+            </MudButton>
+        }
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private string _userName = string.Empty;
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+    private string _password = string.Empty;
+    private string _confirmPassword = string.Empty;
+    private string? _error;
+    private string? _demoPassword;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Hard-redirect away once users exist - covers a second tab/circuit navigating here
+        // after setup already completed elsewhere.
+        if (await SetupState.AnyUsersAsync())
+        {
+            Nav.NavigateTo("/login");
+        }
+    }
+
+    private async Task CreateAdminAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(_userName) || string.IsNullOrWhiteSpace(_password))
+        {
+            _error = "Username and password are required.";
+            return;
+        }
+
+        if (_password != _confirmPassword)
+        {
+            _error = "Passwords do not match.";
+            return;
+        }
+
+        if (_password.Length < AuthDefaults.MinPasswordLength)
+        {
+            _error = $"Password must be at least {AuthDefaults.MinPasswordLength} characters.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await SetupState.CreateFirstAdminAsync(_userName.Trim(), _firstName.Trim(), _lastName.Trim(), _password);
+            Snackbar.Add("Admin account created.", Severity.Success);
+            Nav.NavigateTo("/login");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+            _error = "Could not create the user. Check the values and try again.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CreateDemoAdminAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _error = null;
+        _busy = true;
+        try
+        {
+            var (_, password) = await SetupState.CreateDemoAdminAsync();
+            _demoPassword = password;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+            _error = "Could not create the user. Check the values and try again.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

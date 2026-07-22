@@ -1,4 +1,5 @@
 @page "/orders"
+@attribute [Authorize(Roles = Roles.AdminOrOffice)]
 @using CheapFurniturePlanner.Components.Orders
 @inject OrderEntryService OrderEntryService
 @inject IDialogService DialogService
