@@ -75,8 +75,10 @@ class Program
         builder.Services.AddControllers();
 
         // Bridges the Identity cookie into the Blazor circuit for [Authorize]/AuthorizeView
-        // gating (Task 4) - see HttpContextAuthenticationStateProvider for why a plain
-        // one-shot read (not a revalidating provider) is the right amount of complexity here.
+        // gating (Task 4) - see HttpContextAuthenticationStateProvider: it reads HttpContext once
+        // at circuit start, then a periodic timer loop revalidates against the store on the same
+        // schedule as SecurityStampValidator, so a deactivation or role change cuts a live session
+        // instead of leaving it authenticated until the cookie itself expires.
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddAuthorizationCore();
         builder.Services.AddScoped<AuthenticationStateProvider, HttpContextAuthenticationStateProvider>();

@@ -35,6 +35,18 @@ public sealed class SetupState(IDbContextFactory<FurniturePlannerContext> factor
         ArgumentException.ThrowIfNullOrWhiteSpace(userName);
         ArgumentException.ThrowIfNullOrWhiteSpace(password);
 
+        // Bypass the instance cache and re-check the store directly - a second stale circuit's
+        // SetupState can have _anyUsers cached false even after another circuit already completed
+        // setup, and without this it would mint an extra, unauthenticated Admin.
+        await using (var checkDb = await factory.CreateDbContextAsync(ct))
+        {
+            if (await checkDb.Users.AnyAsync(ct))
+            {
+                _anyUsers = true;
+                throw new InvalidOperationException("Setup has already been completed.");
+            }
+        }
+
         await userAdmin.CreateAsync(userName, firstName, lastName, password, [Roles.Admin], ct);
 
         await using var db = await factory.CreateDbContextAsync(ct);

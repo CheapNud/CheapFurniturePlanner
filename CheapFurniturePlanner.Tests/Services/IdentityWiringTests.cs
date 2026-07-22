@@ -77,4 +77,33 @@ public class IdentityWiringTests
             .AnyAsync(x => x.UserId == created.Id && x.Name == Roles.Admin);
         Assert.True(isAdmin);
     }
+
+    // A second stale circuit's SetupState instance can have its _anyUsers cache primed false
+    // before setup completes elsewhere - CreateFirstAdminAsync must re-check the store itself,
+    // not trust the cache, or it mints a second unauthenticated Admin.
+    [Fact]
+    public async Task CreateFirstAdmin_AfterSetupCompleted_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            await RoleSeeder.SeedAsync(db);
+        }
+
+        var hasher = new PasswordHasher<FurnitureUser>();
+        var userAdmin = new UserAdminService(factory, hasher);
+        var staleSetupState = new SetupState(factory, userAdmin);
+        Assert.False(await staleSetupState.AnyUsersAsync()); // primes the cache empty
+
+        var firstSetupState = new SetupState(factory, userAdmin);
+        await firstSetupState.CreateFirstAdminAsync("admin", "Ada", "Min", "secret1");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => staleSetupState.CreateFirstAdminAsync("intruder", "In", "Truder", "secret2"));
+
+        await using var verify = await factory.CreateDbContextAsync();
+        Assert.Equal(1, await verify.Users.CountAsync());
+    }
 }

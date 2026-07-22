@@ -101,6 +101,7 @@ public sealed class UserAdminService(IDbContextFactory<FurniturePlannerContext> 
 
         user.LockoutEnabled = true;
         user.LockoutEnd = DateTimeOffset.MaxValue;
+        user.SecurityStamp = Guid.NewGuid().ToString("D");
         await db.SaveChangesAsync(ct);
     }
 

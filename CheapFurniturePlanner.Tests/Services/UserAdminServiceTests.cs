@@ -115,8 +115,10 @@ public class UserAdminServiceTests
         var service = new UserAdminService(factory, hasher);
         var setupState = new SetupState(factory, service);
 
-        await service.CreateAsync("directuser", "Di", "Rect", "secret1", [Roles.Office]);
+        // CreateFirstAdminAsync must run while the store is still empty - it now refuses once any
+        // user exists (Task 3's guard), so the setup path runs first, direct creation second.
         var task1User = await setupState.CreateFirstAdminAsync("task1user", "Task", "One", "secret2");
+        await service.CreateAsync("directuser", "Di", "Rect", "secret1", [Roles.Office]);
 
         await using var db = await factory.CreateDbContextAsync();
         var direct = await db.Users.SingleAsync(u => u.UserName == "directuser");
@@ -221,6 +223,29 @@ public class UserAdminServiceTests
 
         await service.ReactivateAsync(targetId);
         Assert.False((await service.ListAsync()).Single(u => u.Id == targetId).IsDeactivated);
+    }
+
+    // Deactivation must rotate the security stamp - otherwise SecurityStampValidator's periodic
+    // revalidation (AuthRevalidationTests) never fires for a principal minted before deactivation,
+    // since the stamp claim it compares against still matches.
+    [Fact]
+    public async Task Deactivate_RotatesSecurityStamp()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new UserAdminService(factory, new PasswordHasher<FurnitureUser>());
+        await service.CreateAsync("admin1", "A", "One", "secret1", [Roles.Admin]);
+        await service.CreateAsync("target", "T", "Get", "secret1", [Roles.Office]);
+        var targetId = (await service.ListAsync()).Single(u => u.UserName == "target").Id;
+
+        await using var before = await factory.CreateDbContextAsync();
+        var stampBefore = await before.Users.Where(u => u.Id == targetId).Select(u => u.SecurityStamp).SingleAsync();
+
+        await service.DeactivateAsync(targetId);
+
+        await using var after = await factory.CreateDbContextAsync();
+        var stampAfter = await after.Users.Where(u => u.Id == targetId).Select(u => u.SecurityStamp).SingleAsync();
+        Assert.NotEqual(stampBefore, stampAfter);
     }
 
     [Fact]
