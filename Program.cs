@@ -72,7 +72,10 @@ class Program
             options.AccessDeniedPath = "/login";
         });
 
-        builder.Services.AddControllers();
+        // The host stages services before the real WebApplication builder exists, so MVC's
+        // part discovery finds no environment (and thus no assemblies) at AddControllers time -
+        // seed the application part explicitly or no controller is ever discovered.
+        builder.Services.AddControllers().AddApplicationPart(typeof(Controllers.AccountController).Assembly);
 
         // Bridges the Identity cookie into the Blazor circuit for [Authorize]/AuthorizeView
         // gating (Task 4) - see HttpContextAuthenticationStateProvider: it reads HttpContext once

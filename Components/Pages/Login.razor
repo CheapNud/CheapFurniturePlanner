@@ -1,4 +1,6 @@
 @page "/login"
+@using Microsoft.AspNetCore.WebUtilities
+@inject NavigationManager Nav
 
 @* Plain HTML form POST to the CheapHelpers AccountController's SignIn action - no
    SignInManager inside this circuit. Smallest thing that signs in; CheapHelpers' own
@@ -6,11 +8,15 @@
    so a thin planner-owned page is the better fit here. *@
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
-    <form method="post" action="/Account/SignIn">
+    <form method="post" action="/Account/SignInForm">
         <MudPaper Elevation="2" Class="pa-6">
             <MudStack Spacing="4">
                 <MudText Typo="Typo.h4">Log in</MudText>
                 <MudDivider />
+                @if (_failureMessage is not null)
+                {
+                    <MudAlert Severity="Severity.Error">@_failureMessage</MudAlert>
+                }
                 <MudTextField T="string" Label="Username" name="UserName" Variant="Variant.Outlined" />
                 <MudTextField T="string" Label="Password" name="Password" InputType="InputType.Password" Variant="Variant.Outlined" />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" ButtonType="ButtonType.Submit">Log in</MudButton>
@@ -18,3 +24,18 @@
         </MudPaper>
     </form>
 </MudContainer>
+
+@code {
+    private string? _failureMessage;
+
+    protected override void OnInitialized()
+    {
+        var query = QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+        if (query.TryGetValue("failed", out var reason))
+        {
+            _failureMessage = reason == "locked"
+                ? "This account has been deactivated."
+                : "Sign in failed. Check your username and password.";
+        }
+    }
+}
