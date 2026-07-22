@@ -1,0 +1,20 @@
+@page "/login"
+
+@* Plain HTML form POST to the CheapHelpers AccountController's SignIn action - no
+   SignInManager inside this circuit. Smallest thing that signs in; CheapHelpers' own
+   Login.razor assumes localization + a JS submit helper this desktop app doesn't wire up,
+   so a thin planner-owned page is the better fit here. *@
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <form method="post" action="/Account/SignIn">
+        <MudPaper Elevation="2" Class="pa-6">
+            <MudStack Spacing="4">
+                <MudText Typo="Typo.h4">Log in</MudText>
+                <MudDivider />
+                <MudTextField T="string" Label="Username" name="UserName" Variant="Variant.Outlined" />
+                <MudTextField T="string" Label="Password" name="Password" InputType="InputType.Password" Variant="Variant.Outlined" />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" ButtonType="ButtonType.Submit">Log in</MudButton>
+            </MudStack>
+        </MudPaper>
+    </form>
+</MudContainer>

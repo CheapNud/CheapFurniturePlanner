@@ -1,10 +1,13 @@
 @using CheapFurniturePlanner.Components.Layout
+@using CheapFurniturePlanner.Services
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.Components.Web
 @using MudBlazor
+@inject SetupState SetupState
+@inject NavigationManager Nav
 
 <CascadingValue Value="@this">
-    <Router AppAssembly="@typeof(Routes).Assembly">
+    <Router AppAssembly="@typeof(Routes).Assembly" OnNavigateAsync="HandleNavigateAsync">
         <Found Context="routeData">
             <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
             <FocusOnNavigate RouteData="@routeData" Selector="h1" />
@@ -31,3 +34,21 @@
     </NotFound>
     </Router>
 </CascadingValue>
+
+@code {
+    // First-run gate: while the user store is empty, every navigation is redirected to /setup
+    // (except /setup itself). SetupState caches the check so this is a no-op after the first
+    // navigation of the session, and the cache flips permanently once setup completes.
+    private async Task HandleNavigateAsync(Microsoft.AspNetCore.Components.Routing.NavigationContext context)
+    {
+        if (context.Path.Equals("setup", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!await SetupState.AnyUsersAsync())
+        {
+            Nav.NavigateTo("/setup");
+        }
+    }
+}

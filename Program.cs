@@ -1,5 +1,6 @@
 ﻿using CheapAvaloniaBlazor.Hosting;
 using CheapAvaloniaBlazor.Extensions;
+using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
@@ -8,11 +9,16 @@ using CheapFurniturePlanner.Mappings;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Repositories;
 using CheapFurniturePlanner.Services;
+using CheapHelpers.Blazor.Pages.Account;
+using CheapHelpers.Blazor.Services;
 using CheapHelpers.EF;
 using CheapHelpers.Models.Entities;
+using CheapHelpers.Services.Email;
 using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using Mapster;
 using MapsterMapper;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -30,12 +36,52 @@ class Program
             .EnableContextMenu()
             .WithSize(1200, 800)
             .UseContentRoot(Directory.GetCurrentDirectory())
-            .AddMudBlazor();
+            .AddMudBlazor()
+            // Identity middleware + the Account controller endpoints. The host only exposes
+            // these two hook points into its pipeline (ConfigurePipeline runs after UseRouting,
+            // before endpoints are mapped; ConfigureEndpoints runs after MapRazorComponents).
+            .ConfigurePipeline(app =>
+            {
+                app.UseAuthentication();
+                app.UseAuthorization();
+            })
+            .ConfigureEndpoints(app => app.MapControllers());
 
         // Configure Entity Framework
         var connectionString = GetConnectionString();
 
         builder.Services.AddDbContextFactory<FurniturePlannerContext>(options => options.UseSqlite(connectionString));
+
+        // Identity: relaxed password policy (desktop app, not internet-facing) and deliberate
+        // opt-out of failed-attempt lockout - deactivation (Task 2) sets LockoutEnd directly instead.
+        builder.Services.AddIdentity<FurnitureUser, IdentityRole>(options =>
+        {
+            options.Password.RequiredLength = 6;
+            options.Password.RequireNonAlphanumeric = false;
+            options.Password.RequireUppercase = false;
+            options.Password.RequireDigit = false;
+            options.Lockout.AllowedForNewUsers = false;
+        })
+            .AddEntityFrameworkStores<FurniturePlannerContext>()
+            .AddDefaultTokenProviders();
+
+        builder.Services.ConfigureApplicationCookie(options =>
+        {
+            options.LoginPath = "/login";
+            options.AccessDeniedPath = "/login";
+        });
+
+        builder.Services.AddControllers();
+
+        // Registrations the CheapHelpers AccountController needs. Not going through
+        // AddCheapHelpersBlazor here - it would re-register MudBlazor (already added via
+        // .AddMudBlazor() above) and re-register the DbContextFactory already set up here;
+        // these three are the only pieces the controller actually requires.
+        builder.Services.AddSingleton<IEmailService, NullEmailService>();
+        builder.Services.AddSingleton(new AccountRouteOptions { LoginRoute = "/login" });
+        builder.Services.AddScoped<UserService<FurnitureUser, FurniturePlannerContext>>();
+
+        builder.Services.AddScoped<SetupState>();
 
         // Apply EF migrations at startup (replaces the orphaned EnsureCreated maintenance service),
         // then seed the Fjord demo catalogue on first run. Both live in this single ConfigureServices
@@ -47,6 +93,7 @@ class Program
             var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>();
             using var migrateContext = factory.CreateDbContext();
             migrateContext.Database.Migrate();
+            RoleSeeder.SeedAsync(migrateContext).GetAwaiter().GetResult();
             scope.ServiceProvider.GetRequiredService<VariantNamingAbsorber>().AbsorbAsync().GetAwaiter().GetResult();
 
             // Seed the authoring store from the embedded demo catalogue if it hasn't been seeded
