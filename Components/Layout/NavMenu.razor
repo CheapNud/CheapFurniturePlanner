@@ -3,54 +3,58 @@
 @inject NavigationManager Navigation
 
 <MudNavMenu>
-    <!-- Home -->
-    <MudNavLink Href="/"
-                Match="NavLinkMatch.All"
-                Icon="@Icons.Material.Filled.Home">
-        Home
-    </MudNavLink>
+    @* Home/planner/catalogue links: gated to any authenticated user (bare AuthorizeView), same
+       reach as the bare [Authorize] on Home/PlannerPage/FurnitureCatalog/RoomPlans themselves. *@
+    <AuthorizeView>
+        <!-- Home -->
+        <MudNavLink Href="/"
+                    Match="NavLinkMatch.All"
+                    Icon="@Icons.Material.Filled.Home">
+            Home
+        </MudNavLink>
 
-    <MudDivider Class="my-2" />
+        <MudDivider Class="my-2" />
 
-    <!-- Room Plans -->
-    <MudNavGroup Text="Room Plans"
-                 Icon="@Icons.Material.Filled.MeetingRoom"
-                 Expanded="true">
-        <MudNavLink Href="/room-plans"
-                    Icon="@Icons.Material.Filled.List">
-            All Plans
-        </MudNavLink>
-        <MudNavLink Href="/room-plans/new"
-                    Icon="@Icons.Material.Filled.Add">
-            New Plan
-        </MudNavLink>
-        @* <MudNavLink Href="/room-plans/templates"
-                    Icon="@Icons.Material.Filled.ContentCopy">
-            Templates
-        </MudNavLink> *@
-    </MudNavGroup>
+        <!-- Room Plans -->
+        <MudNavGroup Text="Room Plans"
+                     Icon="@Icons.Material.Filled.MeetingRoom"
+                     Expanded="true">
+            <MudNavLink Href="/room-plans"
+                        Icon="@Icons.Material.Filled.List">
+                All Plans
+            </MudNavLink>
+            <MudNavLink Href="/room-plans/new"
+                        Icon="@Icons.Material.Filled.Add">
+                New Plan
+            </MudNavLink>
+            @* <MudNavLink Href="/room-plans/templates"
+                        Icon="@Icons.Material.Filled.ContentCopy">
+                Templates
+            </MudNavLink> *@
+        </MudNavGroup>
 
-    <!-- Furniture Catalog -->
-    <MudNavGroup Text="Furniture"
-                 Icon="@Icons.Material.Filled.Chair"
-                 Expanded="false">
-        <MudNavLink Href="/furniture/catalog"
-                    Icon="@Icons.Material.Filled.ViewModule">
-            Catalog
-        </MudNavLink>
-        <MudNavLink Href="/furniture/add"
-                    Icon="@Icons.Material.Filled.Add">
-            Add Furniture
-        </MudNavLink>
-        @* <MudNavLink Href="/furniture/popular"
-                    Icon="@Icons.Material.Filled.TrendingUp">
-            Popular Items
-        </MudNavLink>
-        <MudNavLink Href="/furniture/statistics"
-                    Icon="@Icons.Material.Filled.Analytics">
-            Statistics
-        </MudNavLink> *@
-    </MudNavGroup>
+        <!-- Furniture Catalog -->
+        <MudNavGroup Text="Furniture"
+                     Icon="@Icons.Material.Filled.Chair"
+                     Expanded="false">
+            <MudNavLink Href="/furniture/catalog"
+                        Icon="@Icons.Material.Filled.ViewModule">
+                Catalog
+            </MudNavLink>
+            <MudNavLink Href="/furniture/add"
+                        Icon="@Icons.Material.Filled.Add">
+                Add Furniture
+            </MudNavLink>
+            @* <MudNavLink Href="/furniture/popular"
+                        Icon="@Icons.Material.Filled.TrendingUp">
+                Popular Items
+            </MudNavLink>
+            <MudNavLink Href="/furniture/statistics"
+                        Icon="@Icons.Material.Filled.Analytics">
+                Statistics
+            </MudNavLink> *@
+        </MudNavGroup>
+    </AuthorizeView>
 
     @* <MudDivider Class="my-2" />
 
@@ -74,37 +78,49 @@
 
     <MudDivider Class="my-2" /> *@
 
-    <MudNavLink Href="/studio"
-                Icon="@Icons.Material.Filled.Tag">
-        Studio
-    </MudNavLink>
+    @* Business links: Admin or Office only, matching the [Authorize(Roles = Roles.AdminOrOffice)]
+       on each destination page. *@
+    <AuthorizeView Roles="@Roles.AdminOrOffice">
+        <MudNavLink Href="/studio"
+                    Icon="@Icons.Material.Filled.Tag">
+            Studio
+        </MudNavLink>
 
-    <MudNavLink Href="/studio/prices"
-                Icon="@Icons.Material.Filled.PriceChange">
-        Prices
-    </MudNavLink>
+        <MudNavLink Href="/studio/prices"
+                    Icon="@Icons.Material.Filled.PriceChange">
+            Prices
+        </MudNavLink>
 
-    <MudNavLink Href="/studio/masters"
-                Icon="@Icons.Material.Filled.AttachMoney">
-        Masters
-    </MudNavLink>
+        <MudNavLink Href="/studio/masters"
+                    Icon="@Icons.Material.Filled.AttachMoney">
+            Masters
+        </MudNavLink>
 
-    <MudNavLink Href="/studio/articles"
-                Icon="@Icons.Material.Filled.Inventory2">
-        Articles
-    </MudNavLink>
+        <MudNavLink Href="/studio/articles"
+                    Icon="@Icons.Material.Filled.Inventory2">
+            Articles
+        </MudNavLink>
 
-    <MudNavLink Href="/orders"
-                Icon="@Icons.Material.Filled.ShoppingCart">
-        Orders
-    </MudNavLink>
+        <MudNavLink Href="/orders"
+                    Icon="@Icons.Material.Filled.ShoppingCart">
+            Orders
+        </MudNavLink>
 
-    <MudNavLink Href="/parties"
-                Icon="@Icons.Material.Filled.People">
-        Parties
-    </MudNavLink>
+        <MudNavLink Href="/parties"
+                    Icon="@Icons.Material.Filled.People">
+            Parties
+        </MudNavLink>
+    </AuthorizeView>
 
-    <!-- Help & About -->
+    @* Admin only. *@
+    <AuthorizeView Roles="@Roles.Admin">
+        <MudNavLink Href="/users"
+                    Icon="@Icons.Material.Filled.ManageAccounts">
+            Users
+        </MudNavLink>
+    </AuthorizeView>
+
+    @* Help & About: not gated, same reach as the unattributed (anonymous-accessible) pages. *@
     <MudNavLink Href="/help"
                 Icon="@Icons.Material.Filled.Help">
         Help

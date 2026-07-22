@@ -18,6 +18,7 @@ using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using Mapster;
 using MapsterMapper;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -72,6 +73,13 @@ class Program
         });
 
         builder.Services.AddControllers();
+
+        // Bridges the Identity cookie into the Blazor circuit for [Authorize]/AuthorizeView
+        // gating (Task 4) - see HttpContextAuthenticationStateProvider for why a plain
+        // one-shot read (not a revalidating provider) is the right amount of complexity here.
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddAuthorizationCore();
+        builder.Services.AddScoped<AuthenticationStateProvider, HttpContextAuthenticationStateProvider>();
 
         // Registrations the CheapHelpers AccountController needs. Not going through
         // AddCheapHelpersBlazor here - it would re-register MudBlazor (already added via

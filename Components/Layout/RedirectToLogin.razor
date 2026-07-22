@@ -1,0 +1,11 @@
+@* Issues the actual navigation for AuthorizeRouteView's NotAuthorized template when the user
+   isn't authenticated at all. NavigateTo can't be called directly while the parent is mid-render,
+   but it's the documented pattern to call it from a child component's OnInitialized. *@
+@inject NavigationManager Nav
+
+@code {
+    protected override void OnInitialized()
+    {
+        Nav.NavigateTo("/login");
+    }
+}
