@@ -56,7 +56,7 @@ class Program
         // opt-out of failed-attempt lockout - deactivation (Task 2) sets LockoutEnd directly instead.
         builder.Services.AddIdentity<FurnitureUser, IdentityRole>(options =>
         {
-            options.Password.RequiredLength = 6;
+            options.Password.RequiredLength = AuthDefaults.MinPasswordLength;
             options.Password.RequireNonAlphanumeric = false;
             options.Password.RequireUppercase = false;
             options.Password.RequireDigit = false;

@@ -75,5 +75,4 @@ public sealed class SetupState(IDbContextFactory<FurniturePlannerContext> factor
         return (user, password);
     }
 
-    public void MarkSetupComplete() => _anyUsers = true;
 }
