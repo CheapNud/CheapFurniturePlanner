@@ -37,8 +37,8 @@ public class AccountController(
     public async Task<IActionResult> SignInForm(IFormCollection fc)
     {
         await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
-        var result = await signInManager.PasswordSignInAsync(fc["UserName"].ToString(), fc["Password"].ToString(), isPersistent: true, lockoutOnFailure: false);
-        if (result.Succeeded) { return Redirect(routeOptions.HomeRoute); }
-        return Redirect(result.IsLockedOut ? "/login?failed=locked" : "/login?failed=credentials");
+        var signInResult = await signInManager.PasswordSignInAsync(fc["UserName"].ToString(), fc["Password"].ToString(), isPersistent: true, lockoutOnFailure: false);
+        if (signInResult.Succeeded) { return Redirect(routeOptions.HomeRoute); }
+        return Redirect(signInResult.IsLockedOut ? $"{routeOptions.LoginRoute}?failed=locked" : $"{routeOptions.LoginRoute}?failed=credentials");
     }
 }
