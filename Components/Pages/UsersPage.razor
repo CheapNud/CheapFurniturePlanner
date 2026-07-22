@@ -1,0 +1,124 @@
+@page "/users"
+@attribute [Authorize(Roles = Roles.Admin)]
+@using CheapFurniturePlanner.Components.Users
+@inject UserAdminService UserAdminService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Users - Cheap Furniture Planner</PageTitle>
+
+<MudStack Spacing="3">
+    <MudText Typo="Typo.h6">Users</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddUserAsync())">
+        Add user
+    </MudButton>
+    <MudTable Items="@_users" Hover="true" Striped="true" Dense="true" Elevation="2" T="UserSummary">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Username</MudTh>
+            <MudTh>Roles</MudTh>
+            <MudTh>State</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">@context.DisplayName</MudTd>
+            <MudTd DataLabel="Username">@context.UserName</MudTd>
+            <MudTd DataLabel="Roles">
+                <MudStack Row="true" Spacing="1">
+                    @foreach (var role in context.Roles)
+                    {
+                        <MudChip T="string" Size="Size.Small">@role</MudChip>
+                    }
+                </MudStack>
+            </MudTd>
+            <MudTd DataLabel="State">
+                @if (context.IsDeactivated)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">Deactivated</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditRolesAsync(context))">Edit roles</MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ResetPasswordAsync(context))">Reset password</MudButton>
+                    @if (context.IsDeactivated)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" OnClick="@(() => ReactivateAsync(context))">Reactivate</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeactivateAsync(context))">Deactivate</MudButton>
+                    }
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudStack>
+
+@code {
+    private List<UserSummary> _users = [];
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _users = await UserAdminService.ListAsync();
+
+    private async Task AddUserAsync()
+    {
+        var dialogRef = await DialogService.ShowAsync<NewUserDialog>("Add user");
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not (string userName, string firstName, string lastName, string password, IReadOnlyList<string> roles))
+        {
+            return;
+        }
+        await RunGuardedAsync(() => UserAdminService.CreateAsync(userName, firstName, lastName, password, roles));
+    }
+
+    private async Task EditRolesAsync(UserSummary user)
+    {
+        var parameters = new DialogParameters<EditRolesDialog> { { d => d.CurrentRoles, user.Roles } };
+        var dialogRef = await DialogService.ShowAsync<EditRolesDialog>("Edit roles", parameters);
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not IReadOnlyList<string> roles)
+        {
+            return;
+        }
+        await RunGuardedAsync(() => UserAdminService.SetRolesAsync(user.Id, roles));
+    }
+
+    private async Task ResetPasswordAsync(UserSummary user)
+    {
+        var dialogRef = await DialogService.ShowAsync<ResetPasswordDialog>("Reset password");
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not string password)
+        {
+            return;
+        }
+        await RunGuardedAsync(() => UserAdminService.ResetPasswordAsync(user.Id, password));
+    }
+
+    private async Task DeactivateAsync(UserSummary user)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Deactivate user", $"Deactivate '{user.DisplayName}'?", yesText: "Deactivate", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        await RunGuardedAsync(() => UserAdminService.DeactivateAsync(user.Id));
+    }
+
+    private async Task ReactivateAsync(UserSummary user) => await RunGuardedAsync(() => UserAdminService.ReactivateAsync(user.Id));
+
+    private async Task RunGuardedAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+}

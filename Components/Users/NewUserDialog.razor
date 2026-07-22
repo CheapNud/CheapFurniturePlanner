@@ -1,0 +1,62 @@
+@using CheapFurniturePlanner.Auth
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Username" @bind-Value="_userName" Required="true" />
+            <MudTextField T="string" Label="First name" @bind-Value="_firstName" />
+            <MudTextField T="string" Label="Last name" @bind-Value="_lastName" />
+            <MudTextField T="string" Label="Password" InputType="InputType.Password" @bind-Value="_password" Required="true" />
+            <MudTextField T="string" Label="Confirm password" InputType="InputType.Password" @bind-Value="_confirmPassword" Required="true" />
+            <MudSelect T="string" Label="Roles" MultiSelection="true" @bind-SelectedValues="_selectedRoles">
+                @foreach (var role in Roles.All)
+                {
+                    <MudSelectItem T="string" Value="@role">@role</MudSelectItem>
+                }
+            </MudSelect>
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <MudAlert Severity="Severity.Error">@_error</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Add</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private string _userName = string.Empty;
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+    private string _password = string.Empty;
+    private string _confirmPassword = string.Empty;
+    private IReadOnlyCollection<string> _selectedRoles = new HashSet<string>();
+    private string? _error;
+
+    private void Submit()
+    {
+        if (_password != _confirmPassword)
+        {
+            _error = "Passwords do not match.";
+            return;
+        }
+
+        if (_password.Length < AuthDefaults.MinPasswordLength)
+        {
+            _error = $"Password must be at least {AuthDefaults.MinPasswordLength} characters.";
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok((
+            UserName: _userName.Trim(),
+            FirstName: _firstName.Trim(),
+            LastName: _lastName.Trim(),
+            Password: _password,
+            Roles: (IReadOnlyList<string>)_selectedRoles.ToList())));
+    }
+}

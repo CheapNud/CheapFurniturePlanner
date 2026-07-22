@@ -1,0 +1,30 @@
+@using CheapFurniturePlanner.Auth
+
+<MudDialog>
+    <DialogContent>
+        <MudSelect T="string" Label="Roles" MultiSelection="true" @bind-SelectedValues="_selectedRoles">
+            @foreach (var role in Roles.All)
+            {
+                <MudSelectItem T="string" Value="@role">@role</MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public IReadOnlyList<string> CurrentRoles { get; set; } = [];
+
+    private IReadOnlyCollection<string> _selectedRoles = new HashSet<string>();
+
+    protected override void OnInitialized() => _selectedRoles = new HashSet<string>(CurrentRoles);
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok((IReadOnlyList<string>)_selectedRoles.ToList()));
+}
