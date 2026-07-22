@@ -81,6 +81,8 @@ class Program
         builder.Services.AddSingleton(new AccountRouteOptions { LoginRoute = "/login" });
         builder.Services.AddScoped<UserService<FurnitureUser, FurniturePlannerContext>>();
 
+        builder.Services.AddScoped<UserAdminService>();
+        builder.Services.AddScoped<ICurrentUser, CurrentUser>();
         builder.Services.AddScoped<SetupState>();
 
         // Apply EF migrations at startup (replaces the orphaned EnsureCreated maintenance service),

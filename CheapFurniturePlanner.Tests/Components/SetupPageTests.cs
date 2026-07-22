@@ -43,9 +43,12 @@ public class SetupPageTests : TestContext
         Services.AddMudServices();
         Services.AddSingleton(factory);
         Services.AddSingleton<IPasswordHasher<FurnitureUser>>(new PasswordHasher<FurnitureUser>());
-        Services.AddScoped(sp => new SetupState(
+        Services.AddScoped(sp => new UserAdminService(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<IPasswordHasher<FurnitureUser>>()));
+        Services.AddScoped(sp => new SetupState(
+            sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
+            sp.GetRequiredService<UserAdminService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
         RenderComponent<MudBlazor.MudPopoverProvider>();
         RenderComponent<MudBlazor.MudSnackbarProvider>();

@@ -62,7 +62,8 @@ public class IdentityWiringTests
         }
 
         var hasher = new PasswordHasher<FurnitureUser>();
-        var setupState = new SetupState(factory, hasher);
+        var userAdmin = new UserAdminService(factory, hasher);
+        var setupState = new SetupState(factory, userAdmin);
 
         var created = await setupState.CreateFirstAdminAsync("admin", "Ada", "Min", "secret1");
 
