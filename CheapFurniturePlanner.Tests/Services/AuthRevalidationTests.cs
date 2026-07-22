@@ -3,9 +3,11 @@ using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Services;
@@ -135,5 +137,30 @@ public class AuthRevalidationTests
 
         await using var db = await factory.CreateDbContextAsync();
         Assert.False(await HttpContextAuthenticationStateProvider.ValidateAsync(principal, db));
+    }
+
+    // Covers the invalidation-visibility bug: GetAuthenticationStateAsync used to return a
+    // readonly, ctor-captured Task forever, so a direct caller (CurrentUser) never saw a
+    // revalidation failure even though NotifyAuthenticationStateChanged fired. Invalidate() is the
+    // extracted piece the timer loop calls on a failed tick - exercised directly here, no timer wait.
+    [Fact]
+    public async Task Invalidate_UpdatesGetAuthenticationStateAsyncResult()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+
+        var principal = BuildPrincipal(Guid.NewGuid().ToString(), [Roles.Office], Guid.NewGuid().ToString());
+        var httpContextAccessor = new HttpContextAccessor { HttpContext = new DefaultHttpContext { User = principal } };
+
+        await using var provider = new HttpContextAuthenticationStateProvider(
+            httpContextAccessor, factory, NullLogger<HttpContextAuthenticationStateProvider>.Instance);
+
+        var before = await provider.GetAuthenticationStateAsync();
+        Assert.True(before.User.Identity?.IsAuthenticated);
+
+        provider.Invalidate();
+
+        var after = await provider.GetAuthenticationStateAsync();
+        Assert.False(after.User.Identity?.IsAuthenticated ?? false);
     }
 }

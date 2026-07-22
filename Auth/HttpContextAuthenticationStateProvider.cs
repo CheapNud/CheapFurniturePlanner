@@ -3,6 +3,7 @@ using CheapFurniturePlanner.Data;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CheapFurniturePlanner.Auth;
 
@@ -20,20 +21,35 @@ namespace CheapFurniturePlanner.Auth;
 // user reloads. So an authenticated circuit now also gets a background PeriodicTimer
 // (AuthDefaults.RevalidationInterval, 2 min) that re-checks the principal against the DB and drops
 // the circuit to anonymous on mismatch - AuthorizeRouteView then bounces it to /login.
+//
+// _currentState is mutable (not just notified) so a direct caller of GetAuthenticationStateAsync -
+// e.g. Services/CurrentUser.cs, the audit seam other services stamp "who did this" through - also
+// observes the drop to anonymous, instead of only components subscribed to
+// AuthenticationStateChanged seeing it. It's volatile because the revalidation timer writes it from
+// a background loop while a circuit's render thread can read it concurrently.
+//
+// Each tick's DB round trip runs inside its own try/catch: a transient DB blip must not fault the
+// loop task and silently end revalidation for the rest of the circuit's life. Failures are logged
+// and the loop just waits for the next tick; only disposal (OperationCanceledException) ends it.
 public sealed class HttpContextAuthenticationStateProvider : AuthenticationStateProvider, IAsyncDisposable
 {
     private const string SecurityStampClaimType = "AspNet.Identity.SecurityStamp";
 
     private readonly IDbContextFactory<FurniturePlannerContext> _dbFactory;
-    private readonly Task<AuthenticationState> _state;
+    private readonly ILogger<HttpContextAuthenticationStateProvider> _logger;
+    private volatile Task<AuthenticationState> _currentState;
     private readonly PeriodicTimer? _timer;
     private readonly Task? _revalidationLoop;
 
-    public HttpContextAuthenticationStateProvider(IHttpContextAccessor httpContextAccessor, IDbContextFactory<FurniturePlannerContext> dbFactory)
+    public HttpContextAuthenticationStateProvider(
+        IHttpContextAccessor httpContextAccessor,
+        IDbContextFactory<FurniturePlannerContext> dbFactory,
+        ILogger<HttpContextAuthenticationStateProvider> logger)
     {
         _dbFactory = dbFactory;
+        _logger = logger;
         var user = httpContextAccessor.HttpContext?.User ?? new ClaimsPrincipal(new ClaimsIdentity());
-        _state = Task.FromResult(new AuthenticationState(user));
+        _currentState = Task.FromResult(new AuthenticationState(user));
 
         if (user.Identity?.IsAuthenticated == true)
         {
@@ -42,17 +58,38 @@ public sealed class HttpContextAuthenticationStateProvider : AuthenticationState
         }
     }
 
-    public override Task<AuthenticationState> GetAuthenticationStateAsync() => _state;
+    public override Task<AuthenticationState> GetAuthenticationStateAsync() => _currentState;
+
+    // Extracted for direct testing (AuthRevalidationTests) - swaps in the anonymous state before
+    // notifying, so a direct GetAuthenticationStateAsync caller reflects the revocation right away
+    // rather than only components that subscribed to the change notification.
+    public void Invalidate()
+    {
+        _currentState = Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity())));
+        NotifyAuthenticationStateChanged(_currentState);
+    }
 
     private async Task RevalidateLoopAsync(ClaimsPrincipal user, PeriodicTimer timer)
     {
         while (await timer.WaitForNextTickAsync())
         {
-            await using var db = await _dbFactory.CreateDbContextAsync();
-            if (!await ValidateAsync(user, db))
+            try
             {
-                NotifyAuthenticationStateChanged(Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity()))));
+                await using var db = await _dbFactory.CreateDbContextAsync();
+                if (!await ValidateAsync(user, db))
+                {
+                    Invalidate();
+                    return;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Disposal in progress - let the while condition above end the loop, don't log this as a failure.
                 return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Auth revalidation tick failed; will retry on the next interval.");
             }
         }
     }
