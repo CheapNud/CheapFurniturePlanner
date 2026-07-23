@@ -154,6 +154,53 @@ public class ServiceTicketServiceTests
     }
 
     [Fact]
+    public async Task Cancel_FromNew_Transitions()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = NewService(factory, OfficeUser);
+        var consumerId = await SeedConsumerAsync(factory);
+        var ticket = await service.CreateTicketAsync(consumerId, null, "x", null, ServiceFlow.External, []);
+
+        await service.CancelAsync(ticket.Id, "consumer withdrew");
+
+        var loaded = await service.GetAsync(ticket.Id);
+        Assert.Equal(ServiceTicketState.Cancelled, loaded!.State);
+        Assert.Equal("consumer withdrew", loaded.CancelReason);
+    }
+
+    [Fact]
+    public async Task ApplyFlow_PrefillsSupplierRef_FromFirstTicketLineInOrder()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = NewService(factory, OfficeUser);
+        var consumerId = await SeedConsumerAsync(factory);
+        int firstOrderLineId, secondOrderLineId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var seller = new Seller { Name = "Shop", Multiplier = 1m };
+            db.Sellers.Add(seller);
+            await db.SaveChangesAsync();
+            var order = new Order { OrderNumber = "ORD-2026-0002", SellerId = seller.Id, ConsumerId = consumerId, MarketCode = "BE" };
+            db.Orders.Add(order);
+            await db.SaveChangesAsync();
+            var firstLine = new OrderLine { OrderId = order.Id, DisplayIndex = 0, Kind = OrderLineKind.StandaloneArticle, SupplierRef = "FIRST-REF" };
+            var secondLine = new OrderLine { OrderId = order.Id, DisplayIndex = 1, Kind = OrderLineKind.StandaloneArticle, SupplierRef = "SECOND-REF" };
+            db.OrderLines.AddRange(firstLine, secondLine);
+            await db.SaveChangesAsync();
+            firstOrderLineId = firstLine.Id;
+            secondOrderLineId = secondLine.Id;
+        }
+
+        var ticket = await service.CreateTicketAsync(consumerId, null, "x", null, ServiceFlow.External,
+            [new ServiceLineInput(firstOrderLineId, "first line"), new ServiceLineInput(secondOrderLineId, "second line")]);
+
+        var loaded = await service.GetAsync(ticket.Id);
+        Assert.Equal("FIRST-REF", loaded!.SupplierReport!.SupplierRef);
+    }
+
+    [Fact]
     public async Task OpenTicketCount_CountsOnlyOpenTicketsForOrder()
     {
         var (factory, conn) = await NewFactoryAsync();

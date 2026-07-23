@@ -150,10 +150,14 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
                 if (supplierRef is null)
                 {
                     var lineIds = ticket.Lines.Where(l => l.OrderLineId != null).Select(l => l.OrderLineId!.Value).ToList();
-                    supplierRef = await db.OrderLines
+                    var refsByOrderLineId = await db.OrderLines
                         .Where(ol => lineIds.Contains(ol.Id) && ol.SupplierRef != null)
-                        .Select(ol => ol.SupplierRef)
-                        .FirstOrDefaultAsync(ct);
+                        .Select(ol => new { ol.Id, ol.SupplierRef })
+                        .ToDictionaryAsync(x => x.Id, x => x.SupplierRef, ct);
+                    supplierRef = lineIds
+                        .Where(id => refsByOrderLineId.ContainsKey(id))
+                        .Select(id => refsByOrderLineId[id])
+                        .FirstOrDefault();
                 }
                 ticket.SupplierReport = new SupplierReport { TicketId = ticket.Id, SupplierRef = supplierRef ?? "" };
             }
