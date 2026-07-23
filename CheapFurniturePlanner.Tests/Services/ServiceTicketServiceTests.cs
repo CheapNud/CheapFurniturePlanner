@@ -169,32 +169,57 @@ public class ServiceTicketServiceTests
         Assert.Equal("consumer withdrew", loaded.CancelReason);
     }
 
+    // Seeds an order with two dropship lines whose DB insertion order diverges from the ticket's
+    // line order: "SECOND-REF" is inserted FIRST (lower Id), "FIRST-REF" second (higher Id). The
+    // returned ids are in ticket order (FIRST-REF first), so an unordered query would pick
+    // "SECOND-REF" and fail the assert.
+    private static async Task<(int FirstRefLineId, int SecondRefLineId)> SeedDivergentDropshipLinesAsync(IDbContextFactory<FurniturePlannerContext> factory, int consumerId)
+    {
+        await using var db = await factory.CreateDbContextAsync();
+        var seller = new Seller { Name = "Shop", Multiplier = 1m };
+        db.Sellers.Add(seller);
+        await db.SaveChangesAsync();
+        var order = new Order { OrderNumber = "ORD-2026-0002", SellerId = seller.Id, ConsumerId = consumerId, MarketCode = "BE" };
+        db.Orders.Add(order);
+        await db.SaveChangesAsync();
+        var secondRefLine = new OrderLine { OrderId = order.Id, DisplayIndex = 0, Kind = OrderLineKind.StandaloneArticle, SupplierRef = "SECOND-REF" };
+        db.OrderLines.Add(secondRefLine);
+        await db.SaveChangesAsync();
+        var firstRefLine = new OrderLine { OrderId = order.Id, DisplayIndex = 1, Kind = OrderLineKind.StandaloneArticle, SupplierRef = "FIRST-REF" };
+        db.OrderLines.Add(firstRefLine);
+        await db.SaveChangesAsync();
+        Assert.True(firstRefLine.Id > secondRefLine.Id); // divergence precondition
+        return (firstRefLine.Id, secondRefLine.Id);
+    }
+
     [Fact]
-    public async Task ApplyFlow_PrefillsSupplierRef_FromFirstTicketLineInOrder()
+    public async Task Create_PrefillsSupplierRef_FromFirstTicketLineInOrder()
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var service = NewService(factory, OfficeUser);
         var consumerId = await SeedConsumerAsync(factory);
-        int firstOrderLineId, secondOrderLineId;
-        await using (var db = await factory.CreateDbContextAsync())
-        {
-            var seller = new Seller { Name = "Shop", Multiplier = 1m };
-            db.Sellers.Add(seller);
-            await db.SaveChangesAsync();
-            var order = new Order { OrderNumber = "ORD-2026-0002", SellerId = seller.Id, ConsumerId = consumerId, MarketCode = "BE" };
-            db.Orders.Add(order);
-            await db.SaveChangesAsync();
-            var firstLine = new OrderLine { OrderId = order.Id, DisplayIndex = 0, Kind = OrderLineKind.StandaloneArticle, SupplierRef = "FIRST-REF" };
-            var secondLine = new OrderLine { OrderId = order.Id, DisplayIndex = 1, Kind = OrderLineKind.StandaloneArticle, SupplierRef = "SECOND-REF" };
-            db.OrderLines.AddRange(firstLine, secondLine);
-            await db.SaveChangesAsync();
-            firstOrderLineId = firstLine.Id;
-            secondOrderLineId = secondLine.Id;
-        }
+        var (firstRefLineId, secondRefLineId) = await SeedDivergentDropshipLinesAsync(factory, consumerId);
 
         var ticket = await service.CreateTicketAsync(consumerId, null, "x", null, ServiceFlow.External,
-            [new ServiceLineInput(firstOrderLineId, "first line"), new ServiceLineInput(secondOrderLineId, "second line")]);
+            [new ServiceLineInput(firstRefLineId, "first ticket line"), new ServiceLineInput(secondRefLineId, "second ticket line")]);
+
+        var loaded = await service.GetAsync(ticket.Id);
+        Assert.Equal("FIRST-REF", loaded!.SupplierReport!.SupplierRef);
+    }
+
+    [Fact]
+    public async Task SetFlow_PrefillsSupplierRef_FromFirstTicketLineInOrder()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = NewService(factory, OfficeUser);
+        var consumerId = await SeedConsumerAsync(factory);
+        var (firstRefLineId, secondRefLineId) = await SeedDivergentDropshipLinesAsync(factory, consumerId);
+        var ticket = await service.CreateTicketAsync(consumerId, null, "x", null, ServiceFlow.Undecided,
+            [new ServiceLineInput(firstRefLineId, "first ticket line"), new ServiceLineInput(secondRefLineId, "second ticket line")]);
+
+        await service.SetFlowAsync(ticket.Id, ServiceFlow.External);
 
         var loaded = await service.GetAsync(ticket.Id);
         Assert.Equal("FIRST-REF", loaded!.SupplierReport!.SupplierRef);

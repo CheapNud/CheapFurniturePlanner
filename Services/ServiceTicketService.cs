@@ -192,7 +192,7 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
 
     private static async Task<ServiceTicket> RequireTicketAsync(FurniturePlannerContext db, int ticketId, CancellationToken ct) =>
         await db.ServiceTickets
-            .Include(t => t.Lines)
+            .Include(t => t.Lines.OrderBy(l => l.Id))
             .Include(t => t.InternalRepair).Include(t => t.SupplierReport)
             .FirstOrDefaultAsync(t => t.Id == ticketId, ct)
         ?? throw new InvalidOperationException($"Ticket {ticketId} not found.");
