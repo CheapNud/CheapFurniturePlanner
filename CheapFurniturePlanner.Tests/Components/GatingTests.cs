@@ -11,18 +11,18 @@ using Xunit;
 namespace CheapFurniturePlanner.Tests.Components;
 
 // Task 4: role gating across NavMenu and the page inventory's [Authorize] attributes.
-// NavMenu rendering uses bUnit's built-in AddTestAuthorization() (Bunit.TestDoubles) instead of a
+// NavMenu rendering uses bUnit's built-in AddAuthorization() (Bunit.TestDoubles) instead of a
 // hand-rolled AuthenticationStateProvider fake - it already wires a FakeAuthenticationStateProvider
 // + FakeAuthorizationService that evaluate Roles="..." the same way the real IAuthorizationService
 // does, and it auto-adds <CascadingAuthenticationState> to the render tree, which is what NavMenu's
 // <AuthorizeView> elements need.
 public class GatingTests : TestContext
 {
-    private TestAuthorizationContext ConfigureAuth()
+    private BunitAuthorizationContext ConfigureAuth()
     {
         Services.AddMudServices();
         JSInterop.Mode = JSRuntimeMode.Loose;
-        return this.AddTestAuthorization();
+        return this.AddAuthorization();
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public class GatingTests : TestContext
         auth.SetAuthorized("boss");
         auth.SetRoles(Roles.Admin);
 
-        var cut = RenderComponent<NavMenu>();
+        var cut = Render<NavMenu>();
 
         Assert.Contains("href=\"/users\"", cut.Markup);
         Assert.Contains("href=\"/studio\"", cut.Markup);
@@ -53,7 +53,7 @@ public class GatingTests : TestContext
         auth.SetAuthorized("clerk");
         auth.SetRoles(Roles.Office);
 
-        var cut = RenderComponent<NavMenu>();
+        var cut = Render<NavMenu>();
 
         Assert.Contains("href=\"/studio\"", cut.Markup);
         Assert.Contains("href=\"/orders\"", cut.Markup);
@@ -68,7 +68,7 @@ public class GatingTests : TestContext
         auth.SetAuthorized("wrench");
         auth.SetRoles(Roles.Mechanic);
 
-        var cut = RenderComponent<NavMenu>();
+        var cut = Render<NavMenu>();
 
         Assert.Contains("href=\"/\"", cut.Markup);
         Assert.Contains("href=\"/room-plans\"", cut.Markup);
@@ -78,12 +78,32 @@ public class GatingTests : TestContext
     }
 
     [Fact]
+    public void AnyAuthenticated_SeesServiceLink()
+    {
+        var auth = ConfigureAuth();
+        auth.SetAuthorized("wrench");
+        auth.SetRoles(Roles.Mechanic);
+
+        var cut = Render<NavMenu>();
+
+        Assert.Contains("href=\"/service\"", cut.Markup);
+    }
+
+    [Fact]
+    public void ServicePages_CarryExpectedAuthorization()
+    {
+        Assert.Equal(Roles.AdminOrOffice, typeof(ServiceIntakePage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Null(typeof(ServiceListPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Null(typeof(ServiceTicketPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+    }
+
+    [Fact]
     public void Unauthenticated_SeesOnlyTheAnonymousSafeSubset()
     {
-        // AddTestAuthorization() defaults to SetNotAuthorized().
+        // AddAuthorization() defaults to SetNotAuthorized().
         ConfigureAuth();
 
-        var cut = RenderComponent<NavMenu>();
+        var cut = Render<NavMenu>();
 
         Assert.DoesNotContain("href=\"/\"", cut.Markup);
         Assert.DoesNotContain("href=\"/room-plans\"", cut.Markup);

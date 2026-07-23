@@ -1,0 +1,201 @@
+@page "/service/new"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@inject ServiceTicketService Tickets
+@inject ServicePhotoStore PhotoStore
+@inject PartyService Parties
+@inject OrderEntryService Orders
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>New service ticket</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">New service ticket</MudText>
+    <MudPaper Class="pa-4">
+        <MudStack Spacing="3">
+            <MudSelect T="int?" Label="Consumer" Value="_consumerId" ValueChanged="OnConsumerChanged" Required="true">
+                @foreach (var consumer in _consumers)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)consumer.Id)">@consumer.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudSelect T="int?" Label="Order (optional)" Value="_orderId" ValueChanged="OnOrderChanged" Clearable="true">
+                @foreach (var order in _consumerOrders)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)order.Id)">@order.OrderNumber</MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (_openTicketCount > 0)
+            {
+                <MudAlert Severity="Severity.Warning">This order already has @_openTicketCount open service ticket(s).</MudAlert>
+            }
+
+            @if (_orderLines.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle1">Affected items</MudText>
+                @foreach (var line in _orderLines)
+                {
+                    <MudCheckBox T="bool" Value="_selectedLineIds.Contains(line.Id)"
+                                 ValueChanged="@((bool isChecked) => ToggleLine(line, isChecked))"
+                                 Label="@LineLabel(line)" />
+                }
+            }
+
+            <MudTextField T="string" @bind-Value="_problemDescription" Label="Problem description" Lines="4" Required="true" />
+            <MudTextField T="string" @bind-Value="_visitAddress" Label="Visit address (optional)" />
+
+            <MudText Typo="Typo.subtitle1">Flow</MudText>
+            <MudRadioGroup T="ServiceFlow" @bind-Value="_flow">
+                <MudRadio T="ServiceFlow" Value="ServiceFlow.Undecided">Decide later</MudRadio>
+                <MudRadio T="ServiceFlow" Value="ServiceFlow.Internal">Internal repair</MudRadio>
+                <MudRadio T="ServiceFlow" Value="ServiceFlow.External">Report to supplier</MudRadio>
+            </MudRadioGroup>
+            @if (_flow == ServiceFlow.External)
+            {
+                <MudTextField T="string" @bind-Value="_supplierRef" Label="Supplier reference" />
+            }
+
+            <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="OnFilesChanged" Accept=".jpg,.jpeg,.png,.webp">
+                <CustomContent Context="fileUpload">
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PhotoCamera"
+                               OnClick="@fileUpload.OpenFilePickerAsync">Add photos</MudButton>
+                </CustomContent>
+            </MudFileUpload>
+            @if (_pendingPhotos.Count > 0)
+            {
+                <MudText Typo="Typo.body2">@_pendingPhotos.Count photo(s) attached</MudText>
+            }
+
+            <MudStack Row="true" Justify="Justify.FlexEnd">
+                <MudButton OnClick="@(() => Navigation.NavigateTo("/service"))">Cancel</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Create ticket</MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private List<Consumer> _consumers = [];
+    private List<Order> _allOrders = [];
+    private List<Order> _consumerOrders = [];
+    private List<OrderLine> _orderLines = [];
+    private readonly HashSet<int> _selectedLineIds = [];
+    private readonly List<IBrowserFile> _pendingPhotos = [];
+    private int? _consumerId;
+    private int? _orderId;
+    private int _openTicketCount;
+    private string _problemDescription = "";
+    private string? _visitAddress;
+    private string? _supplierRef;
+    private ServiceFlow _flow = ServiceFlow.Undecided;
+
+    private const long MaxPhotoBytes = 20 * 1024 * 1024;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _consumers = await Parties.ConsumersAsync();
+        _allOrders = await Orders.ListOrdersAsync();
+    }
+
+    private async Task OnConsumerChanged(int? consumerId)
+    {
+        _consumerId = consumerId;
+        _consumerOrders = _allOrders.Where(o => o.ConsumerId == consumerId).ToList();
+        await OnOrderChanged(null);
+    }
+
+    private async Task OnOrderChanged(int? orderId)
+    {
+        _orderId = orderId;
+        _orderLines = [];
+        _selectedLineIds.Clear();
+        _openTicketCount = 0;
+        if (orderId is int selectedOrderId)
+        {
+            var order = await Orders.GetOrderAsync(selectedOrderId);
+            _orderLines = order?.Lines ?? [];
+            _openTicketCount = await Tickets.OpenTicketCountForOrderAsync(selectedOrderId);
+        }
+    }
+
+    private void ToggleLine(OrderLine line, bool isChecked)
+    {
+        if (isChecked)
+        {
+            _selectedLineIds.Add(line.Id);
+            // Dropship payoff: a supplier-backed line suggests the external flow and prefills
+            // the reference; the user can still override both.
+            if (line.SupplierRef is not null)
+            {
+                _flow = ServiceFlow.External;
+                _supplierRef ??= line.SupplierRef;
+            }
+        }
+        else
+        {
+            _selectedLineIds.Remove(line.Id);
+        }
+    }
+
+    private static string LineLabel(OrderLine line)
+    {
+        var identity = line.AssignedCode ?? line.VariantCode ?? "article";
+        return line.SupplierRef is null ? identity : $"{identity} (dropship: {line.SupplierRef})";
+    }
+
+    private void OnFilesChanged(IReadOnlyList<IBrowserFile>? files)
+    {
+        if (files is not null)
+        {
+            _pendingPhotos.AddRange(files);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_consumerId is not int consumerId)
+        {
+            Snackbar.Add("Pick a consumer first.", Severity.Warning);
+            return;
+        }
+        if (_openTicketCount > 0)
+        {
+            var proceed = await DialogService.ShowMessageBoxAsync(
+                "Duplicate warning",
+                $"This order already has {_openTicketCount} open service ticket(s). Create another?",
+                yesText: "Create anyway", cancelText: "Back");
+            if (proceed != true) { return; }
+        }
+        try
+        {
+            var lineInputs = _orderLines
+                .Where(l => _selectedLineIds.Contains(l.Id))
+                .Select(l => new ServiceLineInput(l.Id, LineLabel(l)))
+                .ToList();
+            var ticket = await Tickets.CreateTicketAsync(consumerId, _orderId, _problemDescription, _visitAddress, _flow, lineInputs, _supplierRef);
+            foreach (var photo in _pendingPhotos)
+            {
+                await using var upload = photo.OpenReadStream(MaxPhotoBytes);
+                var storedName = await PhotoStore.SaveAsync(ticket.Id, photo.Name, upload);
+                await Tickets.AddPhotoAsync(ticket.Id, PhotoKind.Before, storedName);
+            }
+            Navigation.NavigateTo($"/service/{ticket.Id}");
+        }
+        catch (InvalidOperationException failure)
+        {
+            Snackbar.Add(failure.Message, Severity.Error);
+        }
+        catch (IOException failure)
+        {
+            Snackbar.Add(failure.Message, Severity.Error);
+        }
+    }
+}

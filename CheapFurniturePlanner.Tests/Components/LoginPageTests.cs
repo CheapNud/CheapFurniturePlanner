@@ -24,7 +24,7 @@ public class LoginPageTests : TestContext
         ConfigureServices();
         Services.GetRequiredService<NavigationManager>().NavigateTo("/login?failed=credentials");
 
-        var cut = RenderComponent<Login>();
+        var cut = Render<Login>();
 
         Assert.Contains("Sign in failed. Check your username and password.", cut.Markup);
     }
@@ -35,7 +35,7 @@ public class LoginPageTests : TestContext
         ConfigureServices();
         Services.GetRequiredService<NavigationManager>().NavigateTo("/login?failed=locked");
 
-        var cut = RenderComponent<Login>();
+        var cut = Render<Login>();
 
         Assert.Contains("This account has been deactivated.", cut.Markup);
     }
@@ -45,7 +45,7 @@ public class LoginPageTests : TestContext
     {
         ConfigureServices();
 
-        var cut = RenderComponent<Login>();
+        var cut = Render<Login>();
 
         Assert.DoesNotContain("mud-alert", cut.Markup);
     }

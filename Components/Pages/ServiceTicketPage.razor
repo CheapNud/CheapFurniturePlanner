@@ -1,0 +1,208 @@
+@page "/service/{Id:int}"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Components.Service
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@attribute [Authorize]
+@inject ServiceTicketService Tickets
+@inject ServicePhotoStore PhotoStore
+@inject ICurrentUser CurrentUser
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Service ticket</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    @if (_ticket is null)
+    {
+        <MudText>Loading…</MudText>
+    }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/service"))" />
+            <MudText Typo="Typo.h4">@_ticket.TicketNumber</MudText>
+            <MudChip T="string" Size="Size.Small">@_ticket.Flow</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="@StateColor(_ticket.State)">@_ticket.State</MudChip>
+        </MudStack>
+
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4 mb-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Ticket</MudText>
+                    <MudText><b>Consumer:</b> @_ticket.Consumer?.Name</MudText>
+                    @if (_ticket.Order is not null)
+                    {
+                        <MudText><b>Order:</b> <MudLink Href="@($"/orders/{_ticket.OrderId}")">@_ticket.Order.OrderNumber</MudLink></MudText>
+                    }
+                    <MudText><b>Problem:</b> @_ticket.ProblemDescription</MudText>
+                    @if (_ticket.VisitAddress is not null)
+                    {
+                        <MudText><b>Visit address:</b> @_ticket.VisitAddress</MudText>
+                    }
+                    <MudText Typo="Typo.body2" Class="mt-1">Created @_ticket.CreatedAt.ToString("yyyy-MM-dd HH:mm")</MudText>
+                    @if (_ticket.CancelReason is not null)
+                    {
+                        <MudAlert Severity="Severity.Warning" Class="mt-2">Cancelled: @_ticket.CancelReason</MudAlert>
+                    }
+                    @foreach (var line in _ticket.Lines)
+                    {
+                        <MudText Typo="Typo.body2">• @line.Description</MudText>
+                    }
+
+                    @if (_canManage && IsOpen)
+                    {
+                        @if (_ticket.State == ServiceTicketState.New)
+                        {
+                            <MudText Typo="Typo.subtitle1" Class="mt-3">Flow</MudText>
+                            <MudRadioGroup T="ServiceFlow" Value="_ticket.Flow" ValueChanged="OnFlowChanged">
+                                <MudRadio T="ServiceFlow" Value="ServiceFlow.Internal">Internal repair</MudRadio>
+                                <MudRadio T="ServiceFlow" Value="ServiceFlow.External">Report to supplier</MudRadio>
+                            </MudRadioGroup>
+                        }
+                        <MudStack Row="true" Class="mt-3" AlignItems="AlignItems.Center">
+                            <MudTextField T="string" @bind-Value="_cancelReason" Label="Cancel reason" />
+                            <MudButton Color="Color.Error" Variant="Variant.Outlined" OnClick="CancelTicketAsync">Cancel ticket</MudButton>
+                        </MudStack>
+                    }
+                </MudPaper>
+
+                <MudPaper Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">History</MudText>
+                    @foreach (var entry in _ticket.Logs)
+                    {
+                        <MudText Typo="Typo.body2">@entry.At.ToString("yyyy-MM-dd HH:mm") — @entry.Message</MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                @if (_ticket.Flow == ServiceFlow.Internal)
+                {
+                    <InternalRepairSection Ticket="_ticket" CanManage="_canManage" OnChanged="ReloadAsync" />
+                }
+                else if (_ticket.Flow == ServiceFlow.External)
+                {
+                    <SupplierReportSection Ticket="_ticket" CanManage="_canManage" OnChanged="ReloadAsync" />
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info">No flow chosen yet.</MudAlert>
+                }
+
+                <MudPaper Class="pa-4 mt-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Photos</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudSelect T="PhotoKind" @bind-Value="_uploadKind" Label="Kind" Dense="true" Disabled="@(!IsOpen)">
+                            <MudSelectItem T="PhotoKind" Value="PhotoKind.Before">Before</MudSelectItem>
+                            <MudSelectItem T="PhotoKind" Value="PhotoKind.After">After</MudSelectItem>
+                        </MudSelect>
+                        <MudFileUpload T="IBrowserFile" FilesChanged="OnPhotoSelected" Accept=".jpg,.jpeg,.png,.webp">
+                            <CustomContent Context="fileUpload">
+                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PhotoCamera"
+                                           OnClick="@fileUpload.OpenFilePickerAsync" Disabled="@(!IsOpen)">Add photo</MudButton>
+                            </CustomContent>
+                        </MudFileUpload>
+                    </MudStack>
+                    <MudGrid>
+                        @foreach (var photo in _ticket.Photos)
+                        {
+                            <MudItem xs="6" sm="4">
+                                <MudImage Src="@_photoSources.GetValueOrDefault(photo.FileName)" Alt="@($"{photo.Kind} photo")" Fluid="true" />
+                                <MudText Typo="Typo.caption">@photo.Kind</MudText>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ServiceTicket? _ticket;
+    private readonly Dictionary<string, string> _photoSources = [];
+    private bool _canManage;
+    private string _cancelReason = "";
+    private PhotoKind _uploadKind = PhotoKind.Before;
+
+    private const long MaxPhotoBytes = 20 * 1024 * 1024;
+
+    private bool IsOpen => _ticket!.State is ServiceTicketState.New or ServiceTicketState.InProgress;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canManage = await CurrentUser.IsInRoleAsync(Roles.Admin) || await CurrentUser.IsInRoleAsync(Roles.Office);
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _ticket = await Tickets.GetAsync(Id);
+        _photoSources.Clear();
+        if (_ticket is not null)
+        {
+            // Local desktop app: photos become data URIs instead of a file-serving endpoint.
+            foreach (var photo in _ticket.Photos)
+            {
+                try
+                {
+                    var bytes = await PhotoStore.ReadAsync(_ticket.Id, photo.FileName);
+                    _photoSources[photo.FileName] = $"data:{ServicePhotoStore.MimeFor(photo.FileName)};base64,{Convert.ToBase64String(bytes)}";
+                }
+                catch (IOException)
+                {
+                    // File missing from disk (e.g. deleted out-of-band) - skip; the caption still
+                    // renders and MudImage degrades gracefully with a null Src.
+                }
+            }
+        }
+        StateHasChanged();
+    }
+
+    private async Task OnFlowChanged(ServiceFlow flow)
+    {
+        try
+        {
+            await Tickets.SetFlowAsync(Id, flow);
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task CancelTicketAsync()
+    {
+        try
+        {
+            await Tickets.CancelAsync(Id, _cancelReason);
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task OnPhotoSelected(IBrowserFile? file)
+    {
+        if (file is null) { return; }
+        try
+        {
+            await using var upload = file.OpenReadStream(MaxPhotoBytes);
+            var storedName = await PhotoStore.SaveAsync(Id, file.Name, upload);
+            await Tickets.AddPhotoAsync(Id, _uploadKind, storedName);
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private static Color StateColor(ServiceTicketState ticketState) => ticketState switch
+    {
+        ServiceTicketState.New => Color.Info,
+        ServiceTicketState.InProgress => Color.Warning,
+        ServiceTicketState.Resolved => Color.Success,
+        _ => Color.Default,
+    };
+}

@@ -69,7 +69,7 @@ public class PriceVersionsPageTests : TestContext
         return new PriceVersionService(factory, publish);
     }
 
-    // bUnit renders each RenderComponent<T>() call as its own root in the render tree, so the
+    // bUnit renders each Render<T>() call as its own root in the render tree, so the
     // PublishVersionDialog opened via DialogService.ShowAsync shows up as a descendant of the
     // MudDialogProvider root, NOT of the page under test - mirrors StudioPageTests.
     private IRenderedComponent<MudDialogProvider> ConfigureServices(IDbContextFactory<FurniturePlannerContext> factory)
@@ -83,8 +83,8 @@ public class PriceVersionsPageTests : TestContext
         Services.AddSingleton(sp => new PriceVersionService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<ModelPublishService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        var dialogProvider = RenderComponent<MudDialogProvider>();
-        RenderComponent<MudPopoverProvider>();
+        var dialogProvider = Render<MudDialogProvider>();
+        Render<MudPopoverProvider>();
         return dialogProvider;
     }
 
@@ -96,7 +96,7 @@ public class PriceVersionsPageTests : TestContext
         await SeedAndPublishAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<PriceVersionsPage>();
+        var cut = Render<PriceVersionsPage>();
 
         cut.WaitForAssertion(() =>
         {
@@ -115,7 +115,7 @@ public class PriceVersionsPageTests : TestContext
         await SeedAndPublishAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<PriceVersionsPage>();
+        var cut = Render<PriceVersionsPage>();
 
         cut.WaitForAssertion(() => Assert.DoesNotContain("Unpublished price changes", cut.Markup));
     }
@@ -131,7 +131,7 @@ public class PriceVersionsPageTests : TestContext
         await store.SaveMastersAsync(masters);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<PriceVersionsPage>();
+        var cut = Render<PriceVersionsPage>();
 
         cut.WaitForAssertion(() => Assert.Contains("Unpublished price changes", cut.Markup));
     }
@@ -147,7 +147,7 @@ public class PriceVersionsPageTests : TestContext
         await store.SaveMastersAsync(masters);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<PriceVersionsPage>();
+        var cut = Render<PriceVersionsPage>();
         cut.WaitForAssertion(() => Assert.Contains("Unpublished price changes", cut.Markup));
 
         var publishButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Publish new version");

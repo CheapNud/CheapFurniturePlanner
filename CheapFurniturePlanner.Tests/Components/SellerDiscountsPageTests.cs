@@ -41,8 +41,8 @@ public class SellerDiscountsPageTests : TestContext
         Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new DiscountService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
-        RenderComponent<MudBlazor.MudDialogProvider>();
-        RenderComponent<MudBlazor.MudPopoverProvider>();
+        Render<MudBlazor.MudDialogProvider>();
+        Render<MudBlazor.MudPopoverProvider>();
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class SellerDiscountsPageTests : TestContext
         await discounts.AddRuleAsync(new DiscountRule { SellerId = seller.Id, Scope = DiscountScope.Everything, RatePercent = 5m });
         ConfigureServices(factory);
 
-        var cut = RenderComponent<SellerDiscountsPage>(parameters => parameters.Add(p => p.SellerId, seller.Id));
+        var cut = Render<SellerDiscountsPage>(parameters => parameters.Add(p => p.SellerId, seller.Id));
 
         cut.WaitForAssertion(() =>
         {
@@ -86,7 +86,7 @@ public class SellerDiscountsPageTests : TestContext
         });
         ConfigureServices(factory);
 
-        var cut = RenderComponent<SellerDiscountsPage>(parameters => parameters.Add(p => p.SellerId, seller.Id));
+        var cut = Render<SellerDiscountsPage>(parameters => parameters.Add(p => p.SellerId, seller.Id));
 
         cut.WaitForAssertion(() => Assert.Contains("42", cut.Markup));
     }

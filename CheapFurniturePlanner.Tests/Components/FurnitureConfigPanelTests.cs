@@ -90,7 +90,7 @@ public class FurnitureConfigPanelTests : TestContext
 
         // MudSelect renders its options into an overlay managed by MudBlazor's popover service, which
         // requires a MudPopoverProvider to be present somewhere in the render tree.
-        RenderComponent<MudPopoverProvider>();
+        Render<MudPopoverProvider>();
 
         return snapshot;
     }
@@ -106,7 +106,7 @@ public class FurnitureConfigPanelTests : TestContext
         ConfigureServices(factory);
         var placement = Fj3Placement();
 
-        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
+        var cut = Render<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
 
         var selects = cut.FindComponents<MudSelect<string>>();
         Assert.Equal(3, selects.Count); // DEPTH, MECH, STITCH visible; HEAD gated behind MECH=REC
@@ -124,7 +124,7 @@ public class FurnitureConfigPanelTests : TestContext
         ConfigureServices(factory);
         var placement = Fj3Placement();
 
-        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
+        var cut = Render<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
 
         var mech = FindSelect(cut, "MECH");
         await cut.InvokeAsync(() => mech.Instance.ValueChanged.InvokeAsync("REC"));
@@ -142,7 +142,7 @@ public class FurnitureConfigPanelTests : TestContext
         ConfigureServices(factory);
         var placement = Fj3Placement();
 
-        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
+        var cut = Render<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
 
         var priceBefore = placement.CachedUnitPrice;
         Assert.NotNull(priceBefore);
@@ -170,7 +170,7 @@ public class FurnitureConfigPanelTests : TestContext
         var placement = Fj3Placement();
         var raisedCount = 0;
 
-        var cut = RenderComponent<FurnitureConfigPanel>(p =>
+        var cut = Render<FurnitureConfigPanel>(p =>
         {
             p.Add(x => x.Placement, placement);
             p.Add(x => x.OnConfigured, EventCallback.Factory.Create(this, () => raisedCount++));
@@ -189,7 +189,7 @@ public class FurnitureConfigPanelTests : TestContext
         var placement = Fj3Placement();
         var raisedCount = 0;
 
-        var cut = RenderComponent<FurnitureConfigPanel>(p =>
+        var cut = Render<FurnitureConfigPanel>(p =>
         {
             p.Add(x => x.Placement, placement);
             p.Add(x => x.OnConfigured, EventCallback.Factory.Create(this, () => raisedCount++));
@@ -211,7 +211,7 @@ public class FurnitureConfigPanelTests : TestContext
         var placement = Fj3Placement();
         var raisedCount = 0;
 
-        var cut = RenderComponent<FurnitureConfigPanel>(p =>
+        var cut = Render<FurnitureConfigPanel>(p =>
         {
             p.Add(x => x.Placement, placement);
             p.Add(x => x.OnConfigured, EventCallback.Factory.Create(this, () => raisedCount++));
@@ -232,7 +232,7 @@ public class FurnitureConfigPanelTests : TestContext
         ConfigureServices(factory);
         var placement = new FurniturePlannerViewModel { ElementCode = "DOES-NOT-EXIST", Name = "Ghost Sofa" };
 
-        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
+        var cut = Render<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
 
         Assert.Contains(cut.FindAll(".mud-alert"), _ => true);
         Assert.Contains("unavailable in this catalogue", cut.Markup);
@@ -246,7 +246,7 @@ public class FurnitureConfigPanelTests : TestContext
         ConfigureServices(factory);
         var placement = Fj3Placement();
 
-        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
+        var cut = Render<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
 
         // Sanity check: the panel priced successfully on first render, so the persisted cache fields
         // (which PlannerService writes into the saved plan) hold a real price.
@@ -275,7 +275,7 @@ public class FurnitureConfigPanelTests : TestContext
         var snapshot = ConfigureServices(factory);
         var placement = Fj3Placement();
 
-        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
+        var cut = Render<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
 
         var config = new ProductConfiguration("FJORD",
             [new ElementSelection("FJ3", 1, placement.Selections, placement.FabricColorCode)]);
@@ -307,7 +307,7 @@ public class FurnitureConfigPanelTests : TestContext
         var naming = new ArticleAuthoringService(namingStore, namingPublish);
         await naming.AssignAsync("FJORD", "FJ3", composed.VariantCode, placement.Selections, "STUDIO-A");
 
-        var cut = RenderComponent<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
+        var cut = Render<FurnitureConfigPanel>(p => p.Add(x => x.Placement, placement));
 
         // The panel also displays the raw pricing-breakdown SKU (composed.VariantCode) elsewhere in
         // its markup - unrelated to and unchanged by this task - so the assertion is scoped to the

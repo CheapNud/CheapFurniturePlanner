@@ -59,7 +59,7 @@ public class StudioPageTests : TestContext
         return new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
     }
 
-    // bUnit renders each RenderComponent<T>() call as its own root in the render tree, so any dialog
+    // bUnit renders each Render<T>() call as its own root in the render tree, so any dialog
     // that DialogService.ShowAsync opens (MudMessageBox, NewModelDialog, EditModelDialog) shows up as
     // a descendant of the MudDialogProvider root, NOT of the page under test - callers must query the
     // returned handle, not `cut`.
@@ -78,8 +78,8 @@ public class StudioPageTests : TestContext
         // MudMessageBox confirmations and the New/Edit model dialogs render via MudDialogProvider;
         // MudSelect-style overlays elsewhere in the app rely on MudPopoverProvider - both need to be
         // present.
-        var dialogProvider = RenderComponent<MudDialogProvider>();
-        RenderComponent<MudPopoverProvider>();
+        var dialogProvider = Render<MudDialogProvider>();
+        Render<MudPopoverProvider>();
         return dialogProvider;
     }
 
@@ -111,7 +111,7 @@ public class StudioPageTests : TestContext
         await SeedAuthoringStoreAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
 
         Assert.Contains("FJORD", cut.Markup);
         Assert.Contains("Fjord", cut.Markup);
@@ -129,7 +129,7 @@ public class StudioPageTests : TestContext
         await SeedAuthoringStoreAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
         var elementsButton = FindActionButton(cut, "Elements");
         await cut.InvokeAsync(() => elementsButton.Click());
 
@@ -148,7 +148,7 @@ public class StudioPageTests : TestContext
         await NewPublishService(factory).SetStateAsync("FJORD", TradeItemState.Active);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
 
         Assert.Contains(TradeItemState.Active.ToString(), cut.Markup);
         Assert.Equal(TradeItemState.Active, FindStateSelect(cut, "FJORD").Instance.Value);
@@ -162,7 +162,7 @@ public class StudioPageTests : TestContext
         await SeedAuthoringStoreAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
         var stateSelect = FindStateSelect(cut, "FJORD");
 
         // Free-flow state change, no confirm dialog involved - driving the picker through the
@@ -186,7 +186,7 @@ public class StudioPageTests : TestContext
         await NewPublishService(factory).SetStateAsync("FJORD", TradeItemState.Active);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
         var stateSelect = FindStateSelect(cut, "FJORD");
 
         await cut.InvokeAsync(() => stateSelect.Instance.ValueChanged.InvokeAsync(TradeItemState.Discontinued));
@@ -211,7 +211,7 @@ public class StudioPageTests : TestContext
         await authoring.CreateBlankAsync("NOEL", "No Elements", null, null);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
         var stateSelect = FindStateSelect(cut, "NOEL");
 
         // NOEL has no elements, so CataloguePublishService rejects the republish, SetStateAsync
@@ -234,7 +234,7 @@ public class StudioPageTests : TestContext
         await SeedAuthoringStoreAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
         var newModelButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "New model");
 
         // OpenNewModelDialogAsync awaits dialogRef.Result, which only resolves once the dialog closes -
@@ -271,7 +271,7 @@ public class StudioPageTests : TestContext
         await authoring.CreateBlankAsync("NEWM", "Existing", null, null);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
         var newModelButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "New model");
 
         var pendingClick = cut.InvokeAsync(() => newModelButton.Click());
@@ -307,7 +307,7 @@ public class StudioPageTests : TestContext
         var sourceModel = await store.LoadModelAsync("FJORD");
         Assert.NotNull(sourceModel);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
         var newModelButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "New model");
 
         var pendingClick = cut.InvokeAsync(() => newModelButton.Click());
@@ -344,7 +344,7 @@ public class StudioPageTests : TestContext
         await SeedAuthoringStoreAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
         var editButton = FindActionButton(cut, "Edit");
 
         var pendingClick = cut.InvokeAsync(() => editButton.Click());
@@ -375,7 +375,7 @@ public class StudioPageTests : TestContext
         await NewPublishService(factory).SetStateAsync("FJORD", TradeItemState.Active);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
 
         Assert.True(FindActionButton(cut, "Delete").HasAttribute("disabled"));
     }
@@ -388,7 +388,7 @@ public class StudioPageTests : TestContext
         await SeedAuthoringStoreAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioPage>();
+        var cut = Render<StudioPage>();
         var deleteButton = FindActionButton(cut, "Delete");
         Assert.False(deleteButton.HasAttribute("disabled"));
 

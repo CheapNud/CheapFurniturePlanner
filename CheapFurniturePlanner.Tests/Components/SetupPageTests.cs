@@ -50,8 +50,8 @@ public class SetupPageTests : TestContext
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<UserAdminService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
-        RenderComponent<MudBlazor.MudPopoverProvider>();
-        RenderComponent<MudBlazor.MudSnackbarProvider>();
+        Render<MudBlazor.MudPopoverProvider>();
+        Render<MudBlazor.MudSnackbarProvider>();
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class SetupPageTests : TestContext
         using var _ = conn;
         ConfigureServices(factory);
 
-        var cut = RenderComponent<SetupPage>();
+        var cut = Render<SetupPage>();
 
         cut.WaitForAssertion(() => Assert.Contains("Create admin account", cut.Markup));
     }
@@ -73,7 +73,7 @@ public class SetupPageTests : TestContext
         using var _ = conn;
         ConfigureServices(factory);
 
-        var cut = RenderComponent<SetupPage>();
+        var cut = Render<SetupPage>();
         var demoButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Create demo admin");
         cut.InvokeAsync(() => demoButton.Click());
 

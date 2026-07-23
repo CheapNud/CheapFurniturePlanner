@@ -1,0 +1,94 @@
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@inject ServiceTicketService Tickets
+@inject SupplierReportPdf ReportPdf
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h6" Class="mb-2">Supplier report</MudText>
+
+    <MudStack Spacing="2">
+        <MudTextField T="string" Label="Supplier reference" @bind-Value="_supplierRef" Disabled="@(!CanManage || !IsOpen)" />
+        <MudTextField T="string" Label="Supplier case number" @bind-Value="_supplierCaseNumber" Disabled="@(!CanManage || !IsOpen)" />
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" OnClick="SaveReportAsync" Disabled="@(!CanManage || !IsOpen)">Save</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                       OnClick="GenerateAsync" Disabled="@(!CanManage || !IsOpen)">
+                Generate report
+            </MudButton>
+        </MudStack>
+        @if (Ticket.SupplierReport?.ReportedAt is DateTime reportedAt)
+        {
+            <MudText Typo="Typo.body2">Reported @reportedAt.ToString("yyyy-MM-dd HH:mm")</MudText>
+        }
+
+        <MudDivider />
+        <MudText Typo="Typo.subtitle1">Decision</MudText>
+        <MudTextField T="string" Label="Decision" @bind-Value="_decision" Disabled="@(!CanManage || !IsOpen)" />
+        <MudTextField T="string" Label="Decision note" @bind-Value="_decisionNote" Lines="2" Disabled="@(!CanManage || !IsOpen)" />
+        <MudButton Variant="Variant.Outlined" Color="Color.Success" OnClick="RecordDecisionAsync" Disabled="@(!CanManage || !IsOpen)">
+            Record decision (resolves ticket)
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public required ServiceTicket Ticket { get; set; }
+    [Parameter] public bool CanManage { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string _supplierRef = "";
+    private string? _supplierCaseNumber;
+    private string _decision = "";
+    private string? _decisionNote;
+
+    private bool IsOpen => Ticket.State is ServiceTicketState.New or ServiceTicketState.InProgress;
+
+    protected override void OnParametersSet()
+    {
+        var report = Ticket.SupplierReport!;
+        _supplierRef = report.SupplierRef;
+        _supplierCaseNumber = report.SupplierCaseNumber;
+        _decision = report.Decision ?? "";
+        _decisionNote = report.DecisionNote;
+    }
+
+    private async Task SaveReportAsync()
+    {
+        try
+        {
+            await Tickets.UpdateSupplierReportAsync(Ticket.Id, _supplierRef, _supplierCaseNumber);
+            await OnChanged.InvokeAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task GenerateAsync()
+    {
+        try
+        {
+            await Tickets.UpdateSupplierReportAsync(Ticket.Id, _supplierRef, _supplierCaseNumber);
+            if (string.IsNullOrWhiteSpace(_supplierRef))
+            {
+                Snackbar.Add("A supplier reference is required before reporting.", Severity.Warning);
+                return;
+            }
+            var filePath = await ReportPdf.GenerateAsync(Ticket.Id);
+            await Tickets.MarkReportedAsync(Ticket.Id);
+            Snackbar.Add($"Report written to {filePath}", Severity.Success);
+            await OnChanged.InvokeAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task RecordDecisionAsync()
+    {
+        try
+        {
+            await Tickets.SetDecisionAsync(Ticket.Id, _decision, _decisionNote);
+            await OnChanged.InvokeAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}

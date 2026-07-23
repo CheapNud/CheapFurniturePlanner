@@ -48,6 +48,12 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<Seller> Sellers => Set<Seller>();
     public DbSet<Consumer> Consumers => Set<Consumer>();
     public DbSet<DiscountRule> DiscountRules => Set<DiscountRule>();
+    public DbSet<ServiceTicket> ServiceTickets => Set<ServiceTicket>();
+    public DbSet<ServiceTicketLine> ServiceTicketLines => Set<ServiceTicketLine>();
+    public DbSet<ServiceTicketLog> ServiceTicketLogs => Set<ServiceTicketLog>();
+    public DbSet<ServiceTicketPhoto> ServiceTicketPhotos => Set<ServiceTicketPhoto>();
+    public DbSet<InternalRepair> InternalRepairs => Set<InternalRepair>();
+    public DbSet<SupplierReport> SupplierReports => Set<SupplierReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -152,6 +158,30 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         modelBuilder.Entity<ModelStateRecord>().Property(s => s.State).HasConversion<string>();
 
         modelBuilder.Entity<AuthoringModelDocument>().HasIndex(m => m.ModelCode).IsUnique();
+
+        modelBuilder.Entity<ServiceTicket>(entity =>
+        {
+            entity.HasIndex(t => t.TicketNumber).IsUnique();
+            entity.Property(t => t.State).HasConversion<string>();
+            entity.Property(t => t.Flow).HasConversion<string>();
+            entity.HasMany(t => t.Lines).WithOne().HasForeignKey(l => l.TicketId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(t => t.Logs).WithOne().HasForeignKey(l => l.TicketId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(t => t.Photos).WithOne().HasForeignKey(p => p.TicketId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ServiceTicketPhoto>().Property(p => p.Kind).HasConversion<string>();
+        modelBuilder.Entity<InternalRepair>(entity =>
+        {
+            entity.HasKey(r => r.TicketId);
+            entity.HasOne<ServiceTicket>().WithOne(t => t.InternalRepair)
+                .HasForeignKey<InternalRepair>(r => r.TicketId).OnDelete(DeleteBehavior.Cascade);
+            entity.Property(r => r.Outcome).HasConversion<string>();
+        });
+        modelBuilder.Entity<SupplierReport>(entity =>
+        {
+            entity.HasKey(r => r.TicketId);
+            entity.HasOne<ServiceTicket>().WithOne(t => t.SupplierReport)
+                .HasForeignKey<SupplierReport>(r => r.TicketId).OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     private static void SeedDefaultData(ModelBuilder modelBuilder)

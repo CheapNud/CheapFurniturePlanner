@@ -40,8 +40,8 @@ public class PartiesPageTests : TestContext
         Services.AddSingleton(factory);
         Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
-        RenderComponent<MudBlazor.MudDialogProvider>();
-        RenderComponent<MudBlazor.MudPopoverProvider>();
+        Render<MudBlazor.MudDialogProvider>();
+        Render<MudBlazor.MudPopoverProvider>();
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class PartiesPageTests : TestContext
         using var _ = conn;
         ConfigureServices(factory);
 
-        var cut = RenderComponent<PartiesPage>();
+        var cut = Render<PartiesPage>();
 
         cut.WaitForAssertion(() =>
         {
@@ -69,7 +69,7 @@ public class PartiesPageTests : TestContext
         await parties.AddSellerAsync("Alpha", 1.1m);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<PartiesPage>();
+        var cut = Render<PartiesPage>();
 
         cut.WaitForAssertion(() => Assert.Contains("Alpha", cut.Markup));
     }

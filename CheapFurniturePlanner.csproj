@@ -21,16 +21,16 @@
 
   <ItemGroup>
     <PackageReference Include="CheapAvaloniaBlazor" Version="3.2.0" />
-    <PackageReference Include="CheapHelpers" Version="3.5.1" />
-    <PackageReference Include="CheapHelpers.Blazor" Version="3.5.1" />
-    <PackageReference Include="CheapHelpers.EF" Version="3.5.1" />
-    <PackageReference Include="CheapHelpers.Models" Version="3.5.1" />
-    <PackageReference Include="CheapHelpers.Services" Version="3.5.1" />
+    <PackageReference Include="CheapHelpers" Version="3.6.0" />
+    <PackageReference Include="CheapHelpers.Blazor" Version="3.6.0" />
+    <PackageReference Include="CheapHelpers.EF" Version="3.6.0" />
+    <PackageReference Include="CheapHelpers.Models" Version="3.6.0" />
+    <PackageReference Include="CheapHelpers.Services" Version="3.6.0" />
 
 
     <!-- Entity Framework for SQLite -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -39,8 +39,8 @@
     <PackageReference Include="MudBlazor" Version="9.7.0" />
 
     <!-- Mapster for object mapping -->
-    <PackageReference Include="Mapster" Version="10.0.10" />
-    <PackageReference Include="Mapster.DependencyInjection" Version="10.0.10" />
+    <PackageReference Include="Mapster" Version="10.0.11" />
+    <PackageReference Include="Mapster.DependencyInjection" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup>

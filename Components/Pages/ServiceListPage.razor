@@ -1,0 +1,83 @@
+@page "/service"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject ServiceTicketService Tickets
+@inject ICurrentUser CurrentUser
+@inject NavigationManager Navigation
+
+<PageTitle>Service</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Service</MudText>
+        <MudSpacer />
+        @if (_canManage)
+        {
+            <MudSwitch T="bool" Value="_onlyMine" ValueChanged="OnOnlyMineChanged" Color="Color.Primary" Label="My tickets only" />
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => Navigation.NavigateTo("/service/new"))">
+                New ticket
+            </MudButton>
+        }
+    </MudStack>
+
+    <MudTable T="ServiceTicketSummary" Items="_tickets" Hover="true"
+              OnRowClick="@((TableRowClickEventArgs<ServiceTicketSummary> args) => Navigation.NavigateTo($"/service/{args.Item!.Id}"))">
+        <HeaderContent>
+            <MudTh>Number</MudTh>
+            <MudTh>Consumer</MudTh>
+            <MudTh>Flow</MudTh>
+            <MudTh>State</MudTh>
+            <MudTh>Assigned</MudTh>
+            <MudTh>Created</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Number">@context.TicketNumber</MudTd>
+            <MudTd DataLabel="Consumer">@context.ConsumerName</MudTd>
+            <MudTd DataLabel="Flow"><MudChip T="string" Size="Size.Small">@context.Flow</MudChip></MudTd>
+            <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip></MudTd>
+            <MudTd DataLabel="Assigned">@context.AssignedUserName</MudTd>
+            <MudTd DataLabel="Created">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private List<ServiceTicketSummary> _tickets = [];
+    private bool _canManage;
+    private bool _onlyMine;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var isAdmin = await CurrentUser.IsInRoleAsync(Roles.Admin);
+        var isOffice = await CurrentUser.IsInRoleAsync(Roles.Office);
+        _canManage = isAdmin || isOffice;
+        // Mechanics (without a back-office role) are pinned to their own tickets; the toggle is
+        // only rendered for Admin/Office.
+        _onlyMine = !_canManage && await CurrentUser.IsInRoleAsync(Roles.Mechanic);
+        await LoadAsync();
+    }
+
+    private async Task OnOnlyMineChanged(bool onlyMine)
+    {
+        _onlyMine = onlyMine;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var mineUserId = _onlyMine ? await CurrentUser.UserIdAsync() : null;
+        _tickets = await Tickets.ListAsync(mineUserId);
+    }
+
+    private static Color StateColor(ServiceTicketState ticketState) => ticketState switch
+    {
+        ServiceTicketState.New => Color.Info,
+        ServiceTicketState.InProgress => Color.Warning,
+        ServiceTicketState.Resolved => Color.Success,
+        _ => Color.Default,
+    };
+}

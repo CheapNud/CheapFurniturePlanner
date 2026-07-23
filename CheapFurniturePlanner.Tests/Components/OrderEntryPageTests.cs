@@ -91,8 +91,8 @@ public class OrderEntryPageTests : TestContext
         Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new DiscountService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
-        RenderComponent<MudBlazor.MudDialogProvider>();
-        RenderComponent<MudBlazor.MudPopoverProvider>();
+        Render<MudBlazor.MudDialogProvider>();
+        Render<MudBlazor.MudPopoverProvider>();
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public class OrderEntryPageTests : TestContext
         var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUN");
         ConfigureServices(factory);
 
-        var cut = RenderComponent<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
+        var cut = Render<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
 
         cut.WaitForAssertion(() =>
         {
@@ -128,7 +128,7 @@ public class OrderEntryPageTests : TestContext
         var reloaded = await harness.Orders.GetOrderAsync(order.Id);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
+        var cut = Render<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
 
         cut.WaitForAssertion(() =>
         {
@@ -152,7 +152,7 @@ public class OrderEntryPageTests : TestContext
         await harness.Orders.PlaceAsync(order.Id);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
+        var cut = Render<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
 
         cut.WaitForAssertion(() =>
         {
@@ -170,7 +170,7 @@ public class OrderEntryPageTests : TestContext
         var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUN");
         ConfigureServices(factory);
 
-        var cut = RenderComponent<OrdersPage>();
+        var cut = Render<OrdersPage>();
 
         cut.WaitForAssertion(() =>
         {
@@ -202,7 +202,7 @@ public class OrderEntryPageTests : TestContext
         await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
+        var cut = Render<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
 
         cut.WaitForAssertion(() =>
         {
@@ -227,10 +227,10 @@ public class OrderEntryPageTests : TestContext
         await harness.Orders.PlaceAsync(placedOrder.Id);
         ConfigureServices(factory);
 
-        var draftCut = RenderComponent<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, draftOrder.Id));
+        var draftCut = Render<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, draftOrder.Id));
         draftCut.WaitForAssertion(() => Assert.NotEmpty(draftCut.FindComponents<MudBlazor.MudNumericField<decimal>>()));
 
-        var placedCut = RenderComponent<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, placedOrder.Id));
+        var placedCut = Render<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, placedOrder.Id));
         placedCut.WaitForAssertion(() => Assert.Empty(placedCut.FindComponents<MudBlazor.MudNumericField<decimal>>()));
     }
 
@@ -247,7 +247,7 @@ public class OrderEntryPageTests : TestContext
         await harness.Orders.SetLineDiscountAsync(order.Id, line.Id, 15m);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
+        var cut = Render<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
 
         cut.WaitForAssertion(() =>
             Assert.Contains(cut.FindComponents<MudBlazor.MudChip<string>>(), c => c.Markup.Contains("manual")));

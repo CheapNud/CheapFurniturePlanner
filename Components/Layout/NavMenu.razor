@@ -112,6 +112,14 @@
         </MudNavLink>
     </AuthorizeView>
 
+    @* Service: any authenticated user - mechanics work their tickets here too. *@
+    <AuthorizeView>
+        <MudNavLink Href="/service"
+                    Icon="@Icons.Material.Filled.Handyman">
+            Service
+        </MudNavLink>
+    </AuthorizeView>
+
     @* Admin only. *@
     <AuthorizeView Roles="@Roles.Admin">
         <MudNavLink Href="/users"

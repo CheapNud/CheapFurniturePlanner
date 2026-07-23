@@ -51,8 +51,8 @@ public class MastersPageTests : TestContext
         Services.AddSingleton(sp => new AuthoringCatalogueStore(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new MasterAuthoringService(sp.GetRequiredService<AuthoringCatalogueStore>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
-        RenderComponent<MudBlazor.MudDialogProvider>();
-        RenderComponent<MudBlazor.MudPopoverProvider>();
+        Render<MudBlazor.MudDialogProvider>();
+        Render<MudBlazor.MudPopoverProvider>();
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class MastersPageTests : TestContext
         await SeedAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<MastersPage>();
+        var cut = Render<MastersPage>();
 
         cut.WaitForAssertion(() =>
         {
@@ -81,7 +81,7 @@ public class MastersPageTests : TestContext
         var firstCode = (await store.LoadAsync()).Materials[0].Code;
         ConfigureServices(factory);
 
-        var cut = RenderComponent<MastersPage>();
+        var cut = Render<MastersPage>();
 
         cut.WaitForAssertion(() => Assert.Contains(firstCode, cut.Markup));
     }
@@ -112,7 +112,7 @@ public class MastersPageTests : TestContext
         await SeedAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<MastersPage>();
+        var cut = Render<MastersPage>();
 
         cut.WaitForAssertion(() =>
         {
@@ -144,7 +144,7 @@ public class MastersPageTests : TestContext
         await SeedAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<MastersPage>();
+        var cut = Render<MastersPage>();
 
         cut.WaitForAssertion(() => Assert.Contains("Fabric groups", cut.Markup));
     }
@@ -157,7 +157,7 @@ public class MastersPageTests : TestContext
         await SeedAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<MastersPage>();
+        var cut = Render<MastersPage>();
 
         cut.WaitForAssertion(() => Assert.Contains("Combination pricing", cut.Markup));
     }
@@ -170,7 +170,7 @@ public class MastersPageTests : TestContext
         await SeedAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<MastersPage>();
+        var cut = Render<MastersPage>();
 
         cut.WaitForAssertion(() =>
         {
