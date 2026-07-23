@@ -4,6 +4,7 @@
 @using CheapFurniturePlanner.Domain.Catalog
 @using CheapFurniturePlanner.Domain.Serialization
 @inject OrderEntryService OrderEntryService
+@inject ProductionUnitService Units
 @inject ISnackbar Snackbar
 
 <PageTitle>Order - Cheap Furniture Planner</PageTitle>
@@ -18,7 +19,13 @@ else
         <MudStack Spacing="2">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.h5">@_order.OrderNumber</MudText>
-                <MudChip T="string" Color="@StateColor(_order.State)">@_order.State</MudChip>
+                <MudStack Row="true" Spacing="2">
+                    <MudChip T="string" Color="@StateColor(_order.State)">@_order.State</MudChip>
+                    @if (_phase is ProductionPhase orderPhase)
+                    {
+                        <MudChip T="string" Color="@PhaseColor(orderPhase)">@PhaseLabel(orderPhase)</MudChip>
+                    }
+                </MudStack>
             </MudStack>
             <MudText Typo="Typo.body2">Seller: @_order.Seller?.Name — Consumer: @_order.Consumer?.Name — Market: @_order.MarketCode</MudText>
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
@@ -66,6 +73,7 @@ else
             <MudTh>Discount</MudTh>
             <MudTh>Line total</MudTh>
             <MudTh>Supplier ref</MudTh>
+            <MudTh>Production</MudTh>
             <MudTh>Actions</MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -117,6 +125,20 @@ else
             </MudTd>
             <MudTd DataLabel="Line total">@context.LineTotal.ToString("C2")</MudTd>
             <MudTd DataLabel="Supplier ref">@context.SupplierRef</MudTd>
+            <MudTd DataLabel="Production">
+                @if (_order.State == OrderState.Draft && context.Kind == OrderLineKind.StandaloneArticle && context.SupplierRef is not null)
+                {
+                    <MudSwitch T="bool" Value="@context.DeliverToWarehouse" Color="Color.Primary" Label="Via warehouse"
+                               ValueChanged="@((bool viaWarehouse) => SetDeliverToWarehouseAsync(context.Id, viaWarehouse))" />
+                }
+                else if (_order.State == OrderState.Placed)
+                {
+                    @foreach (var unit in _units.Where(u => u.OrderLineId == context.Id))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@UnitColor(unit.State)">@unit.SequenceNumber: @unit.State</MudChip>
+                    }
+                }
+            </MudTd>
             <MudTd DataLabel="Actions">
                 @if (_order.State == OrderState.Draft)
                 {
@@ -138,18 +160,47 @@ else
     public int OrderId { get; set; }
 
     private Order? _order;
+    private ProductionPhase? _phase;
+    private List<ProductionUnit> _units = [];
     private MudTabs? _tabs;
     private ElementEntryTab? _elementTab;
 
     protected override async Task OnParametersSetAsync() => await ReloadAsync();
 
-    private async Task ReloadAsync() => _order = await OrderEntryService.GetOrderAsync(OrderId);
+    private async Task ReloadAsync()
+    {
+        _order = await OrderEntryService.GetOrderAsync(OrderId);
+        _phase = await Units.PhaseForOrderAsync(OrderId);
+        _units = await Units.UnitsForOrderAsync(OrderId);
+    }
 
     private static Color StateColor(OrderState state) => state switch
     {
         OrderState.Draft => Color.Default,
         OrderState.Placed => Color.Success,
         OrderState.Cancelled => Color.Error,
+        _ => Color.Default,
+    };
+
+    private static string PhaseLabel(ProductionPhase orderPhase) => orderPhase switch
+    {
+        ProductionPhase.InProduction => "In production",
+        ProductionPhase.Ready => "Ready",
+        _ => "Delivered",
+    };
+
+    private static Color PhaseColor(ProductionPhase orderPhase) => orderPhase switch
+    {
+        ProductionPhase.InProduction => Color.Warning,
+        ProductionPhase.Ready => Color.Info,
+        _ => Color.Success,
+    };
+
+    private static Color UnitColor(ProductionUnitState state) => state switch
+    {
+        ProductionUnitState.Expected => Color.Warning,
+        ProductionUnitState.Arrived => Color.Info,
+        ProductionUnitState.Delivered => Color.Success,
         _ => Color.Default,
     };
 
@@ -210,6 +261,19 @@ else
         try
         {
             await OrderEntryService.SetOrderDiscountAsync(OrderId, percent);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task SetDeliverToWarehouseAsync(int lineId, bool viaWarehouse)
+    {
+        try
+        {
+            await OrderEntryService.SetDeliverToWarehouseAsync(OrderId, lineId, viaWarehouse);
         }
         catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
         {

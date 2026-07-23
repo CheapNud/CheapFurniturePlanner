@@ -46,7 +46,7 @@ public class IdentityWiringTests
         }
 
         await using var verify = await factory.CreateDbContextAsync();
-        Assert.Equal(3, await verify.Roles.CountAsync());
+        Assert.Equal(4, await verify.Roles.CountAsync());
         Assert.Equal(Roles.All.OrderBy(r => r), (await verify.Roles.Select(r => r.Name!).ToListAsync()).OrderBy(r => r));
     }
 

@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = Roles.AdminOrOffice)]
 @using CheapFurniturePlanner.Components.Orders
 @inject OrderEntryService OrderEntryService
+@inject ProductionUnitService Units
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
@@ -24,6 +25,7 @@
         <MudTh>Seller</MudTh>
         <MudTh>Consumer</MudTh>
         <MudTh>State</MudTh>
+        <MudTh>Production</MudTh>
         <MudTh>Lines</MudTh>
         <MudTh>Total</MudTh>
         <MudTh>Pinned version</MudTh>
@@ -35,6 +37,12 @@
         <MudTd DataLabel="State">
             <MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>
         </MudTd>
+        <MudTd DataLabel="Production">
+            @if (_phases.GetValueOrDefault(context.Id) is ProductionPhase orderPhase)
+            {
+                <MudChip T="string" Size="Size.Small" Color="@PhaseColor(orderPhase)">@PhaseLabel(orderPhase)</MudChip>
+            }
+        </MudTd>
         <MudTd DataLabel="Lines">@context.Lines.Count</MudTd>
         <MudTd DataLabel="Total">@OrderEntryService.OrderTotal(context).ToString("C2")</MudTd>
         <MudTd DataLabel="Pinned version">@(context.PinnedCatalogueVersion ?? "—")</MudTd>
@@ -43,10 +51,15 @@
 
 @code {
     private List<Order> _orders = [];
+    private Dictionary<int, ProductionPhase?> _phases = [];
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
-    private async Task ReloadAsync() => _orders = await OrderEntryService.ListOrdersAsync();
+    private async Task ReloadAsync()
+    {
+        _orders = await OrderEntryService.ListOrdersAsync();
+        _phases = await Units.PhasesForOrdersAsync(_orders.Select(o => o.Id).ToList());
+    }
 
     private static Color StateColor(OrderState state) => state switch
     {
@@ -54,6 +67,20 @@
         OrderState.Placed => Color.Success,
         OrderState.Cancelled => Color.Error,
         _ => Color.Default,
+    };
+
+    private static string PhaseLabel(ProductionPhase orderPhase) => orderPhase switch
+    {
+        ProductionPhase.InProduction => "In production",
+        ProductionPhase.Ready => "Ready",
+        _ => "Delivered",
+    };
+
+    private static Color PhaseColor(ProductionPhase orderPhase) => orderPhase switch
+    {
+        ProductionPhase.InProduction => Color.Warning,
+        ProductionPhase.Ready => Color.Info,
+        _ => Color.Success,
     };
 
     private async Task NewOrderAsync()

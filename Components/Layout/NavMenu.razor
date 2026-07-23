@@ -120,6 +120,18 @@
         </MudNavLink>
     </AuthorizeView>
 
+    @* Dock screens: Admin, Office or Warehouse. *@
+    <AuthorizeView Roles="@Roles.WarehouseStaff">
+        <MudNavLink Href="/receiving"
+                    Icon="@Icons.Material.Filled.Warehouse">
+            Receiving
+        </MudNavLink>
+        <MudNavLink Href="/trips"
+                    Icon="@Icons.Material.Filled.LocalShipping">
+            Trips
+        </MudNavLink>
+    </AuthorizeView>
+
     @* Admin only. *@
     <AuthorizeView Roles="@Roles.Admin">
         <MudNavLink Href="/users"

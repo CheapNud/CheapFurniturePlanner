@@ -1,0 +1,53 @@
+@page "/trips"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = Roles.WarehouseStaff)]
+@inject ProductionUnitService Units
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Trips</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Trips</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewTripAsync">New trip</MudButton>
+    </MudStack>
+
+    <MudTable T="Trip" Items="_trips" Hover="true" Dense="true"
+              OnRowClick="@((TableRowClickEventArgs<Trip> args) => Navigation.NavigateTo($"/trips/{args.Item!.Id}"))">
+        <HeaderContent>
+            <MudTh>Trip</MudTh>
+            <MudTh>Departure</MudTh>
+            <MudTh>Truck</MudTh>
+            <MudTh>State</MudTh>
+            <MudTh>Units</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Trip">@context.TripCode</MudTd>
+            <MudTd DataLabel="Departure">@(context.DepartureDate?.ToString("yyyy-MM-dd") ?? "—")</MudTd>
+            <MudTd DataLabel="Truck">@context.TruckName</MudTd>
+            <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@(context.State == TripState.Departed ? Color.Success : Color.Info)">@context.State</MudChip></MudTd>
+            <MudTd DataLabel="Units">@context.Units.Count</MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private List<Trip> _trips = [];
+
+    protected override async Task OnInitializedAsync() => _trips = await Units.ListTripsAsync();
+
+    private async Task NewTripAsync()
+    {
+        try
+        {
+            var trip = await Units.CreateTripAsync();
+            Navigation.NavigateTo($"/trips/{trip.Id}");
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}

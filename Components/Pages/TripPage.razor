@@ -1,0 +1,168 @@
+@page "/trips/{Id:int}"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = Roles.WarehouseStaff)]
+@inject ProductionUnitService Units
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Trip</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    @if (_trip is null)
+    {
+        <MudText>Loading…</MudText>
+    }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/trips"))" />
+            <MudText Typo="Typo.h4">@_trip.TripCode</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@(IsPlanning ? Color.Info : Color.Success)">@_trip.State</MudChip>
+            <MudSpacer />
+            @if (IsPlanning)
+            {
+                <MudButton Color="Color.Error" Variant="Variant.Outlined" Disabled="@(_trip.Units.Count > 0)" OnClick="DeleteAsync">Delete</MudButton>
+                <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.LocalShipping" OnClick="DepartAsync">Depart</MudButton>
+            }
+        </MudStack>
+
+        <MudGrid>
+            <MudItem xs="12" md="5">
+                <MudPaper Class="pa-4 mb-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Trip</MudText>
+                    <MudDatePicker Label="Departure date" Date="_departureDate" DateChanged="OnFieldsChangedDate" Disabled="@(!IsPlanning)" />
+                    <MudTextField T="string" Label="Truck" Value="_truckName" ValueChanged="OnTruckChanged" Disabled="@(!IsPlanning)" />
+                    <MudTextField T="string" Label="Driver" Value="_driverName" ValueChanged="OnDriverChanged" Disabled="@(!IsPlanning)" />
+                    @if (_trip.DepartedAt is DateTime departedAt)
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-2">Departed @departedAt.ToString("yyyy-MM-dd HH:mm")</MudText>
+                    }
+                </MudPaper>
+
+                @if (IsPlanning)
+                {
+                    <MudPaper Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-2">Arrived units</MudText>
+                        @foreach (var candidate in _assignable)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+                                <MudText>@candidate.UnitCode — @candidate.Order?.Consumer?.Name</MudText>
+                                <MudSpacer />
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => AssignAsync(candidate.Id))">Load</MudButton>
+                            </MudStack>
+                        }
+                        @if (_assignable.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2">No unassigned arrived units.</MudText>
+                        }
+                    </MudPaper>
+                }
+            </MudItem>
+
+            <MudItem xs="12" md="7">
+                <MudPaper Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-2">Load list</MudText>
+                    <MudTable T="ProductionUnit" Items="_trip.Units" Dense="true">
+                        <HeaderContent>
+                            <MudTh>Position</MudTh>
+                            <MudTh>Unit</MudTh>
+                            <MudTh>Order</MudTh>
+                            <MudTh>Consumer</MudTh>
+                            <MudTh></MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Position">
+                                <MudNumericField T="int?" Value="@context.LoadPosition" ValueChanged="@((int? position) => SetPositionAsync(context.Id, position))" Disabled="@(!IsPlanning)" Margin="Margin.Dense" />
+                            </MudTd>
+                            <MudTd DataLabel="Unit">@context.UnitCode</MudTd>
+                            <MudTd DataLabel="Order">@context.Order?.OrderNumber</MudTd>
+                            <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
+                            <MudTd>
+                                @if (IsPlanning)
+                                {
+                                    <MudButton Size="Size.Small" OnClick="@(() => ReleaseAsync(context.Id))">Release</MudButton>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Trip? _trip;
+    private List<ProductionUnit> _assignable = [];
+    private DateTime? _departureDate;
+    private string? _truckName;
+    private string? _driverName;
+
+    private bool IsPlanning => _trip!.State == TripState.Planning;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _trip = await Units.GetTripAsync(Id);
+        if (_trip is not null)
+        {
+            _departureDate = _trip.DepartureDate;
+            _truckName = _trip.TruckName;
+            _driverName = _trip.DriverName;
+            _assignable = _trip.State == TripState.Planning ? await Units.AssignableUnitsAsync() : [];
+        }
+        StateHasChanged();
+    }
+
+    private Task OnFieldsChangedDate(DateTime? departureDate) { _departureDate = departureDate; return SaveFieldsAsync(); }
+    private Task OnTruckChanged(string? truckName) { _truckName = truckName; return SaveFieldsAsync(); }
+    private Task OnDriverChanged(string? driverName) { _driverName = driverName; return SaveFieldsAsync(); }
+
+    private async Task SaveFieldsAsync()
+    {
+        try { await Units.UpdateTripAsync(Id, _departureDate, _truckName, _driverName); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task AssignAsync(int unitId)
+    {
+        try { await Units.AssignToTripAsync(Id, unitId); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task ReleaseAsync(int unitId)
+    {
+        try { await Units.ReleaseFromTripAsync(unitId); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task SetPositionAsync(int unitId, int? position)
+    {
+        try { await Units.SetLoadPositionAsync(unitId, position); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task DepartAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Depart trip",
+            $"Depart {_trip!.TripCode} with {_trip.Units.Count} unit(s)? Their orders become delivered.",
+            yesText: "Depart", cancelText: "Back");
+        if (confirmed != true) { return; }
+        try { await Units.DepartAsync(Id); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task DeleteAsync()
+    {
+        try { await Units.DeleteTripAsync(Id); Navigation.NavigateTo("/trips"); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}

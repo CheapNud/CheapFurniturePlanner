@@ -1,6 +1,7 @@
 using Bunit;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Components.Pages;
+using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Configurator;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
@@ -13,6 +14,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor.Services;
 using Xunit;
+using CheapFurniturePlanner.Tests.Services;
 
 namespace CheapFurniturePlanner.Tests.Components;
 
@@ -70,7 +72,8 @@ public class OrderEntryPageTests : TestContext
         var articles = new ArticleAuthoringService(store, publish);
         var parties = new PartyService(factory);
         var pinned = new PinnedCatalogueProvider(factory);
-        var orders = new OrderEntryService(factory, source, pinned);
+        var productionUnits = new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var orders = new OrderEntryService(factory, source, pinned, productionUnits);
         var discounts = new DiscountService(factory);
         var seller = await parties.AddSellerAsync("Northwind Reseller", 1.2m);
         var consumer = await parties.AddConsumerAsync("Jane Consumer", "jane@example.com");
@@ -84,10 +87,13 @@ public class OrderEntryPageTests : TestContext
         Services.AddSingleton(factory);
         Services.AddSingleton<ICatalogueSource>(sp => new DbCatalogueSource(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new PinnedCatalogueProvider(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
+        Services.AddSingleton(sp => new ProductionUnitService(
+            sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
         Services.AddSingleton(sp => new OrderEntryService(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<ICatalogueSource>(),
-            sp.GetRequiredService<PinnedCatalogueProvider>()));
+            sp.GetRequiredService<PinnedCatalogueProvider>(),
+            sp.GetRequiredService<ProductionUnitService>()));
         Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new DiscountService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         JSInterop.Mode = JSRuntimeMode.Loose;

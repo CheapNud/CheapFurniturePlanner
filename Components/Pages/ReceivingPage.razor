@@ -1,0 +1,135 @@
+@page "/receiving"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = Roles.WarehouseStaff)]
+@inject ProductionUnitService Units
+@inject ISnackbar Snackbar
+
+<PageTitle>Receiving</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Receiving</MudText>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudTextField T="string" @bind-Value="_scanEntry" Label="Scan or type a unit code" Immediate="true"
+                      AutoFocus="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.QrCodeScanner"
+                      OnKeyDown="OnScanKeyAsync" />
+        @if (_unknownScans.Count > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-2">
+                Needs review — unknown codes this session: @string.Join(", ", _unknownScans)
+            </MudAlert>
+        }
+    </MudPaper>
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudTextField T="string" Value="_orderFilter" ValueChanged="OnOrderFilterChanged" Label="Filter by order number" Clearable="true" />
+        <MudSelect T="ProductionUnitState?" Value="_stateFilter" ValueChanged="OnStateFilterChanged" Label="State" Clearable="true">
+            <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Expected)">Expected</MudSelectItem>
+            <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Arrived)">Arrived</MudSelectItem>
+            <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Delivered)">Delivered</MudSelectItem>
+            <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Cancelled)">Cancelled</MudSelectItem>
+        </MudSelect>
+    </MudStack>
+
+    <MudTable T="ProductionUnit" Items="_units" Hover="true" Dense="true">
+        <HeaderContent>
+            <MudTh>Unit code</MudTh>
+            <MudTh>Order</MudTh>
+            <MudTh>Consumer</MudTh>
+            <MudTh>State</MudTh>
+            <MudTh>Trip</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Unit code">@context.UnitCode</MudTd>
+            <MudTd DataLabel="Order">@context.Order?.OrderNumber</MudTd>
+            <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
+            <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip></MudTd>
+            <MudTd DataLabel="Trip">@context.Trip?.TripCode</MudTd>
+            <MudTd>
+                @if (context.State == ProductionUnitState.Expected)
+                {
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ArriveAsync(context.Id))">Arrive</MudButton>
+                }
+                else if (context.State == ProductionUnitState.Arrived && context.TripId is null)
+                {
+                    <MudButton Size="Size.Small" OnClick="@(() => UndoAsync(context.Id))">Undo</MudButton>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private List<ProductionUnit> _units = [];
+    private readonly List<string> _unknownScans = [];
+    private string _scanEntry = "";
+    private string _orderFilter = "";
+    private ProductionUnitState? _stateFilter;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync() =>
+        _units = await Units.ListUnitsAsync(string.IsNullOrWhiteSpace(_orderFilter) ? null : _orderFilter, _stateFilter);
+
+    private async Task OnOrderFilterChanged(string filterText)
+    {
+        _orderFilter = filterText;
+        await LoadAsync();
+    }
+
+    private async Task OnStateFilterChanged(ProductionUnitState? stateFilter)
+    {
+        _stateFilter = stateFilter;
+        await LoadAsync();
+    }
+
+    private async Task OnScanKeyAsync(KeyboardEventArgs keyArgs)
+    {
+        if (keyArgs.Key != "Enter" || string.IsNullOrWhiteSpace(_scanEntry)) { return; }
+        var scannedCode = _scanEntry.Trim();
+        _scanEntry = "";
+        try
+        {
+            var outcome = await Units.ArriveByCodeAsync(scannedCode);
+            switch (outcome)
+            {
+                case ScanOutcome.Arrived:
+                    Snackbar.Add($"{scannedCode} arrived.", Severity.Success);
+                    await LoadAsync();
+                    break;
+                case ScanOutcome.AlreadyArrived:
+                    Snackbar.Add($"{scannedCode} was already arrived.", Severity.Info);
+                    break;
+                default:
+                    _unknownScans.Add(scannedCode);
+                    Snackbar.Add($"{scannedCode} is not an expected unit.", Severity.Warning);
+                    break;
+            }
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task ArriveAsync(int unitId)
+    {
+        try { await Units.ArriveAsync(unitId); await LoadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task UndoAsync(int unitId)
+    {
+        try { await Units.UndoArriveAsync(unitId); await LoadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private static Color StateColor(ProductionUnitState unitState) => unitState switch
+    {
+        ProductionUnitState.Expected => Color.Info,
+        ProductionUnitState.Arrived => Color.Warning,
+        ProductionUnitState.Delivered => Color.Success,
+        _ => Color.Default,
+    };
+}

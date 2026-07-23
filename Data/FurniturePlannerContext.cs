@@ -54,6 +54,8 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<ServiceTicketPhoto> ServiceTicketPhotos => Set<ServiceTicketPhoto>();
     public DbSet<InternalRepair> InternalRepairs => Set<InternalRepair>();
     public DbSet<SupplierReport> SupplierReports => Set<SupplierReport>();
+    public DbSet<ProductionUnit> ProductionUnits => Set<ProductionUnit>();
+    public DbSet<Trip> Trips => Set<Trip>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -181,6 +183,24 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasKey(r => r.TicketId);
             entity.HasOne<ServiceTicket>().WithOne(t => t.SupplierReport)
                 .HasForeignKey<SupplierReport>(r => r.TicketId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<OrderLine>(entity =>
+        {
+            entity.Property(o => o.DeliverToWarehouse).HasDefaultValue(true);
+        });
+        modelBuilder.Entity<ProductionUnit>(entity =>
+        {
+            entity.HasIndex(u => u.UnitCode).IsUnique();
+            entity.HasIndex(u => u.OrderId);
+            entity.Property(u => u.State).HasConversion<string>();
+            entity.HasOne(u => u.Order).WithMany().HasForeignKey(u => u.OrderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<OrderLine>().WithMany().HasForeignKey(u => u.OrderLineId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(u => u.Trip).WithMany(t => t.Units).HasForeignKey(u => u.TripId).OnDelete(DeleteBehavior.SetNull);
+        });
+        modelBuilder.Entity<Trip>(entity =>
+        {
+            entity.HasIndex(t => t.TripCode).IsUnique();
+            entity.Property(t => t.State).HasConversion<string>();
         });
     }
 

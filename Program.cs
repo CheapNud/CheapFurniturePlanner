@@ -150,6 +150,10 @@ class Program
                 var publishService = scope.ServiceProvider.GetRequiredService<ModelPublishService>();
                 publishService.RepublishAsync().GetAwaiter().GetResult();
             }
+
+            // One-time unit backfill for orders placed before the production module existed;
+            // idempotent no-op on every later start.
+            scope.ServiceProvider.GetRequiredService<ProductionUnitService>().BackfillAsync().GetAwaiter().GetResult();
         });
 
         // Configure Mapster
@@ -180,6 +184,7 @@ class Program
         builder.Services.AddScoped<PartyService>();
         builder.Services.AddScoped<DiscountService>();
         builder.Services.AddScoped<PinnedCatalogueProvider>();
+        builder.Services.AddScoped<ProductionUnitService>();
         builder.Services.AddScoped<OrderEntryService>();
         builder.Services.AddScoped<ServiceTicketService>();
 

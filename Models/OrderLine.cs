@@ -26,4 +26,9 @@ public class OrderLine
     public string? DiscountSource { get; set; }
     public bool DiscountIsManual { get; set; }
     public string? SupplierRef { get; set; }
+
+    // Per-line dropship choice: configured lines are always delivered to our warehouse; a
+    // standalone dropship line can instead ship straight to the consumer (false = no units
+    // spawn and the line is excluded from the derived production phase).
+    public bool DeliverToWarehouse { get; set; } = true;
 }
