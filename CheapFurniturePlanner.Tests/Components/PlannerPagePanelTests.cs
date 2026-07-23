@@ -127,7 +127,7 @@ public class PlannerPagePanelTests : TestContext
 
         // MudSelect (used by both the room-settings dialog and the config panel's option dropdowns)
         // renders into an overlay that requires a MudPopoverProvider somewhere in the render tree.
-        RenderComponent<MudPopoverProvider>();
+        Render<MudPopoverProvider>();
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class PlannerPagePanelTests : TestContext
         using var _ = conn;
         ConfigureServices(options);
 
-        var cut = RenderComponent<PlannerPage>(p => p.Add(x => x.RoomPlanId, roomId));
+        var cut = Render<PlannerPage>(p => p.Add(x => x.RoomPlanId, roomId));
 
         Assert.Empty(cut.FindComponents<FurnitureConfigPanel>());
         Assert.Contains("Select an element to configure", cut.Markup);
@@ -150,7 +150,7 @@ public class PlannerPagePanelTests : TestContext
         using var _ = conn;
         ConfigureServices(options);
 
-        var cut = RenderComponent<PlannerPage>(p => p.Add(x => x.RoomPlanId, roomId));
+        var cut = Render<PlannerPage>(p => p.Add(x => x.RoomPlanId, roomId));
         Assert.Empty(cut.FindComponents<FurnitureConfigPanel>()); // nothing selected yet
 
         var furnitureItem = cut.Find(".furniture-item");
@@ -172,7 +172,7 @@ public class PlannerPagePanelTests : TestContext
         using var _ = conn;
         ConfigureServices(options);
 
-        var cut = RenderComponent<PlannerPage>(p => p.Add(x => x.RoomPlanId, roomId));
+        var cut = Render<PlannerPage>(p => p.Add(x => x.RoomPlanId, roomId));
 
         var furnitureItem = cut.Find(".furniture-item");
         cut.InvokeAsync(() => furnitureItem.Click());
@@ -211,7 +211,7 @@ public class PlannerPagePanelTests : TestContext
         using var _ = conn;
         ConfigureServices(options);
 
-        var cut = RenderComponent<PlannerPage>(p => p.Add(x => x.RoomPlanId, roomId));
+        var cut = Render<PlannerPage>(p => p.Add(x => x.RoomPlanId, roomId));
 
         var furnitureItem = cut.Find(".furniture-item");
         cut.InvokeAsync(() => furnitureItem.Click());

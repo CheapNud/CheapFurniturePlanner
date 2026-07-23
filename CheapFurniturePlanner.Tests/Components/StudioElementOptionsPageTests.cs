@@ -77,8 +77,8 @@ public class StudioElementOptionsPageTests : TestContext
         Services.AddSingleton(sp => new OptionAuthoringService(sp.GetRequiredService<AuthoringCatalogueStore>(), sp.GetRequiredService<ModelPublishService>(), sp.GetRequiredService<ArticleAuthoringService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        var dialogProvider = RenderComponent<MudDialogProvider>();
-        RenderComponent<MudPopoverProvider>();
+        var dialogProvider = Render<MudDialogProvider>();
+        Render<MudPopoverProvider>();
         return dialogProvider;
     }
 
@@ -102,7 +102,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
 
         Assert.Contains("DEPTH", cut.Markup);
         Assert.Contains("MECH", cut.Markup);
@@ -122,7 +122,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add choice option");
 
         // AddChoiceAsync awaits dialogRef.Result, which only resolves once the dialog closes -
@@ -163,7 +163,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add fabric option");
 
         var pendingClick = cut.InvokeAsync(() => addButton.Click());
@@ -199,7 +199,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var editButton = FindRowButton(cut, "STITCH", "Edit");
 
         var pendingClick = cut.InvokeAsync(() => editButton.Click());
@@ -229,7 +229,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var deleteButton = FindRowButton(cut, "STITCH", "Delete");
 
         var pendingClick = cut.InvokeAsync(() => deleteButton.Click());
@@ -260,7 +260,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var deleteButton = FindRowButton(cut, "DEPTH", "Delete");
 
         var pendingClick = cut.InvokeAsync(() => deleteButton.Click());
@@ -286,7 +286,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var deleteButton = FindRowButton(cut, "MECH", "Delete");
 
         var pendingClick = cut.InvokeAsync(() => deleteButton.Click());
@@ -310,7 +310,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var store = new AuthoringCatalogueStore(factory);
         var before = (await store.LoadModelAsync(Studio))!.Elements.Single(e => e.Code == StudioElement).Options.Select(o => o.OptionDefinitionCode).ToList();
         Assert.Equal(["DEPTH", "MECH", "HEAD", "STITCH", "FABRIC"], before);
@@ -332,7 +332,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Active).Add(x => x.ElementCode, ActiveElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Active).Add(x => x.ElementCode, ActiveElement));
 
         Assert.Null(cut.FindAll("button").SingleOrDefault(b => b.TextContent.Trim() == "Add choice option"));
         Assert.Null(cut.FindAll("button").SingleOrDefault(b => b.TextContent.Trim() == "Add fabric option"));
@@ -355,7 +355,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
 
         // HEAD carries the seeded MECH:REC rule; STITCH has none.
         Assert.NotNull(FindRow(cut, "HEAD").QuerySelectorAll("button").SingleOrDefault(b => b.TextContent.Trim() == "Visibility (1)"));
@@ -371,7 +371,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Active).Add(x => x.ElementCode, ActiveElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Active).Add(x => x.ElementCode, ActiveElement));
 
         var visibilityButtons = cut.FindAll("tbody tr")
             .SelectMany(tr => tr.QuerySelectorAll("button"))
@@ -393,7 +393,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var visibilityButton = FindRowButton(cut, "HEAD", "Visibility (1)");
 
         var pendingClick = cut.InvokeAsync(() => visibilityButton.Click());
@@ -426,7 +426,7 @@ public class StudioElementOptionsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementOptionsPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var visibilityButton = FindRowButton(cut, "STITCH", "Visibility (0)");
 
         var pendingClick = cut.InvokeAsync(() => visibilityButton.Click());

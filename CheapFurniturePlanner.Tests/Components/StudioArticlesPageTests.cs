@@ -59,8 +59,8 @@ public class StudioArticlesPageTests : TestContext
             sp.GetRequiredService<AuthoringCatalogueStore>()));
         Services.AddSingleton(sp => new ArticleAuthoringService(sp.GetRequiredService<AuthoringCatalogueStore>(), sp.GetRequiredService<ModelPublishService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
-        RenderComponent<MudBlazor.MudDialogProvider>();
-        RenderComponent<MudBlazor.MudPopoverProvider>();
+        Render<MudBlazor.MudDialogProvider>();
+        Render<MudBlazor.MudPopoverProvider>();
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class StudioArticlesPageTests : TestContext
         await SeedAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioArticlesPage>();
+        var cut = Render<StudioArticlesPage>();
 
         cut.WaitForAssertion(() =>
         {
@@ -94,7 +94,7 @@ public class StudioArticlesPageTests : TestContext
         await service.AddStandaloneAsync(new Article { AssignedCode = "ART-DROP", Name = "Pouf", ManualPrice = 79m, SupplierRef = "SUP-X", State = TradeItemState.Active });
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioArticlesPage>();
+        var cut = Render<StudioArticlesPage>();
 
         cut.WaitForAssertion(() =>
         {
@@ -119,7 +119,7 @@ public class StudioArticlesPageTests : TestContext
         await service.AssignAsync(Studio, "FS2", "FS2-DEPTH:STD", selections, "K7E");
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioArticlesPage>();
+        var cut = Render<StudioArticlesPage>();
 
         cut.WaitForAssertion(() =>
         {

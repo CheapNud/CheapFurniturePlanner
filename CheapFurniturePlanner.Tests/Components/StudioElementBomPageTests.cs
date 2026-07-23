@@ -78,8 +78,8 @@ public class StudioElementBomPageTests : TestContext
         Services.AddSingleton(sp => new BomAuthoringService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<AuthoringCatalogueStore>(), sp.GetRequiredService<ModelPublishService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        var dialogProvider = RenderComponent<MudDialogProvider>();
-        RenderComponent<MudPopoverProvider>();
+        var dialogProvider = Render<MudDialogProvider>();
+        Render<MudPopoverProvider>();
         return dialogProvider;
     }
 
@@ -106,7 +106,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
 
         Assert.Contains("FR-FS2", cut.Markup);
         Assert.Contains("LB-CUT-FS2", cut.Markup);
@@ -126,7 +126,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add Labor line");
 
         // AddAsync awaits dialogRef.Result, which only resolves once the dialog closes - awaiting the
@@ -167,7 +167,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add CutSort line");
 
         var pendingClick = cut.InvokeAsync(() => addButton.Click());
@@ -212,7 +212,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add CutSort line");
 
         var pendingClick = cut.InvokeAsync(() => addButton.Click());
@@ -262,7 +262,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add Misc line");
 
         var pendingClick = cut.InvokeAsync(() => addButton.Click());
@@ -304,7 +304,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
 
         Assert.Contains("when DEPTH=DEEP", FindRow(cut, "FM-DEEP-FS2").TextContent);
     }
@@ -323,7 +323,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, chaiseElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, chaiseElement));
         var editButton = FindRowButton(cut, "LB-LEATHERWORK-FSCH", "Edit");
 
         var pendingClick = cut.InvokeAsync(() => editButton.Click());
@@ -356,7 +356,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var editButton = FindRowButton(cut, "FR-FS2", "Edit");
 
         var pendingClick = cut.InvokeAsync(() => editButton.Click());
@@ -385,7 +385,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var deleteButton = FindRowButton(cut, "MI-FS2", "Delete");
 
         var pendingClick = cut.InvokeAsync(() => deleteButton.Click());
@@ -414,7 +414,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var before = (await BomAsync(factory)).Sections.Single(s => s.Kind == BomSectionKind.Labor).Lines.Select(l => l.LineKey).ToList();
         Assert.Equal(["LB-CUT-FS2", "LB-SEW-FS2"], before);
 
@@ -436,7 +436,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
 
         Assert.Contains("FM-STD", cut.Markup);
         Assert.Contains("FM-FIRM", cut.Markup);
@@ -452,7 +452,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add substitution");
 
         // AddSubstitutionAsync awaits dialogRef.Result, which only resolves once the dialog closes -
@@ -485,7 +485,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Studio).Add(x => x.ElementCode, StudioElement));
         var deleteButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Delete"
             && b.Closest("table")?.QuerySelector("th")?.TextContent.Trim() == "Swap");
 
@@ -511,7 +511,7 @@ public class StudioElementBomPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Active).Add(x => x.ElementCode, ActiveElement));
+        var cut = Render<StudioElementBomPage>(p => p.Add(x => x.ModelCode, Active).Add(x => x.ElementCode, ActiveElement));
 
         var addButtons = cut.FindAll("button").Where(b => b.TextContent.Trim().StartsWith("Add ", StringComparison.Ordinal) && b.TextContent.Trim().EndsWith(" line", StringComparison.Ordinal)).ToList();
         Assert.NotEmpty(addButtons);

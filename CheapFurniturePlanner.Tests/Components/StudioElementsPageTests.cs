@@ -82,8 +82,8 @@ public class StudioElementsPageTests : TestContext
         Services.AddSingleton(sp => new ElementAuthoringService(sp.GetRequiredService<AuthoringCatalogueStore>(), sp.GetRequiredService<ModelPublishService>(), sp.GetRequiredService<ArticleAuthoringService>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        var dialogProvider = RenderComponent<MudDialogProvider>();
-        RenderComponent<MudPopoverProvider>();
+        var dialogProvider = Render<MudDialogProvider>();
+        Render<MudPopoverProvider>();
         return dialogProvider;
     }
 
@@ -119,7 +119,7 @@ public class StudioElementsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = Render<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
 
         Assert.Contains("FS2", cut.Markup);
         Assert.Contains("FS3", cut.Markup);
@@ -136,7 +136,7 @@ public class StudioElementsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = Render<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
         var addButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Add element");
 
         // AddElementAsync awaits dialogRef.Result, which only resolves once the dialog closes -
@@ -182,7 +182,7 @@ public class StudioElementsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = Render<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
         var editButton = FindRowButton(cut, "FS2", "Edit");
 
         var pendingClick = cut.InvokeAsync(() => editButton.Click());
@@ -213,7 +213,7 @@ public class StudioElementsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = Render<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
         var store = new AuthoringCatalogueStore(factory);
         var before = (await store.LoadModelAsync(Studio))!.Elements.Select(e => e.Code).ToList();
         Assert.Equal(["FS2", "FS3", "FSCH"], before);
@@ -235,7 +235,7 @@ public class StudioElementsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         var dialogProvider = ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = Render<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
         var deleteButton = FindRowButton(cut, "FS3", "Delete");
 
         var pendingClick = cut.InvokeAsync(() => deleteButton.Click());
@@ -264,7 +264,7 @@ public class StudioElementsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementsPage>(p => p.Add(x => x.ModelCode, Active));
+        var cut = Render<StudioElementsPage>(p => p.Add(x => x.ModelCode, Active));
 
         Assert.Contains("FJ2", cut.Markup);
         Assert.Null(cut.FindAll("button").SingleOrDefault(b => b.TextContent.Trim() == "Add element"));
@@ -285,7 +285,7 @@ public class StudioElementsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = Render<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
         var optionsButton = FindRowButton(cut, "FS2", "Options");
 
         await cut.InvokeAsync(() => optionsButton.Click());
@@ -303,7 +303,7 @@ public class StudioElementsPageTests : TestContext
         await SeedModelStatesAsync(factory);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = Render<StudioElementsPage>(p => p.Add(x => x.ModelCode, Studio));
         var bomButton = FindRowButton(cut, "FS2", "BOM");
 
         await cut.InvokeAsync(() => bomButton.Click());

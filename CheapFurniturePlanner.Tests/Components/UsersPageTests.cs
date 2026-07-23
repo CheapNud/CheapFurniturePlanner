@@ -47,8 +47,8 @@ public class UsersPageTests : TestContext
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<IPasswordHasher<FurnitureUser>>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
-        RenderComponent<MudBlazor.MudDialogProvider>();
-        RenderComponent<MudBlazor.MudPopoverProvider>();
+        Render<MudBlazor.MudDialogProvider>();
+        Render<MudBlazor.MudPopoverProvider>();
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class UsersPageTests : TestContext
         await admin.DeactivateAsync(wrenchId);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<UsersPage>();
+        var cut = Render<UsersPage>();
 
         cut.WaitForAssertion(() =>
         {
@@ -98,7 +98,7 @@ public class UsersPageTests : TestContext
         await admin.CreateAsync("newperson", "New", "Person", "secret1", [Roles.Office]);
         ConfigureServices(factory);
 
-        var cut = RenderComponent<UsersPage>();
+        var cut = Render<UsersPage>();
 
         cut.WaitForAssertion(() => Assert.Contains("New Person", cut.Markup));
     }

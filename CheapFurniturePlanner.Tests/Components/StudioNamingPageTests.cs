@@ -73,7 +73,7 @@ public class StudioNamingPageTests : TestContext
         Services.AddSingleton(naming);
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        RenderComponent<MudPopoverProvider>();
+        Render<MudPopoverProvider>();
         return naming;
     }
 
@@ -89,7 +89,7 @@ public class StudioNamingPageTests : TestContext
         var snapshot = SeedCatalogue.Load();
         var expectedRowCount = model.Elements.Sum(e => VariantEnumerator.Enumerate(e, snapshot).Count);
 
-        var cut = RenderComponent<StudioNamingPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = Render<StudioNamingPage>(p => p.Add(x => x.ModelCode, Studio));
 
         Assert.Contains("Fjord Studio", cut.Markup);
         Assert.DoesNotContain("frozen", cut.Markup);
@@ -112,7 +112,7 @@ public class StudioNamingPageTests : TestContext
         var firstElement = model.Elements[0];
         var expectedVariantCode = VariantEnumerator.Enumerate(firstElement, snapshot)[0].VariantCode;
 
-        var cut = RenderComponent<StudioNamingPage>(p => p.Add(x => x.ModelCode, Studio));
+        var cut = Render<StudioNamingPage>(p => p.Add(x => x.ModelCode, Studio));
 
         // MudTable preserves Items order (no sorting configured), so the first-rendered field belongs
         // to the first element's first enumerated row - matching expectedVariantCode above.
@@ -131,7 +131,7 @@ public class StudioNamingPageTests : TestContext
         await SeedModelStatesAsync(factory);
         await ConfigureServicesAsync(factory);
 
-        var cut = RenderComponent<StudioNamingPage>(p => p.Add(x => x.ModelCode, Released));
+        var cut = Render<StudioNamingPage>(p => p.Add(x => x.ModelCode, Released));
 
         Assert.Contains("frozen", cut.Markup);
         Assert.Contains(TradeItemState.Active.ToString(), cut.Markup);
@@ -148,7 +148,7 @@ public class StudioNamingPageTests : TestContext
         using var _ = conn;
         await ConfigureServicesAsync(factory);
 
-        var cut = RenderComponent<StudioNamingPage>(p => p.Add(x => x.ModelCode, "NOPE"));
+        var cut = Render<StudioNamingPage>(p => p.Add(x => x.ModelCode, "NOPE"));
 
         Assert.Contains("not found", cut.Markup);
     }
