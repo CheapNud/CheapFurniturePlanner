@@ -120,6 +120,8 @@ public class GatingTests : TestContext
     public void DockPages_RequireWarehouseStaff()
     {
         Assert.Equal(Roles.WarehouseStaff, typeof(ReceivingPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Equal(Roles.WarehouseStaff, typeof(TripsPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Equal(Roles.WarehouseStaff, typeof(TripPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
     }
 
     [Fact]
