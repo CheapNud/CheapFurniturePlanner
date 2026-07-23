@@ -184,6 +184,10 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasOne<ServiceTicket>().WithOne(t => t.SupplierReport)
                 .HasForeignKey<SupplierReport>(r => r.TicketId).OnDelete(DeleteBehavior.Cascade);
         });
+        modelBuilder.Entity<OrderLine>(entity =>
+        {
+            entity.Property(o => o.DeliverToWarehouse).HasDefaultValue(true);
+        });
         modelBuilder.Entity<ProductionUnit>(entity =>
         {
             entity.HasIndex(u => u.UnitCode).IsUnique();

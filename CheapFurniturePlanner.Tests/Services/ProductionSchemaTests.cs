@@ -35,6 +35,7 @@ public class ProductionSchemaTests
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         int unitId;
+        int orderId;
         await using (var db = await factory.CreateDbContextAsync())
         {
             var seller = new Seller { Name = "Shop" };
@@ -46,6 +47,7 @@ public class ProductionSchemaTests
             order.Lines.Add(new OrderLine { Kind = OrderLineKind.ConfiguredElement, DisplayIndex = 0, Quantity = 1, UnitPrice = 100m, LineTotal = 100m });
             db.Orders.Add(order);
             await db.SaveChangesAsync();
+            orderId = order.Id;
             var trip = new Trip { TripCode = "TRP-2026-0001" };
             db.Trips.Add(trip);
             await db.SaveChangesAsync();
@@ -72,7 +74,15 @@ public class ProductionSchemaTests
             Assert.Null(loaded.TripId); // SetNull, not cascade: deleting a trip releases its units
             Assert.Equal(ProductionUnitState.Arrived, loaded.State);
             var line = await verify.OrderLines.SingleAsync();
-            Assert.True(line.DeliverToWarehouse); // column default
+            Assert.True(line.DeliverToWarehouse); // CLR initializer
+
+            // Genuine DB-default assertion: insert a row via raw SQL bypassing EF's CLR value,
+            // omitting DeliverToWarehouse entirely, and confirm the column-level default kicks in.
+            await verify.Database.ExecuteSqlRawAsync(
+                "INSERT INTO OrderLines (OrderId, DisplayIndex, Kind, SelectionsJson, Quantity, UnitPrice, LineTotal, DiscountPercent, DiscountIsManual) VALUES ({0}, 7, 0, '{{}}', 1, 0, 0, 0, 0)",
+                orderId);
+            var rawInsertedLine = await verify.OrderLines.SingleAsync(l => l.DisplayIndex == 7);
+            Assert.True(rawInsertedLine.DeliverToWarehouse); // DB column default, not the CLR initializer
         }
     }
 

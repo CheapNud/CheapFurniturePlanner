@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CheapFurniturePlanner.Migrations
 {
     [DbContext(typeof(FurniturePlannerContext))]
-    [Migration("20260723162821_PR1Production")]
+    [Migration("20260723163417_PR1Production")]
     partial class PR1Production
     {
         /// <inheritdoc />
@@ -530,7 +530,9 @@ namespace CheapFurniturePlanner.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("DeliverToWarehouse")
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("DiscountIsManual")
                         .HasColumnType("INTEGER");

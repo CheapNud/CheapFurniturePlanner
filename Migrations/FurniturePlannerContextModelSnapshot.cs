@@ -527,7 +527,9 @@ namespace CheapFurniturePlanner.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("DeliverToWarehouse")
-                        .HasColumnType("INTEGER");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("DiscountIsManual")
                         .HasColumnType("INTEGER");

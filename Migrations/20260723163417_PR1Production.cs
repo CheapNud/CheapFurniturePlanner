@@ -16,7 +16,7 @@ namespace CheapFurniturePlanner.Migrations
                 table: "OrderLines",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: true);
 
             migrationBuilder.CreateTable(
                 name: "Trips",
