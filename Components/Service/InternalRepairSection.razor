@@ -1,0 +1,131 @@
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@inject ServiceTicketService Tickets
+@inject UserAdminService Users
+@inject ICurrentUser CurrentUser
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4">
+    <MudText Typo="Typo.h6" Class="mb-2">Internal repair</MudText>
+
+    <MudStack Spacing="2">
+        <MudSelect T="string" Value="_assignedUserId" ValueChanged="OnAssigneeChanged" Label="Mechanic"
+                   Disabled="@(!CanManage || !IsOpen)">
+            @foreach (var mechanic in _mechanics)
+            {
+                <MudSelectItem T="string" Value="@mechanic.Id">@mechanic.DisplayName</MudSelectItem>
+            }
+        </MudSelect>
+        <MudDatePicker Label="Execution date" Date="_executionDate" DateChanged="OnExecutionDateChanged"
+                       Disabled="@(!CanManage || !IsOpen)" />
+        @if (_mileageTotal is int totalKm)
+        {
+            <MudText Typo="Typo.caption">Assigned mechanic total mileage: @totalKm km</MudText>
+        }
+
+        <MudDivider />
+        <MudText Typo="Typo.subtitle1">Execution</MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudTimePicker Label="Arrival" @bind-Time="_arrivalTime" Disabled="@(!_canEditExecution)" />
+            <MudTimePicker Label="Departure" @bind-Time="_departureTime" Disabled="@(!_canEditExecution)" />
+        </MudStack>
+        <MudStack Row="true" Spacing="2">
+            <MudNumericField T="int?" Label="Mileage before" @bind-Value="_mileageBefore" Disabled="@(!_canEditExecution)" />
+            <MudNumericField T="int?" Label="Mileage after" @bind-Value="_mileageAfter" Disabled="@(!_canEditExecution)" />
+        </MudStack>
+        <MudTextField T="string" Label="Solution" @bind-Value="_solutionDescription" Lines="3" Disabled="@(!_canEditExecution)" />
+        <MudTextField T="string" Label="Internal remark" @bind-Value="_internalRemark" Lines="2" Disabled="@(!_canEditExecution)" />
+        <MudButton Variant="Variant.Outlined" OnClick="SaveExecutionAsync" Disabled="@(!_canEditExecution)">Save execution</MudButton>
+
+        <MudSelect T="RepairOutcome?" Label="Outcome" Value="_outcome" ValueChanged="OnOutcomeChanged"
+                   Disabled="@(!_canEditExecution || Ticket.State == ServiceTicketState.New)">
+            <MudSelectItem T="RepairOutcome?" Value="@((RepairOutcome?)RepairOutcome.NotResolved)">Not resolved</MudSelectItem>
+            <MudSelectItem T="RepairOutcome?" Value="@((RepairOutcome?)RepairOutcome.GoodsTaken)">Goods taken</MudSelectItem>
+            <MudSelectItem T="RepairOutcome?" Value="@((RepairOutcome?)RepairOutcome.Unfounded)">Unfounded</MudSelectItem>
+            <MudSelectItem T="RepairOutcome?" Value="@((RepairOutcome?)RepairOutcome.Resolved)">Resolved</MudSelectItem>
+        </MudSelect>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public required ServiceTicket Ticket { get; set; }
+    [Parameter] public bool CanManage { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private List<UserSummary> _mechanics = [];
+    private string? _assignedUserId;
+    private DateTime? _executionDate;
+    private TimeSpan? _arrivalTime;
+    private TimeSpan? _departureTime;
+    private int? _mileageBefore;
+    private int? _mileageAfter;
+    private string? _solutionDescription;
+    private string? _internalRemark;
+    private RepairOutcome? _outcome;
+    private int? _mileageTotal;
+    private bool _canEditExecution;
+
+    private bool IsOpen => Ticket.State is ServiceTicketState.New or ServiceTicketState.InProgress;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _mechanics = (await Users.ListAsync()).Where(u => u.Roles.Contains(Roles.Mechanic) && !u.IsDeactivated).ToList();
+        var repair = Ticket.InternalRepair!;
+        _assignedUserId = repair.AssignedUserId;
+        _executionDate = repair.ExecutionDate;
+        _arrivalTime = repair.ArrivalTime;
+        _departureTime = repair.DepartureTime;
+        _mileageBefore = repair.MileageBefore;
+        _mileageAfter = repair.MileageAfter;
+        _solutionDescription = repair.SolutionDescription;
+        _internalRemark = repair.InternalRemark;
+        _outcome = repair.Outcome;
+
+        var isAdmin = await CurrentUser.IsInRoleAsync(Roles.Admin);
+        var myId = await CurrentUser.UserIdAsync();
+        _canEditExecution = IsOpen && (isAdmin || (myId is not null && myId == repair.AssignedUserId));
+        _mileageTotal = repair.AssignedUserId is string assignedId ? await Tickets.MechanicMileageTotalAsync(assignedId) : null;
+    }
+
+    private async Task OnAssigneeChanged(string? assignedUserId)
+    {
+        try
+        {
+            await Tickets.DispatchAsync(Ticket.Id, assignedUserId, _executionDate);
+            await OnChanged.InvokeAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task OnExecutionDateChanged(DateTime? executionDate)
+    {
+        try
+        {
+            await Tickets.DispatchAsync(Ticket.Id, _assignedUserId, executionDate);
+            await OnChanged.InvokeAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task SaveExecutionAsync()
+    {
+        try
+        {
+            await Tickets.RecordExecutionAsync(Ticket.Id, _arrivalTime, _departureTime, _mileageBefore, _mileageAfter, _solutionDescription, _internalRemark);
+            await OnChanged.InvokeAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task OnOutcomeChanged(RepairOutcome? outcome)
+    {
+        if (outcome is not RepairOutcome chosen) { return; }
+        try
+        {
+            await Tickets.SetOutcomeAsync(Ticket.Id, chosen);
+            await OnChanged.InvokeAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}

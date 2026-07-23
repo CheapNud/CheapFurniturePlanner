@@ -94,6 +94,7 @@ public class GatingTests : TestContext
     {
         Assert.Equal(Roles.AdminOrOffice, typeof(ServiceIntakePage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
         Assert.Null(typeof(ServiceListPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Null(typeof(ServiceTicketPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
     }
 
     [Fact]
