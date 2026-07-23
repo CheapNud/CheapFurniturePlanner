@@ -130,6 +130,88 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task DispatchAsync(int ticketId, string? assignedUserId, DateTime? executionDate, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var ticket = await RequireTicketAsync(db, ticketId, ct);
+        RequireOpen(ticket);
+        var repair = ticket.InternalRepair ?? throw new InvalidOperationException($"Ticket {ticket.TicketNumber} has no internal repair flow.");
+        var userId = await RequireUserIdAsync();
+
+        if (assignedUserId is not null && assignedUserId != repair.AssignedUserId)
+        {
+            var isMechanic = await db.UserRoles
+                .Join(db.Roles, ur => ur.RoleId, r => r.Id, (ur, r) => new { ur.UserId, r.Name })
+                .AnyAsync(x => x.UserId == assignedUserId && x.Name == Roles.Mechanic, ct);
+            if (!isMechanic) { throw new InvalidOperationException("The assignee must hold the Mechanic role."); }
+            repair.AssignedUserId = assignedUserId;
+            var assigneeName = await db.Users.Where(u => u.Id == assignedUserId).Select(u => u.UserName).SingleAsync(ct);
+            AddLog(db, ticket.Id, userId, $"Assigned to {assigneeName}");
+        }
+        repair.ExecutionDate = executionDate;
+
+        if (ticket.State == ServiceTicketState.New)
+        {
+            Transition(ticket, ServiceTicketState.InProgress);
+            AddLog(db, ticket.Id, userId, "Work started");
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task RecordExecutionAsync(int ticketId, TimeSpan? arrivalTime, TimeSpan? departureTime, int? mileageBefore, int? mileageAfter, string? solutionDescription, string? internalRemark, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var ticket = await RequireTicketAsync(db, ticketId, ct);
+        RequireOpen(ticket);
+        var repair = ticket.InternalRepair ?? throw new InvalidOperationException($"Ticket {ticket.TicketNumber} has no internal repair flow.");
+        await RequireAssignedMechanicOrAdminAsync(repair);
+
+        repair.ArrivalTime = arrivalTime;
+        repair.DepartureTime = departureTime;
+        repair.MileageBefore = mileageBefore;
+        repair.MileageAfter = mileageAfter;
+        repair.SolutionDescription = solutionDescription;
+        repair.InternalRemark = internalRemark;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task SetOutcomeAsync(int ticketId, RepairOutcome outcome, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var ticket = await RequireTicketAsync(db, ticketId, ct);
+        RequireOpen(ticket);
+        var repair = ticket.InternalRepair ?? throw new InvalidOperationException($"Ticket {ticket.TicketNumber} has no internal repair flow.");
+        await RequireAssignedMechanicOrAdminAsync(repair);
+        if (ticket.State == ServiceTicketState.New) { throw new InvalidOperationException($"Ticket {ticket.TicketNumber} has not been dispatched."); }
+
+        repair.Outcome = outcome;
+        var userId = await RequireUserIdAsync();
+        AddLog(db, ticket.Id, userId, $"Outcome: {outcome}");
+        if (outcome == RepairOutcome.Resolved)
+        {
+            Transition(ticket, ServiceTicketState.Resolved);
+            AddLog(db, ticket.Id, userId, "Ticket resolved");
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<int> MechanicMileageTotalAsync(string userId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.InternalRepairs
+            .Where(r => r.AssignedUserId == userId && r.MileageBefore != null && r.MileageAfter != null)
+            .SumAsync(r => r.MileageAfter!.Value - r.MileageBefore!.Value, ct);
+    }
+
+    private async Task RequireAssignedMechanicOrAdminAsync(InternalRepair repair)
+    {
+        if (await currentUser.IsInRoleAsync(Roles.Admin)) { return; }
+        var userId = await currentUser.UserIdAsync();
+        if (userId is not null && userId == repair.AssignedUserId) { return; }
+        throw new InvalidOperationException("Only the assigned mechanic or an admin can edit execution details.");
+    }
+
     // ----- shared internals (Tasks 3-5 add the flow-specific mutations below) -----
 
     private async Task ApplyFlowAsync(FurniturePlannerContext db, ServiceTicket ticket, ServiceFlow flow, string? supplierRef, CancellationToken ct)
