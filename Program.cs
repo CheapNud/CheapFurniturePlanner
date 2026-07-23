@@ -180,6 +180,7 @@ class Program
         builder.Services.AddScoped<DiscountService>();
         builder.Services.AddScoped<PinnedCatalogueProvider>();
         builder.Services.AddScoped<OrderEntryService>();
+        builder.Services.AddScoped<ServiceTicketService>();
 
         // Run the app - all Avalonia complexity handled by the package
         builder.RunApp(args);
