@@ -1,4 +1,5 @@
 using Bunit;
+using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Components.Pages;
 using CheapFurniturePlanner.Data;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor.Services;
 using Xunit;
+using CheapFurniturePlanner.Tests.Services;
 
 namespace CheapFurniturePlanner.Tests.Components;
 
@@ -82,7 +84,8 @@ public class PartiesPageTests : TestContext
         var parties = new PartyService(factory);
         var seller = await parties.AddSellerAsync("Beta", 1m);
         var consumer = await parties.AddConsumerAsync("Gamma", "gamma@example.com");
-        var orders = new OrderEntryService(factory, new DbCatalogueSource(factory), new PinnedCatalogueProvider(factory));
+        var orders = new OrderEntryService(factory, new DbCatalogueSource(factory), new PinnedCatalogueProvider(factory),
+            new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office)));
         await orders.CreateOrderAsync(seller.Id, consumer.Id, "EUN");
 
         // Deleting through the service throws; the page surfaces this as a Snackbar. Assert the

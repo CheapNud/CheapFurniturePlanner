@@ -18,7 +18,8 @@ public sealed class OrderPlacedException(string orderNumber) : Exception($"Order
 public sealed class OrderEntryService(
     IDbContextFactory<FurniturePlannerContext> factory,
     ICatalogueSource catalogue,
-    PinnedCatalogueProvider pinned)
+    PinnedCatalogueProvider pinned,
+    ProductionUnitService productionUnits)
 {
     public async Task<Order> CreateOrderAsync(int sellerId, int consumerId, string marketCode, CancellationToken ct = default)
     {
@@ -255,6 +256,7 @@ public sealed class OrderEntryService(
         order.State = OrderState.Placed;
         order.PlacedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        await productionUnits.SpawnForOrderAsync(orderId, ct);
     }
 
     // Terminal from Draft or Placed; cancelling a Cancelled order is a no-op-that-throws — callers
@@ -266,6 +268,21 @@ public sealed class OrderEntryService(
             ?? throw new InvalidOperationException($"Order {orderId} not found.");
         if (order.State == OrderState.Cancelled) { throw new InvalidOperationException($"Order {order.OrderNumber} is already cancelled."); }
         order.State = OrderState.Cancelled;
+        await db.SaveChangesAsync(ct);
+        await productionUnits.CancelForOrderAsync(orderId, ct);
+    }
+
+    public async Task SetDeliverToWarehouseAsync(int orderId, int lineId, bool deliverToWarehouse, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var order = await RequireDraftAsync(db, orderId, ct);
+        var line = order.Lines.FirstOrDefault(l => l.Id == lineId)
+            ?? throw new InvalidOperationException($"Line {lineId} not found on order {order.OrderNumber}.");
+        if (line.Kind != OrderLineKind.StandaloneArticle || line.SupplierRef is null)
+        {
+            throw new InvalidOperationException("Only dropship lines can ship straight to the consumer.");
+        }
+        line.DeliverToWarehouse = deliverToWarehouse;
         await db.SaveChangesAsync(ct);
     }
 

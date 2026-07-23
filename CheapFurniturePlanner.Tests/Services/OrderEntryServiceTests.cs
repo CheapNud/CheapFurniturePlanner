@@ -1,3 +1,4 @@
+using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Configurator;
 using CheapFurniturePlanner.Data;
@@ -71,7 +72,8 @@ public class OrderEntryServiceTests
         await publish.RepublishAsync();
 
         var pinned = new PinnedCatalogueProvider(factory);
-        var orders = new OrderEntryService(factory, source, pinned);
+        var productionUnits = new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var orders = new OrderEntryService(factory, source, pinned, productionUnits);
         var parties = new PartyService(factory);
         var seller = await parties.AddSellerAsync("Northwind Reseller", 1.2m);
         var consumer = await parties.AddConsumerAsync("Jane Consumer", "jane@example.com");
