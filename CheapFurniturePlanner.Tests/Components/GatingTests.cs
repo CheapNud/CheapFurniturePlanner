@@ -90,6 +90,39 @@ public class GatingTests : TestContext
     }
 
     [Fact]
+    public void WarehouseRole_SeesDockLinksButNotBusinessLinks()
+    {
+        var auth = ConfigureAuth();
+        auth.SetAuthorized("dock");
+        auth.SetRoles(Roles.Warehouse);
+
+        var cut = Render<NavMenu>();
+
+        Assert.Contains("href=\"/receiving\"", cut.Markup);
+        Assert.Contains("href=\"/trips\"", cut.Markup);
+        Assert.DoesNotContain("href=\"/orders\"", cut.Markup);
+        Assert.DoesNotContain("href=\"/users\"", cut.Markup);
+    }
+
+    [Fact]
+    public void Mechanic_DoesNotSeeDockLinks()
+    {
+        var auth = ConfigureAuth();
+        auth.SetAuthorized("wrench");
+        auth.SetRoles(Roles.Mechanic);
+
+        var cut = Render<NavMenu>();
+
+        Assert.DoesNotContain("href=\"/receiving\"", cut.Markup);
+    }
+
+    [Fact]
+    public void DockPages_RequireWarehouseStaff()
+    {
+        Assert.Equal(Roles.WarehouseStaff, typeof(ReceivingPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+    }
+
+    [Fact]
     public void ServicePages_CarryExpectedAuthorization()
     {
         Assert.Equal(Roles.AdminOrOffice, typeof(ServiceIntakePage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
