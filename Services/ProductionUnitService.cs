@@ -138,8 +138,13 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         await RequireWarehouseStaffAsync();
         await using var db = await factory.CreateDbContextAsync(ct);
         var prefix = $"TRP-{DateTime.UtcNow.Year}-";
-        var countThisYear = await db.Trips.CountAsync(t => t.TripCode.StartsWith(prefix), ct);
-        var trip = new Trip { TripCode = $"{prefix}{countThisYear + 1:D4}" };
+        var codesThisYear = await db.Trips.Where(t => t.TripCode.StartsWith(prefix)).Select(t => t.TripCode).ToListAsync(ct);
+        var maxSuffix = 0;
+        foreach (var code in codesThisYear)
+        {
+            if (int.TryParse(code[prefix.Length..], out var suffix) && suffix > maxSuffix) { maxSuffix = suffix; }
+        }
+        var trip = new Trip { TripCode = $"{prefix}{maxSuffix + 1:D4}" };
         db.Trips.Add(trip);
         await db.SaveChangesAsync(ct);
         return trip;

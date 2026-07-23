@@ -230,4 +230,26 @@ public class ProductionDockTests
         await using var db = await factory.CreateDbContextAsync();
         Assert.False(await db.Trips.AnyAsync(t => t.Id == trip.Id));
     }
+
+    // Regression: CreateTripAsync must not derive the next trip number from a COUNT of existing
+    // trips with the year prefix - deleting a mid-sequence trip then shrinks the count, causing the
+    // next created trip to reuse a TripCode that still exists and blow the unique index.
+    [Fact]
+    public async Task CreateTrip_AfterDeletingFirstOfTwo_SkipsToNextFreeNumber()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser);
+
+        var tripA = await service.CreateTripAsync();
+        var tripB = await service.CreateTripAsync();
+        Assert.Equal($"TRP-{DateTime.UtcNow.Year}-0001", tripA.TripCode);
+        Assert.Equal($"TRP-{DateTime.UtcNow.Year}-0002", tripB.TripCode);
+
+        await service.DeleteTripAsync(tripA.Id);
+
+        var tripC = await service.CreateTripAsync();
+
+        Assert.Equal($"TRP-{DateTime.UtcNow.Year}-0003", tripC.TripCode);
+    }
 }
