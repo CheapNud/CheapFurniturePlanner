@@ -212,6 +212,57 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
         throw new InvalidOperationException("Only the assigned mechanic or an admin can edit execution details.");
     }
 
+    public async Task UpdateSupplierReportAsync(int ticketId, string supplierRef, string? supplierCaseNumber, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var ticket = await RequireTicketAsync(db, ticketId, ct);
+        RequireOpen(ticket);
+        var report = ticket.SupplierReport ?? throw new InvalidOperationException($"Ticket {ticket.TicketNumber} has no supplier report flow.");
+        report.SupplierRef = (supplierRef ?? "").Trim();
+        report.SupplierCaseNumber = string.IsNullOrWhiteSpace(supplierCaseNumber) ? null : supplierCaseNumber.Trim();
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task MarkReportedAsync(int ticketId, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var ticket = await RequireTicketAsync(db, ticketId, ct);
+        RequireOpen(ticket);
+        var report = ticket.SupplierReport ?? throw new InvalidOperationException($"Ticket {ticket.TicketNumber} has no supplier report flow.");
+        if (string.IsNullOrWhiteSpace(report.SupplierRef)) { throw new InvalidOperationException("A supplier reference is required before reporting."); }
+
+        report.ReportedAt = DateTime.UtcNow;
+        var userId = await RequireUserIdAsync();
+        if (ticket.State == ServiceTicketState.New)
+        {
+            Transition(ticket, ServiceTicketState.InProgress);
+            AddLog(db, ticket.Id, userId, "Work started");
+        }
+        AddLog(db, ticket.Id, userId, "Report generated");
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task SetDecisionAsync(int ticketId, string decision, string? decisionNote, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        if (string.IsNullOrWhiteSpace(decision)) { throw new InvalidOperationException("A decision is required."); }
+
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var ticket = await RequireTicketAsync(db, ticketId, ct);
+        RequireOpen(ticket);
+        var report = ticket.SupplierReport ?? throw new InvalidOperationException($"Ticket {ticket.TicketNumber} has no supplier report flow.");
+
+        report.Decision = decision.Trim();
+        report.DecisionNote = string.IsNullOrWhiteSpace(decisionNote) ? null : decisionNote.Trim();
+        var userId = await RequireUserIdAsync();
+        AddLog(db, ticket.Id, userId, $"Supplier decision: {report.Decision}");
+        Transition(ticket, ServiceTicketState.Resolved);
+        AddLog(db, ticket.Id, userId, "Ticket resolved");
+        await db.SaveChangesAsync(ct);
+    }
+
     // ----- shared internals (Tasks 3-5 add the flow-specific mutations below) -----
 
     private async Task ApplyFlowAsync(FurniturePlannerContext db, ServiceTicket ticket, ServiceFlow flow, string? supplierRef, CancellationToken ct)

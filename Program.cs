@@ -13,6 +13,7 @@ using CheapHelpers.Blazor.Pages.Account;
 using CheapHelpers.Blazor.Services;
 using CheapHelpers.EF;
 using CheapHelpers.Models.Entities;
+using CheapHelpers.Services.DataExchange.Pdf;
 using CheapHelpers.Services.Email;
 using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using Mapster;
@@ -182,18 +183,26 @@ class Program
         builder.Services.AddScoped<OrderEntryService>();
         builder.Services.AddScoped<ServiceTicketService>();
 
+        builder.Services.AddSingleton<IPdfTemplateService, PdfTemplateService>();
+        builder.Services.AddSingleton<IPdfExportService, PdfExportService>();
+        builder.Services.AddScoped(sp => new SupplierReportPdf(
+            sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
+            sp.GetRequiredService<IPdfExportService>(),
+            Path.Combine(GetAppDataPath(), "reports")));
+
         // Run the app - all Avalonia complexity handled by the package
         builder.RunApp(args);
     }
 
-    private static string GetConnectionString()
+    private static string GetAppDataPath()
     {
         var appDataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CheapFurniturePlanner");
         if (!Directory.Exists(appDataPath))
         {
             Directory.CreateDirectory(appDataPath);
         }
-        var dbPath = Path.Combine(appDataPath, "furniture_planner.db");
-        return $"Data Source={dbPath}";
+        return appDataPath;
     }
+
+    private static string GetConnectionString() => $"Data Source={Path.Combine(GetAppDataPath(), "furniture_planner.db")}";
 }
