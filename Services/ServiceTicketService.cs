@@ -204,6 +204,23 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
             .SumAsync(r => r.MileageAfter!.Value - r.MileageBefore!.Value, ct);
     }
 
+    public async Task AddPhotoAsync(int ticketId, PhotoKind kind, string storedFileName, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var ticket = await RequireTicketAsync(db, ticketId, ct);
+        RequireOpen(ticket);
+        var userId = await RequireUserIdAsync();
+        db.ServiceTicketPhotos.Add(new ServiceTicketPhoto
+        {
+            TicketId = ticket.Id,
+            Kind = kind,
+            FileName = storedFileName,
+            UploadedAt = DateTime.UtcNow,
+            UserId = userId,
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
     private async Task RequireAssignedMechanicOrAdminAsync(InternalRepair repair)
     {
         if (await currentUser.IsInRoleAsync(Roles.Admin)) { return; }
