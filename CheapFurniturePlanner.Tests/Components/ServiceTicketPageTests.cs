@@ -135,4 +135,23 @@ public class ServiceTicketPageTests : TestContext
             Assert.Contains("Generate report", cut.Markup);
         });
     }
+
+    [Fact]
+    public async Task Ticket_PhotoFileMissingFromDisk_RendersWithoutThrowing()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var consumerId = await SeedConsumerAsync(factory);
+        var office = new FakeCurrentUser("office-1", Roles.Office);
+        var seedingService = new ServiceTicketService(factory, office);
+        var ticket = await seedingService.CreateTicketAsync(consumerId, null, "chair wobbles", null, ServiceFlow.Internal, []);
+        // Stored file name that was never written via ServicePhotoStore.SaveAsync - simulates a
+        // photo row whose backing file is missing from disk.
+        await seedingService.AddPhotoAsync(ticket.Id, PhotoKind.Before, "does-not-exist.jpg");
+
+        ConfigureServices(factory, office);
+        var cut = Render<ServiceTicketPage>(p => p.Add(x => x.Id, ticket.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains(ticket.TicketNumber, cut.Markup));
+    }
 }

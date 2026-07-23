@@ -193,5 +193,9 @@
         {
             Snackbar.Add(failure.Message, Severity.Error);
         }
+        catch (IOException failure)
+        {
+            Snackbar.Add(failure.Message, Severity.Error);
+        }
     }
 }

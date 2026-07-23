@@ -95,14 +95,14 @@
                 <MudPaper Class="pa-4 mt-4">
                     <MudText Typo="Typo.h6" Class="mb-2">Photos</MudText>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
-                        <MudSelect T="PhotoKind" @bind-Value="_uploadKind" Label="Kind" Dense="true">
+                        <MudSelect T="PhotoKind" @bind-Value="_uploadKind" Label="Kind" Dense="true" Disabled="@(!IsOpen)">
                             <MudSelectItem T="PhotoKind" Value="PhotoKind.Before">Before</MudSelectItem>
                             <MudSelectItem T="PhotoKind" Value="PhotoKind.After">After</MudSelectItem>
                         </MudSelect>
                         <MudFileUpload T="IBrowserFile" FilesChanged="OnPhotoSelected" Accept=".jpg,.jpeg,.png,.webp">
                             <CustomContent Context="fileUpload">
                                 <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PhotoCamera"
-                                           OnClick="@fileUpload.OpenFilePickerAsync">Add photo</MudButton>
+                                           OnClick="@fileUpload.OpenFilePickerAsync" Disabled="@(!IsOpen)">Add photo</MudButton>
                             </CustomContent>
                         </MudFileUpload>
                     </MudStack>
@@ -149,8 +149,16 @@
             // Local desktop app: photos become data URIs instead of a file-serving endpoint.
             foreach (var photo in _ticket.Photos)
             {
-                var bytes = await PhotoStore.ReadAsync(_ticket.Id, photo.FileName);
-                _photoSources[photo.FileName] = $"data:{ServicePhotoStore.MimeFor(photo.FileName)};base64,{Convert.ToBase64String(bytes)}";
+                try
+                {
+                    var bytes = await PhotoStore.ReadAsync(_ticket.Id, photo.FileName);
+                    _photoSources[photo.FileName] = $"data:{ServicePhotoStore.MimeFor(photo.FileName)};base64,{Convert.ToBase64String(bytes)}";
+                }
+                catch (IOException)
+                {
+                    // File missing from disk (e.g. deleted out-of-band) - skip; the caption still
+                    // renders and MudImage degrades gracefully with a null Src.
+                }
             }
         }
         StateHasChanged();
@@ -187,6 +195,7 @@
             await ReloadAsync();
         }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
 
     private static Color StateColor(ServiceTicketState ticketState) => ticketState switch
