@@ -78,6 +78,25 @@ public class GatingTests : TestContext
     }
 
     [Fact]
+    public void AnyAuthenticated_SeesServiceLink()
+    {
+        var auth = ConfigureAuth();
+        auth.SetAuthorized("wrench");
+        auth.SetRoles(Roles.Mechanic);
+
+        var cut = Render<NavMenu>();
+
+        Assert.Contains("href=\"/service\"", cut.Markup);
+    }
+
+    [Fact]
+    public void ServicePages_CarryExpectedAuthorization()
+    {
+        Assert.Equal(Roles.AdminOrOffice, typeof(ServiceIntakePage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Null(typeof(ServiceListPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+    }
+
+    [Fact]
     public void Unauthenticated_SeesOnlyTheAnonymousSafeSubset()
     {
         // AddAuthorization() defaults to SetNotAuthorized().
