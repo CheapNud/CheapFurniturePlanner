@@ -185,6 +185,7 @@ class Program
         builder.Services.AddScoped<DiscountService>();
         builder.Services.AddScoped<PinnedCatalogueProvider>();
         builder.Services.AddScoped<ProductionUnitService>();
+        builder.Services.AddScoped<InvoicingService>();
         builder.Services.AddScoped<OrderEntryService>();
         builder.Services.AddScoped<ServiceTicketService>();
 
