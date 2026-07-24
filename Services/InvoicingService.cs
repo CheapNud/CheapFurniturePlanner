@@ -137,6 +137,54 @@ public sealed class InvoicingService(IDbContextFactory<FurniturePlannerContext> 
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task<CreditNote> CreateCreditNoteAsync(int invoiceId, CreditReason reason, decimal? grossAmount = null, string? note = null, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var invoice = await db.Invoices.Include(i => i.CreditNotes).FirstOrDefaultAsync(i => i.Id == invoiceId, ct)
+            ?? throw new InvalidOperationException($"Invoice {invoiceId} not found.");
+        if (invoice.GrossTotal <= 0) { throw new InvalidOperationException($"Invoice {invoice.InvoiceNumber} has no amount to credit."); }
+
+        var remaining = RemainingBalance(invoice);
+        var gross = grossAmount ?? remaining;
+        if (gross <= 0) { throw new InvalidOperationException("Credit amount must be positive."); }
+        if (gross > remaining) { throw new InvalidOperationException($"Credit exceeds the remaining balance of {remaining.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}."); }
+
+        var vatShare = invoice.VatTotal / invoice.GrossTotal;
+        var vatAmount = Math.Round(gross * vatShare, 2, MidpointRounding.AwayFromZero);
+        var prefix = $"CN-{DateTime.UtcNow.Year}-";
+        var countThisYear = await db.CreditNotes.CountAsync(c => c.CreditNoteNumber.StartsWith(prefix), ct);
+        var creditNote = new CreditNote
+        {
+            CreditNoteNumber = $"{prefix}{countThisYear + 1:D4}",
+            InvoiceId = invoice.Id,
+            Reason = reason,
+            GrossAmount = gross,
+            VatAmount = vatAmount,
+            NetAmount = gross - vatAmount,
+            Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+            IssuedAt = DateTime.UtcNow,
+            CreatedByUserId = await RequireUserIdAsync(),
+        };
+        db.CreditNotes.Add(creditNote);
+        await db.SaveChangesAsync(ct);
+        return creditNote;
+    }
+
+    public async Task MarkSettledAsync(int creditNoteId, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var creditNote = await db.CreditNotes.FirstOrDefaultAsync(c => c.Id == creditNoteId, ct)
+            ?? throw new InvalidOperationException($"Credit note {creditNoteId} not found.");
+        if (creditNote.IsSettled) { throw new InvalidOperationException($"Credit note {creditNote.CreditNoteNumber} is already settled."); }
+        creditNote.IsSettled = true;
+        creditNote.SettledAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public static decimal RemainingBalance(Invoice invoice) => invoice.GrossTotal - invoice.CreditNotes.Sum(c => c.GrossAmount);
+
     // ----- shared internals (Task 3 appends credit-note methods above this region) -----
 
     private static string LineDescription(OrderLine line)
