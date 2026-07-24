@@ -96,6 +96,8 @@ public class OrderEntryPageTests : TestContext
             sp.GetRequiredService<ProductionUnitService>()));
         Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new DiscountService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
+        Services.AddSingleton(sp => new InvoicingService(
+            sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
         JSInterop.Mode = JSRuntimeMode.Loose;
         Render<MudBlazor.MudDialogProvider>();
         Render<MudBlazor.MudPopoverProvider>();

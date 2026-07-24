@@ -167,6 +167,8 @@ public class GatingTests : TestContext
         typeof(OrderEntryPage),
         typeof(PartiesPage),
         typeof(SellerDiscountsPage),
+        typeof(InvoicesPage),
+        typeof(InvoicePage),
     };
 
     [Theory]

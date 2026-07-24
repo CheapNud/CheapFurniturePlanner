@@ -185,12 +185,17 @@ class Program
         builder.Services.AddScoped<DiscountService>();
         builder.Services.AddScoped<PinnedCatalogueProvider>();
         builder.Services.AddScoped<ProductionUnitService>();
+        builder.Services.AddScoped<InvoicingService>();
         builder.Services.AddScoped<OrderEntryService>();
         builder.Services.AddScoped<ServiceTicketService>();
 
         builder.Services.AddSingleton<IPdfTemplateService, PdfTemplateService>();
         builder.Services.AddSingleton<IPdfExportService, PdfExportService>();
         builder.Services.AddScoped(sp => new SupplierReportPdf(
+            sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
+            sp.GetRequiredService<IPdfExportService>(),
+            Path.Combine(GetAppDataPath(), "reports")));
+        builder.Services.AddScoped(sp => new InvoicePdf(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<IPdfExportService>(),
             Path.Combine(GetAppDataPath(), "reports")));

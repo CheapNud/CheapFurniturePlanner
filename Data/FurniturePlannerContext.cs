@@ -56,6 +56,10 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<SupplierReport> SupplierReports => Set<SupplierReport>();
     public DbSet<ProductionUnit> ProductionUnits => Set<ProductionUnit>();
     public DbSet<Trip> Trips => Set<Trip>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
+    public DbSet<MarketVatRate> MarketVatRates => Set<MarketVatRate>();
+    public DbSet<CreditNote> CreditNotes => Set<CreditNote>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -201,6 +205,20 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         {
             entity.HasIndex(t => t.TripCode).IsUnique();
             entity.Property(t => t.State).HasConversion<string>();
+        });
+        modelBuilder.Entity<Invoice>(entity =>
+        {
+            entity.HasIndex(i => i.InvoiceNumber).IsUnique();
+            entity.HasIndex(i => i.OrderId).IsUnique();
+            entity.HasOne(i => i.Order).WithMany().HasForeignKey(i => i.OrderId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(i => i.Lines).WithOne().HasForeignKey(l => l.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(i => i.CreditNotes).WithOne().HasForeignKey(c => c.InvoiceId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<MarketVatRate>().HasIndex(r => r.MarketCode).IsUnique();
+        modelBuilder.Entity<CreditNote>(entity =>
+        {
+            entity.HasIndex(c => c.CreditNoteNumber).IsUnique();
+            entity.Property(c => c.Reason).HasConversion<string>();
         });
     }
 

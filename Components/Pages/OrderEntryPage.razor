@@ -5,6 +5,8 @@
 @using CheapFurniturePlanner.Domain.Serialization
 @inject OrderEntryService OrderEntryService
 @inject ProductionUnitService Units
+@inject InvoicingService Invoicing
+@inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 
 <PageTitle>Order - Cheap Furniture Planner</PageTitle>
@@ -48,6 +50,14 @@ else
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="PlaceAsync">Place order</MudButton>
                     <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="CancelAsync">Cancel order</MudButton>
                 </MudStack>
+            }
+            @if (_order.State == OrderState.Placed && _invoice is null)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="CreateInvoiceAsync">Create invoice</MudButton>
+            }
+            else if (_invoice is not null)
+            {
+                <MudLink Href="@($"/invoices/{_invoice.Id}")">@_invoice.InvoiceNumber</MudLink>
             }
         </MudStack>
     </MudPaper>
@@ -162,6 +172,7 @@ else
     private Order? _order;
     private ProductionPhase? _phase;
     private List<ProductionUnit> _units = [];
+    private Invoice? _invoice;
     private MudTabs? _tabs;
     private ElementEntryTab? _elementTab;
 
@@ -172,6 +183,17 @@ else
         _order = await OrderEntryService.GetOrderAsync(OrderId);
         _phase = await Units.PhaseForOrderAsync(OrderId);
         _units = await Units.UnitsForOrderAsync(OrderId);
+        _invoice = await Invoicing.InvoiceForOrderAsync(OrderId);
+    }
+
+    private async Task CreateInvoiceAsync()
+    {
+        try
+        {
+            var invoice = await Invoicing.CreateInvoiceAsync(OrderId);
+            Navigation.NavigateTo($"/invoices/{invoice.Id}");
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
 
     private static Color StateColor(OrderState state) => state switch
