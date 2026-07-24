@@ -1,0 +1,179 @@
+@page "/invoices/{Id:int}"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@using System.Globalization
+@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@inject InvoicingService Invoicing
+@inject InvoicePdf Pdf
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Invoice</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    @if (_invoice is null)
+    {
+        <MudText>Loading…</MudText>
+    }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/invoices"))" />
+            <MudText Typo="Typo.h4">@_invoice.InvoiceNumber</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@(_invoice.IsPaid ? Color.Success : Color.Warning)">@(_invoice.IsPaid ? "Paid" : "Open")</MudChip>
+            <MudSpacer />
+            @if (!_invoice.IsPaid)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Success" OnClick="MarkPaidAsync">Mark paid</MudButton>
+            }
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</MudButton>
+        </MudStack>
+
+        <MudPaper Class="pa-4 mb-4">
+            <MudText><b>Order:</b> <MudLink Href="@($"/orders/{_invoice.OrderId}")">@_invoice.Order?.OrderNumber</MudLink></MudText>
+            <MudText><b>Consumer:</b> @_invoice.Order?.Consumer?.Name @(_invoice.Order?.Consumer?.VatNumber is string vatNumber ? $"({vatNumber})" : "")</MudText>
+            <MudText><b>Issued:</b> @_invoice.IssuedAt.ToString("yyyy-MM-dd") — <b>Due:</b> @_invoice.DueDate.ToString("yyyy-MM-dd")</MudText>
+        </MudPaper>
+
+        <MudTable T="InvoiceLine" Items="_invoice.Lines" Dense="true" Class="mb-4">
+            <HeaderContent>
+                <MudTh>Description</MudTh>
+                <MudTh>Qty</MudTh>
+                <MudTh>Unit</MudTh>
+                <MudTh>Disc %</MudTh>
+                <MudTh>Line total</MudTh>
+                <MudTh>VAT</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Description">@context.Description</MudTd>
+                <MudTd DataLabel="Qty">@context.Quantity</MudTd>
+                <MudTd DataLabel="Unit">@Money(context.UnitPrice)</MudTd>
+                <MudTd DataLabel="Disc %">@(context.DiscountPercent == 0 ? "—" : Money(context.DiscountPercent))</MudTd>
+                <MudTd DataLabel="Line total">@Money(context.LineTotal)</MudTd>
+                <MudTd DataLabel="VAT">@Money(context.VatAmount)</MudTd>
+            </RowTemplate>
+        </MudTable>
+
+        <MudPaper Class="pa-4 mb-4">
+            @if (_invoice.OrderDiscountPercent != 0)
+            {
+                <MudText>Order discount: @Money(_invoice.OrderDiscountPercent)%</MudText>
+            }
+            <MudText>Net: @Money(_invoice.NetTotal)</MudText>
+            <MudText>VAT: @Money(_invoice.VatTotal)</MudText>
+            <MudText Typo="Typo.h6">Total: @Money(_invoice.GrossTotal)</MudText>
+            @if (_invoice.CreditNotes.Count > 0)
+            {
+                <MudText Typo="Typo.body2">Remaining after credits: @Money(InvoicingService.RemainingBalance(_invoice))</MudText>
+            }
+        </MudPaper>
+
+        <MudPaper Class="pa-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.h6">Credit notes</MudText>
+                <MudSpacer />
+                <MudButton Variant="Variant.Outlined" OnClick="@(() => _showCreditForm = !_showCreditForm)">New credit note</MudButton>
+            </MudStack>
+            @if (_showCreditForm)
+            {
+                <MudStack Spacing="2" Class="mb-3">
+                    <MudSelect T="CreditReason" @bind-Value="_creditReason" Label="Reason">
+                        <MudSelectItem T="CreditReason" Value="CreditReason.Return">Return</MudSelectItem>
+                        <MudSelectItem T="CreditReason" Value="CreditReason.Goodwill">Goodwill</MudSelectItem>
+                        <MudSelectItem T="CreditReason" Value="CreditReason.PriceCorrection">Price correction</MudSelectItem>
+                    </MudSelect>
+                    <MudStack Row="true" AlignItems="AlignItems.Center">
+                        <MudCheckBox T="bool" @bind-Value="_fullCredit" Label="Full remaining balance" />
+                        @if (!_fullCredit)
+                        {
+                            <MudNumericField T="decimal" @bind-Value="_creditGross" Label="Gross amount" Min="0.01m" />
+                        }
+                    </MudStack>
+                    <MudTextField T="string" @bind-Value="_creditNoteText" Label="Note (optional)" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateCreditAsync">Create</MudButton>
+                </MudStack>
+            }
+            @foreach (var creditNote in _invoice.CreditNotes)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+                    <MudText>@creditNote.CreditNoteNumber — @creditNote.Reason — @Money(creditNote.GrossAmount)</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(creditNote.IsSettled ? Color.Success : Color.Warning)">@(creditNote.IsSettled ? "Settled" : "Open")</MudChip>
+                    <MudSpacer />
+                    <MudButton Size="Size.Small" OnClick="@(() => CreditPdfAsync(creditNote.Id))">PDF</MudButton>
+                    @if (!creditNote.IsSettled)
+                    {
+                        <MudButton Size="Size.Small" OnClick="@(() => SettleAsync(creditNote.Id))">Mark settled</MudButton>
+                    }
+                </MudStack>
+            }
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Invoice? _invoice;
+    private bool _showCreditForm;
+    private CreditReason _creditReason = CreditReason.Return;
+    private bool _fullCredit = true;
+    private decimal _creditGross;
+    private string? _creditNoteText;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _invoice = await Invoicing.GetInvoiceAsync(Id);
+        StateHasChanged();
+    }
+
+    private static string Money(decimal amount) => amount.ToString("0.00", CultureInfo.InvariantCulture);
+
+    private async Task MarkPaidAsync()
+    {
+        try { await Invoicing.MarkPaidAsync(Id); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task GeneratePdfAsync()
+    {
+        try
+        {
+            var filePath = await Pdf.GenerateInvoiceAsync(Id);
+            Snackbar.Add($"Invoice written to {filePath}", Severity.Success);
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task CreditPdfAsync(int creditNoteId)
+    {
+        try
+        {
+            var filePath = await Pdf.GenerateCreditNoteAsync(creditNoteId);
+            Snackbar.Add($"Credit note written to {filePath}", Severity.Success);
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task CreateCreditAsync()
+    {
+        try
+        {
+            await Invoicing.CreateCreditNoteAsync(Id, _creditReason, _fullCredit ? null : _creditGross, _creditNoteText);
+            _showCreditForm = false;
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task SettleAsync(int creditNoteId)
+    {
+        try { await Invoicing.MarkSettledAsync(creditNoteId); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}

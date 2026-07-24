@@ -1,0 +1,98 @@
+@page "/invoices"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@inject InvoicingService Invoicing
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Invoices</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Invoices</MudText>
+
+    <MudTable T="Invoice" Items="_invoices" Hover="true" Dense="true" Class="mb-6"
+              OnRowClick="@((TableRowClickEventArgs<Invoice> args) => Navigation.NavigateTo($"/invoices/{args.Item!.Id}"))">
+        <HeaderContent>
+            <MudTh>Invoice</MudTh>
+            <MudTh>Order</MudTh>
+            <MudTh>Consumer</MudTh>
+            <MudTh>Issued</MudTh>
+            <MudTh>Gross</MudTh>
+            <MudTh>Status</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Invoice">@context.InvoiceNumber</MudTd>
+            <MudTd DataLabel="Order">@context.Order?.OrderNumber</MudTd>
+            <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
+            <MudTd DataLabel="Issued">@context.IssuedAt.ToString("yyyy-MM-dd")</MudTd>
+            <MudTd DataLabel="Gross">@context.GrossTotal.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</MudTd>
+            <MudTd DataLabel="Status">
+                <MudChip T="string" Size="Size.Small" Color="@(context.IsPaid ? Color.Success : Color.Warning)">@(context.IsPaid ? "Paid" : "Open")</MudChip>
+                @if (context.CreditNotes.Count > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">Credited</MudChip>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" Class="mb-2">VAT rates</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudTextField T="string" @bind-Value="_newMarketCode" Label="Market" />
+            <MudNumericField T="decimal" @bind-Value="_newRatePercent" Label="Rate %" Min="0" Max="100" />
+            <MudButton Variant="Variant.Outlined" OnClick="SaveRateAsync">Save</MudButton>
+        </MudStack>
+        <MudTable T="MarketVatRate" Items="_vatRates" Dense="true">
+            <HeaderContent>
+                <MudTh>Market</MudTh>
+                <MudTh>Rate %</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Market">@context.MarketCode</MudTd>
+                <MudTd DataLabel="Rate %">@context.RatePercent.ToString("0.##")</MudTd>
+                <MudTd><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteRateAsync(context.Id))" /></MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private List<Invoice> _invoices = [];
+    private List<MarketVatRate> _vatRates = [];
+    private string _newMarketCode = "";
+    private decimal _newRatePercent = 21m;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _invoices = await Invoicing.ListInvoicesAsync();
+        _vatRates = await Invoicing.VatRatesAsync();
+    }
+
+    private async Task SaveRateAsync()
+    {
+        try
+        {
+            await Invoicing.SetVatRateAsync(_newMarketCode, _newRatePercent);
+            _newMarketCode = "";
+            await LoadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task DeleteRateAsync(int vatRateId)
+    {
+        try
+        {
+            await Invoicing.DeleteVatRateAsync(vatRateId);
+            await LoadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}
