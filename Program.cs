@@ -195,6 +195,10 @@ class Program
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<IPdfExportService>(),
             Path.Combine(GetAppDataPath(), "reports")));
+        builder.Services.AddScoped(sp => new InvoicePdf(
+            sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
+            sp.GetRequiredService<IPdfExportService>(),
+            Path.Combine(GetAppDataPath(), "reports")));
         builder.Services.AddSingleton(new ServicePhotoStore(Path.Combine(GetAppDataPath(), "service")));
 
         // Run the app - all Avalonia complexity handled by the package
