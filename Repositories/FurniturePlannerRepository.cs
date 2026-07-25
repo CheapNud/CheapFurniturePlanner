@@ -513,9 +513,12 @@ public class FurniturePlannerRepository
         try
         {
             using var context = _contextFactory.CreateDbContext();
+            // Unbacked planner items (nullable FurnitureItemId by design) have no catalogue card
+            // to show - without the filter they form a null-keyed group that reaches the Home
+            // page as a (null, count) tuple.
             return await context.PlannerFurnitureItems
-                .Include(p => p.FurnitureItem)
-                .GroupBy(p => p.FurnitureItem)
+                .Where(p => p.FurnitureItemId != null)
+                .GroupBy(p => p.FurnitureItem!)
                 .Select(g => new { Furniture = g.Key, Count = g.Count() })
                 .OrderByDescending(x => x.Count)
                 .Take(limit)

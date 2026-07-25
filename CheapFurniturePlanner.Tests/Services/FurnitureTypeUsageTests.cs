@@ -54,4 +54,43 @@ public class FurnitureTypeUsageTests
         Assert.Equal(FurnitureType.Sofa, entry.Key);
         Assert.Equal(1, entry.Value);
     }
+
+    // Same disease, sibling query: GetPopularFurnitureAsync grouped by the nullable
+    // FurnitureItem nav itself, so unbacked rows formed a null-keyed group that reached the
+    // Home page as a (null, count) tuple and blew up card rendering.
+    [Fact]
+    public async Task PopularFurniture_NeverYieldsNullFurniture()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var _ = connection;
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(connection).Options;
+        await using (var migrateContext = new FurniturePlannerContext(options))
+        {
+            await migrateContext.Database.MigrateAsync();
+            await RoleSeeder.SeedAsync(migrateContext);
+        }
+
+        var factory = new TestDbContextFactory(options);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var plan = new RoomPlan { Name = "Smoke plan", Width = 400, Height = 300 };
+            db.RoomPlans.Add(plan);
+            await db.SaveChangesAsync();
+            db.PlannerFurnitureItems.Add(new PlannerFurnitureItem { RoomPlanId = plan.Id, FurnitureItemId = 1, UIId = 1, X = 0, Y = 0 });
+            db.PlannerFurnitureItems.Add(new PlannerFurnitureItem { RoomPlanId = plan.Id, FurnitureItemId = null, UIId = 2, X = 10, Y = 10 });
+            db.PlannerFurnitureItems.Add(new PlannerFurnitureItem { RoomPlanId = plan.Id, FurnitureItemId = null, UIId = 3, X = 20, Y = 20 });
+            await db.SaveChangesAsync();
+        }
+
+        var repository = new FurniturePlannerRepository(factory);
+        var popular = await repository.GetPopularFurnitureAsync();
+
+        // Two unbacked rows outnumber the single backed one - pre-fix they surfaced as the TOP
+        // entry with a null Furniture. Only the backed item may appear, and never null.
+        var single = Assert.Single(popular);
+        Assert.NotNull(single.Furniture);
+        Assert.Equal(1, single.Furniture.Id);
+        Assert.Equal(1, single.UsageCount);
+    }
 }
