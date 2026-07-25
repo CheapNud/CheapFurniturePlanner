@@ -491,9 +491,11 @@ public class FurniturePlannerRepository
         try
         {
             using var context = _contextFactory.CreateDbContext();
+            // FurnitureItemId is nullable by design (planner items without a catalogue backing);
+            // those rows have no type to count, so they stay out of the usage statistics.
             return await context.PlannerFurnitureItems
-                .Include(p => p.FurnitureItem)
-                .GroupBy(p => p.FurnitureItem.Type)
+                .Where(p => p.FurnitureItemId != null)
+                .GroupBy(p => p.FurnitureItem!.Type)
                 .ToDictionaryAsync(g => g.Key, g => g.Count(), cancellationToken);
         }
         catch (Exception ex)

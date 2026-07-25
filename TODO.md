@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapFurniturePlanner project work tracker
-  Last updated: 2026-07-23
+  Last updated: 2026-07-26
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -41,6 +41,7 @@ _Nothing blocking._
 
 ## Future
 
+- [ ] (2026-07-26) upstream CheapAvaloniaBlazor: the embedded host serves 404 for /cheap-blazor-interop.js (seen in desktop run logs); whatever interop rides that script silently degrades — static asset wiring belongs in the library, not here [bug]
 - [ ] (2026-07-22) upstream CheapHelpers: make CheapAccountController.SignIn virtual (or add a failure-feedback redirect option) so consumers don't need a parallel sign-in action for login feedback [bug]
 - [ ] (2026-07-22) upstream CheapAvaloniaBlazor: the embedded host pipeline runs antiforgery before the consumer pipeline hook (where authentication lands), deviating from the recommended middleware order; harmless today, but an authorized antiforgery-validated form would hit odd 400s — fix belongs in CheapAvaloniaBlazor, not here [audit]
 - [ ] (2026-07-22) upstream CheapAvaloniaBlazor: expose a configurable listen address on the HostBuilder (localhost-only today) — the knob that enables hosting the app on a LAN ("Mode B") [user]
