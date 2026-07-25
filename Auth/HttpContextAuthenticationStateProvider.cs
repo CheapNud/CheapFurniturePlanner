@@ -31,7 +31,7 @@ namespace CheapFurniturePlanner.Auth;
 // Each tick's DB round trip runs inside its own try/catch: a transient DB blip must not fault the
 // loop task and silently end revalidation for the rest of the circuit's life. Failures are logged
 // and the loop just waits for the next tick; only disposal (OperationCanceledException) ends it.
-public sealed class HttpContextAuthenticationStateProvider : AuthenticationStateProvider, IAsyncDisposable
+public sealed class HttpContextAuthenticationStateProvider : AuthenticationStateProvider, IAsyncDisposable, IDisposable
 {
     private const string SecurityStampClaimType = "AspNet.Identity.SecurityStamp";
 
@@ -129,4 +129,11 @@ public sealed class HttpContextAuthenticationStateProvider : AuthenticationState
             await _revalidationLoop;
         }
     }
+
+    // Sync counterpart for scopes that dispose synchronously (the Program.cs startup callback
+    // resolves this provider transitively through ICurrentUser, and a DI scope hard-throws on
+    // IAsyncDisposable-only services). Disposing the timer makes WaitForNextTickAsync return
+    // false, so the revalidation loop drains itself - it is fire-and-forget here by design,
+    // not awaited, since a sync path has no safe way to block on it.
+    public void Dispose() => _timer?.Dispose();
 }
