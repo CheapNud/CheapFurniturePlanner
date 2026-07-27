@@ -18,5 +18,6 @@ public class CreditNote
     public DateTime IssuedAt { get; set; }
     public bool IsSettled { get; set; }
     public DateTime? SettledAt { get; set; }
+    public DateTime? ExportedAt { get; set; }
     public required string CreatedByUserId { get; set; }
 }
