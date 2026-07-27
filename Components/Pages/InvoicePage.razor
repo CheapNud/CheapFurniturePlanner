@@ -7,6 +7,7 @@
 @attribute [Authorize(Roles = Roles.AdminOrOffice)]
 @inject InvoicingService Invoicing
 @inject InvoicePdf Pdf
+@inject UblExport Exporter
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 
@@ -29,6 +30,7 @@
                 <MudButton Variant="Variant.Outlined" Color="Color.Success" OnClick="MarkPaidAsync">Mark paid</MudButton>
             }
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</MudButton>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Code" OnClick="ExportXmlAsync">Export XML</MudButton>
         </MudStack>
 
         <MudPaper Class="pa-4 mb-4">
@@ -102,6 +104,7 @@
                     <MudChip T="string" Size="Size.Small" Color="@(creditNote.IsSettled ? Color.Success : Color.Warning)">@(creditNote.IsSettled ? "Settled" : "Open")</MudChip>
                     <MudSpacer />
                     <MudButton Size="Size.Small" OnClick="@(() => CreditPdfAsync(creditNote.Id))">PDF</MudButton>
+                    <MudButton Size="Size.Small" OnClick="@(() => ExportCreditXmlAsync(creditNote.Id))">Export XML</MudButton>
                     @if (!creditNote.IsSettled)
                     {
                         <MudButton Size="Size.Small" OnClick="@(() => SettleAsync(creditNote.Id))">Mark settled</MudButton>
@@ -155,6 +158,30 @@
         {
             var filePath = await Pdf.GenerateCreditNoteAsync(creditNoteId);
             Snackbar.Add($"Credit note written to {filePath}", Severity.Success);
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task ExportXmlAsync()
+    {
+        try
+        {
+            var filePath = await Exporter.ExportInvoiceAsync(Id);
+            Snackbar.Add($"Exported to {filePath}", Severity.Success);
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task ExportCreditXmlAsync(int creditNoteId)
+    {
+        try
+        {
+            var filePath = await Exporter.ExportCreditNoteAsync(creditNoteId);
+            Snackbar.Add($"Exported to {filePath}", Severity.Success);
+            await ReloadAsync();
         }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
         catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }

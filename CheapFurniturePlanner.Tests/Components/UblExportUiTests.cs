@@ -14,11 +14,10 @@ using CheapFurniturePlanner.Tests.Services;
 
 namespace CheapFurniturePlanner.Tests.Components;
 
-// Task 5: /invoices lists invoices and edits MarketVatRate rows; /invoices/{Id} shows a single
-// invoice, marks it paid, and raises credit notes. Harness mirrors ReceivingPageTests (bUnit +
-// in-memory SQLite, real InvoicingService) plus ServiceTicketPageTests' real InvoicePdf wiring
-// (InvoicePage injects it even though these tests never click the PDF button).
-public class InvoicePagesTests : TestContext
+// Task 3: the "Export XML" buttons on InvoicePage/InvoicesPage. Harness mirrors InvoicePagesTests
+// (bUnit + in-memory SQLite, real InvoicingService + InvoicePdf) plus a real UblExport wired to a
+// temp output root, mirroring UblExportTests.
+public class UblExportUiTests : TestContext
 {
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
     {
@@ -40,7 +39,7 @@ public class InvoicePagesTests : TestContext
     }
 
     // Seeds a Seller/Consumer/placed Order with one line, a BE 21% VAT rate, and issues the
-    // invoice through the real service - mirrors InvoicingServiceTests.SeedPlacedOrderAsync.
+    // invoice through the real service - mirrors InvoicePagesTests.SeedInvoiceAsync.
     private static async Task<Invoice> SeedInvoiceAsync(IDbContextFactory<FurniturePlannerContext> factory, InvoicingService invoicing)
     {
         await using var db = await factory.CreateDbContextAsync();
@@ -66,86 +65,59 @@ public class InvoicePagesTests : TestContext
         return await invoicing.CreateInvoiceAsync(order.Id);
     }
 
-    private void ConfigureServices(IDbContextFactory<FurniturePlannerContext> factory, InvoicingService invoicing)
+    private string ConfigureServices(IDbContextFactory<FurniturePlannerContext> factory, InvoicingService invoicing, ICurrentUser currentUser)
     {
         var pdfRoot = Path.Combine(Path.GetTempPath(), "in1-invoice-page-tests", Guid.NewGuid().ToString("N"));
-        var exportRoot = Path.Combine(Path.GetTempPath(), "in1-invoice-page-tests-export", Guid.NewGuid().ToString("N"));
+        var exportRoot = Path.Combine(Path.GetTempPath(), "ax1-ubl-ui-tests", Guid.NewGuid().ToString("N"));
         Services.AddMudServices();
         Services.AddSingleton(factory);
         Services.AddSingleton(invoicing);
         Services.AddSingleton(sp => new InvoicePdf(factory, new PdfExportService(new PdfTemplateService()), pdfRoot));
-        Services.AddSingleton(sp => new UblExport(factory, new FakeCurrentUser("office-1", Roles.Office), exportRoot));
+        Services.AddSingleton(sp => new UblExport(factory, currentUser, exportRoot));
         JSInterop.Mode = JSRuntimeMode.Loose;
         Render<MudBlazor.MudDialogProvider>();
         Render<MudBlazor.MudPopoverProvider>();
+        return exportRoot;
     }
 
     [Fact]
-    public async Task List_ShowsInvoice_AndVatEditorRoundTrips()
+    public async Task Detail_ExportXml_WritesFile_AndReloadsStamp()
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var office = new FakeCurrentUser("office-1", Roles.Office);
         var invoicing = new InvoicingService(factory, office);
         var invoice = await SeedInvoiceAsync(factory, invoicing);
-        ConfigureServices(factory, invoicing);
-
-        var cut = Render<InvoicesPage>();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.Contains(invoice.InvoiceNumber, cut.Markup);
-            Assert.Contains("Open", cut.Markup);
-            Assert.Contains("BE", cut.Markup);
-            Assert.Contains("21", cut.Markup);
-        });
-
-        var marketField = cut.FindComponents<MudBlazor.MudTextField<string>>().Single(f => f.Instance.Label == "Market");
-        await cut.InvokeAsync(() => marketField.Instance.ValueChanged.InvokeAsync("NL"));
-        var rateField = cut.FindComponents<MudBlazor.MudNumericField<decimal>>().Single(f => f.Instance.Label == "Rate %");
-        await cut.InvokeAsync(() => rateField.Instance.ValueChanged.InvokeAsync(19m));
-        cut.FindAll("button").First(b => b.TextContent.Contains("Save")).Click();
-
-        await cut.WaitForAssertionAsync(async () =>
-        {
-            var rates = await invoicing.VatRatesAsync();
-            Assert.Contains(rates, r => r.MarketCode == "NL" && r.RatePercent == 19m);
-        });
-    }
-
-    [Fact]
-    public async Task Detail_MarkPaid_And_FullCredit()
-    {
-        var (factory, conn) = await NewFactoryAsync();
-        using var _ = conn;
-        var office = new FakeCurrentUser("office-1", Roles.Office);
-        var invoicing = new InvoicingService(factory, office);
-        var invoice = await SeedInvoiceAsync(factory, invoicing);
-        ConfigureServices(factory, invoicing);
+        var exportRoot = ConfigureServices(factory, invoicing, office);
 
         var cut = Render<InvoicePage>(p => p.Add(x => x.Id, invoice.Id));
 
-        cut.WaitForAssertion(() => Assert.Contains("Mark paid", cut.Markup));
-        cut.FindAll("button").First(b => b.TextContent.Contains("Mark paid")).Click();
+        cut.WaitForAssertion(() => Assert.Contains("Export XML", cut.Markup));
+        cut.FindAll("button").First(b => b.TextContent.Contains("Export XML")).Click();
 
         await cut.WaitForAssertionAsync(async () =>
         {
             var reloaded = await invoicing.GetInvoiceAsync(invoice.Id);
-            Assert.True(reloaded!.IsPaid);
+            Assert.NotNull(reloaded!.ExportedAt);
+            Assert.True(File.Exists(Path.Combine(exportRoot, $"{invoice.InvoiceNumber}.xml")));
         });
-        cut.WaitForAssertion(() => Assert.Contains("Paid", cut.Markup));
+    }
 
-        cut.FindAll("button").First(b => b.TextContent.Contains("New credit note")).Click();
-        cut.WaitForAssertion(() => Assert.Contains("Full remaining balance", cut.Markup));
+    [Fact]
+    public async Task List_ExportNew_ShowsExportedChip()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var office = new FakeCurrentUser("office-1", Roles.Office);
+        var invoicing = new InvoicingService(factory, office);
+        await SeedInvoiceAsync(factory, invoicing);
+        ConfigureServices(factory, invoicing, office);
 
-        var createButton = cut.FindAll("button").First(b => b.TextContent.Trim() == "Create");
-        createButton.Click();
+        var cut = Render<InvoicesPage>();
 
-        await cut.WaitForAssertionAsync(async () =>
-        {
-            var reloaded = await invoicing.GetInvoiceAsync(invoice.Id);
-            var creditNote = Assert.Single(reloaded!.CreditNotes);
-            Assert.Equal(reloaded.GrossTotal, creditNote.GrossAmount);
-        });
+        cut.WaitForAssertion(() => Assert.Contains("Export new", cut.Markup));
+        cut.FindAll("button").First(b => b.TextContent.Contains("Export new")).Click();
+
+        cut.WaitForAssertion(() => Assert.Contains("Exported", cut.Markup));
     }
 }
