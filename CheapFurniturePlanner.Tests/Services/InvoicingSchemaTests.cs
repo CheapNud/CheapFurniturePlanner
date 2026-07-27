@@ -76,4 +76,26 @@ public class InvoicingSchemaTests
         db.MarketVatRates.Add(new MarketVatRate { MarketCode = "BE", RatePercent = 6m });
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
+
+    [Fact]
+    public async Task ExportedAt_RoundTrips_AndDefaultsNull()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await using var db = await factory.CreateDbContextAsync();
+        db.Consumers.Add(new Consumer { Name = "Jansen" });
+        db.Sellers.Add(new Seller { Name = "Shop" });
+        await db.SaveChangesAsync();
+        var order = new Order { OrderNumber = "ORD-2026-0001", SellerId = db.Sellers.First().Id, ConsumerId = db.Consumers.First().Id, MarketCode = "BE", State = OrderState.Placed };
+        db.Orders.Add(order);
+        await db.SaveChangesAsync();
+        var invoice = new Invoice { InvoiceNumber = "INV-2026-0001", OrderId = order.Id, IssuedAt = DateTime.UtcNow, DueDate = DateTime.UtcNow, CreatedByUserId = "u1" };
+        db.Invoices.Add(invoice);
+        await db.SaveChangesAsync();
+
+        Assert.Null((await db.Invoices.AsNoTracking().SingleAsync()).ExportedAt);
+        invoice.ExportedAt = new DateTime(2026, 7, 26, 12, 0, 0, DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+        Assert.Equal(new DateTime(2026, 7, 26, 12, 0, 0, DateTimeKind.Utc), (await db.Invoices.AsNoTracking().SingleAsync()).ExportedAt);
+    }
 }

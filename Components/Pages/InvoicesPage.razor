@@ -5,13 +5,18 @@
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize(Roles = Roles.AdminOrOffice)]
 @inject InvoicingService Invoicing
+@inject UblExport Exporter
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 
 <PageTitle>Invoices</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">Invoices</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Invoices</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Code" OnClick="ExportNewAsync">Export new</MudButton>
+    </MudStack>
 
     <MudTable T="Invoice" Items="_invoices" Hover="true" Dense="true" Class="mb-6"
               OnRowClick="@((TableRowClickEventArgs<Invoice> args) => Navigation.NavigateTo($"/invoices/{args.Item!.Id}"))">
@@ -34,6 +39,10 @@
                 @if (context.CreditNotes.Count > 0)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Secondary">Credited</MudChip>
+                }
+                @if (context.ExportedAt is not null)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Exported</MudChip>
                 }
             </MudTd>
         </RowTemplate>
@@ -94,5 +103,17 @@
             await LoadAsync();
         }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task ExportNewAsync()
+    {
+        try
+        {
+            var writtenPaths = await Exporter.ExportNewAsync();
+            Snackbar.Add(writtenPaths.Count == 0 ? "Nothing new to export." : $"Exported {writtenPaths.Count} document(s).", Severity.Success);
+            await LoadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
 }

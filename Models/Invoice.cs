@@ -18,6 +18,7 @@ public class Invoice
     public decimal GrossTotal { get; set; }
     public bool IsPaid { get; set; }
     public DateTime? PaidAt { get; set; }
+    public DateTime? ExportedAt { get; set; }
     public required string CreatedByUserId { get; set; }
     public List<InvoiceLine> Lines { get; set; } = [];
     public List<CreditNote> CreditNotes { get; set; } = [];
