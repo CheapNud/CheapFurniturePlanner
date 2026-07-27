@@ -76,37 +76,54 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
         return writtenPaths;
     }
 
-    private static UblInvoice MapInvoice(Invoice invoice) => new()
+    private static UblInvoice MapInvoice(Invoice invoice)
     {
-        Id = invoice.InvoiceNumber,
-        IssueDate = invoice.IssuedAt,
-        DueDate = invoice.DueDate,
-        Seller = new UblParty { Name = invoice.Order?.Seller?.Name ?? "" },
-        Buyer = new UblParty { Name = invoice.Order?.Consumer?.Name ?? "", TaxId = invoice.Order?.Consumer?.VatNumber },
-        TaxTotal = new UblTaxTotal
+        // Per-line nets are rounded independently, but the header net (invoice.NetTotal) rounds
+        // the sum once - on multi-line invoices those two roundings can land a cent apart. The
+        // invariant that must hold is: line totals must sum to the header net. Fold the
+        // difference into the last line (every invoice has at least one) so the document is
+        // internally consistent.
+        var roundedLineNets = invoice.Lines
+            .Select(line => Math.Round(line.LineTotal * (1 - invoice.OrderDiscountPercent / 100m), 2, MidpointRounding.AwayFromZero))
+            .ToList();
+        var roundingResidue = invoice.NetTotal - roundedLineNets.Sum();
+        if (roundingResidue != 0m)
         {
-            TaxAmount = invoice.VatTotal,
-            TaxSubtotals =
-            [
-                new UblTaxSubtotal
-                {
-                    TaxableAmount = invoice.NetTotal,
-                    TaxAmount = invoice.VatTotal,
-                    TaxCategory = VatCategory(invoice.Lines.FirstOrDefault()?.VatRatePercent ?? 0m),
-                },
-            ],
-        },
-        Totals = new UblMonetaryTotals { LineExtensionAmount = invoice.NetTotal, TaxAmount = invoice.VatTotal, PayableAmount = invoice.GrossTotal },
-        Lines = invoice.Lines.Select((line, index) => new UblInvoiceLine
+            roundedLineNets[^1] += roundingResidue;
+        }
+
+        return new UblInvoice
         {
-            Id = (index + 1).ToString(CultureInfo.InvariantCulture),
-            Item = new UblItem { Name = line.Description },
-            Quantity = line.Quantity,
-            UnitPrice = line.UnitPrice,
-            LineTotal = Math.Round(line.LineTotal * (1 - invoice.OrderDiscountPercent / 100m), 2, MidpointRounding.AwayFromZero),
-            TaxCategory = VatCategory(line.VatRatePercent),
-        }).ToList(),
-    };
+            Id = invoice.InvoiceNumber,
+            IssueDate = invoice.IssuedAt,
+            DueDate = invoice.DueDate,
+            Seller = new UblParty { Name = invoice.Order?.Seller?.Name ?? "" },
+            Buyer = new UblParty { Name = invoice.Order?.Consumer?.Name ?? "", TaxId = invoice.Order?.Consumer?.VatNumber },
+            TaxTotal = new UblTaxTotal
+            {
+                TaxAmount = invoice.VatTotal,
+                TaxSubtotals =
+                [
+                    new UblTaxSubtotal
+                    {
+                        TaxableAmount = invoice.NetTotal,
+                        TaxAmount = invoice.VatTotal,
+                        TaxCategory = VatCategory(invoice.Lines.FirstOrDefault()?.VatRatePercent ?? 0m),
+                    },
+                ],
+            },
+            Totals = new UblMonetaryTotals { LineExtensionAmount = invoice.NetTotal, TaxAmount = invoice.VatTotal, PayableAmount = invoice.GrossTotal },
+            Lines = invoice.Lines.Select((line, index) => new UblInvoiceLine
+            {
+                Id = (index + 1).ToString(CultureInfo.InvariantCulture),
+                Item = new UblItem { Name = line.Description },
+                Quantity = line.Quantity,
+                UnitPrice = line.UnitPrice,
+                LineTotal = roundedLineNets[index],
+                TaxCategory = VatCategory(line.VatRatePercent),
+            }).ToList(),
+        };
+    }
 
     private static UblCreditNote MapCreditNote(CreditNote creditNote, Invoice invoice) => new()
     {

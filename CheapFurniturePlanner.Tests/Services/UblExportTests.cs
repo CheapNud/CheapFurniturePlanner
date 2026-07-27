@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Xml.Linq;
 using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Data;
@@ -187,5 +188,36 @@ public class UblExportTests
         var officeExport = new UblExport(factory, OfficeUser, NewOutputRoot());
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => officeExport.ExportInvoiceAsync(999_999));
         Assert.Contains("not found", ex.Message);
+    }
+
+    // Three lines of 0.67 at 50% order discount: unrounded per-line net is 0.335, and naive
+    // per-line rounding (0.34 x 3 = 1.02) disagrees with the header net, which rounds the summed
+    // 1.005 once (1.01). The header and the lines must agree - see the reconciliation comment in
+    // UblExport.MapInvoice.
+    [Fact]
+    public async Task ExportInvoice_LineTotalsSumToHeaderNet_WhenPerLineRoundingWouldDrift()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await SeedVatAsync(factory, "BE", 0m);
+        var orderId = await SeedPlacedOrderAsync(factory, 50m, "BE",
+            (0.67m, 1, 0.67m, 0m), (0.67m, 1, 0.67m, 0m), (0.67m, 1, 0.67m, 0m));
+        var invoicing = new InvoicingService(factory, OfficeUser);
+        var invoice = await invoicing.CreateInvoiceAsync(orderId);
+        Assert.Equal(1.01m, invoice.NetTotal);
+
+        var export = new UblExport(factory, OfficeUser, NewOutputRoot());
+        var filePath = await export.ExportInvoiceAsync(invoice.Id);
+
+        var document = XDocument.Load(filePath);
+        var headerNet = decimal.Parse(document.Descendants().First(e => e.Name.LocalName == "LegalMonetaryTotal")
+            .Elements().First(e => e.Name.LocalName == "LineExtensionAmount").Value, CultureInfo.InvariantCulture);
+        var lineNetSum = document.Descendants().Where(e => e.Name.LocalName == "InvoiceLine")
+            .Select(line => decimal.Parse(line.Elements().First(e => e.Name.LocalName == "LineExtensionAmount").Value, CultureInfo.InvariantCulture))
+            .Sum();
+
+        Assert.Equal(1.01m, headerNet);
+        Assert.Equal(1.01m, lineNetSum);
+        Assert.Equal(headerNet, lineNetSum);
     }
 }
