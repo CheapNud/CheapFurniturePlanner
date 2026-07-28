@@ -4,6 +4,7 @@
 @using CheapFurniturePlanner.Domain.Catalog
 @using CheapFurniturePlanner.Domain.Serialization
 @inject OrderEntryService OrderEntryService
+@inject PartyService Parties
 @inject ProductionUnitService Units
 @inject InvoicingService Invoicing
 @inject NavigationManager Navigation
@@ -30,6 +31,13 @@ else
                 </MudStack>
             </MudStack>
             <MudText Typo="Typo.body2">Seller: @_order.Seller?.Name — Consumer: @_order.Consumer?.Name — Market: @_order.MarketCode</MudText>
+            <MudSelect T="int?" Label="Delivery address" Value="@SelectedDeliveryAddressBookEntryId" ValueChanged="SetDeliveryAddressAsync"
+                       Disabled="@(_order.State != OrderState.Draft)" Clearable="true">
+                @foreach (var entry in _deliveryAddresses)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)entry.Id)">@($"{entry.Label} — {entry.Address!.ToOneLine()}")</MudSelectItem>
+                }
+            </MudSelect>
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudChip T="string" Size="Size.Small">@(_order.PinnedCatalogueVersion ?? "not pinned yet")</MudChip>
                 <MudText Typo="Typo.subtitle1">Total: @OrderEntryService.OrderTotal(_order).ToString("C2")</MudText>
@@ -134,9 +142,9 @@ else
                 </MudStack>
             </MudTd>
             <MudTd DataLabel="Line total">@context.LineTotal.ToString("C2")</MudTd>
-            <MudTd DataLabel="Supplier ref">@context.SupplierRef</MudTd>
+            <MudTd DataLabel="Supplier ref">@(context.Supplier is null ? "" : $"{context.Supplier.Code} - {context.Supplier.Name}")</MudTd>
             <MudTd DataLabel="Production">
-                @if (_order.State == OrderState.Draft && context.Kind == OrderLineKind.StandaloneArticle && context.SupplierRef is not null)
+                @if (_order.State == OrderState.Draft && context.Kind == OrderLineKind.StandaloneArticle && context.SupplierId is not null)
                 {
                     <MudSwitch T="bool" Value="@context.DeliverToWarehouse" Color="Color.Primary" Label="Via warehouse"
                                ValueChanged="@((bool viaWarehouse) => SetDeliverToWarehouseAsync(context.Id, viaWarehouse))" />
@@ -173,8 +181,14 @@ else
     private ProductionPhase? _phase;
     private List<ProductionUnit> _units = [];
     private Invoice? _invoice;
+    private List<ConsumerDeliveryAddress> _deliveryAddresses = [];
     private MudTabs? _tabs;
     private ElementEntryTab? _elementTab;
+
+    // The book entry whose Address matches the order's current DeliveryAddressId - the select
+    // shows the label/entry, not the raw Address row.
+    private int? SelectedDeliveryAddressBookEntryId =>
+        _deliveryAddresses.FirstOrDefault(d => d.AddressId == _order!.DeliveryAddressId)?.Id;
 
     protected override async Task OnParametersSetAsync() => await ReloadAsync();
 
@@ -184,6 +198,20 @@ else
         _phase = await Units.PhaseForOrderAsync(OrderId);
         _units = await Units.UnitsForOrderAsync(OrderId);
         _invoice = await Invoicing.InvoiceForOrderAsync(OrderId);
+        _deliveryAddresses = _order is null ? [] : await Parties.DeliveryAddressesAsync(_order.ConsumerId);
+    }
+
+    private async Task SetDeliveryAddressAsync(int? bookEntryId)
+    {
+        try
+        {
+            await OrderEntryService.SetDeliveryAddressAsync(OrderId, bookEntryId);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
     }
 
     private async Task CreateInvoiceAsync()

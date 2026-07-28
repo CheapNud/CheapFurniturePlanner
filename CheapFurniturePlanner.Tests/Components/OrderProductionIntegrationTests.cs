@@ -66,7 +66,7 @@ public class OrderProductionIntegrationTests : TestContext
         var source = new DbCatalogueSource(factory);
         var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
         var articles = new ArticleAuthoringService(store, publish);
-        var parties = new PartyService(factory);
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var pinned = new PinnedCatalogueProvider(factory);
         var productionUnits = new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var orders = new OrderEntryService(factory, source, pinned, productionUnits);
@@ -89,7 +89,7 @@ public class OrderProductionIntegrationTests : TestContext
             sp.GetRequiredService<ICatalogueSource>(),
             sp.GetRequiredService<PinnedCatalogueProvider>(),
             sp.GetRequiredService<ProductionUnitService>()));
-        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
+        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
         Services.AddSingleton(sp => new DiscountService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new InvoicingService(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
@@ -137,6 +137,10 @@ public class OrderProductionIntegrationTests : TestContext
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await SeedAsync(factory);
+        // SetDeliverToWarehouseAsync now gates on the resolved Supplier FK, not the legacy ref
+        // string, so the dropship line needs a real Supplier "SUP-X" for AddStandaloneLineAsync
+        // to resolve SupplierId against.
+        await harness.Parties.AddSupplierAsync("SUP-X", "Sup X Wholesale");
         await harness.Articles.AddStandaloneAsync(new Article { AssignedCode = "ART-DROP", Name = "Pouf", ManualPrice = 79m, SupplierRef = "SUP-X", State = TradeItemState.Active });
         await harness.Publish.RepublishAsync();
         var article = (await harness.Store.LoadArticlesAsync()).Single(a => a.AssignedCode == "ART-DROP");

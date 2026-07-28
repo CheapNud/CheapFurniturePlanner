@@ -20,8 +20,8 @@ public sealed class InvoicePdf(IDbContextFactory<FurniturePlannerContext> factor
         await using var db = await factory.CreateDbContextAsync(ct);
         var invoice = await db.Invoices.AsNoTracking()
             .Include(i => i.Lines)
-            .Include(i => i.Order)!.ThenInclude(o => o!.Consumer)
-            .Include(i => i.Order)!.ThenInclude(o => o!.Seller)
+            .Include(i => i.Order)!.ThenInclude(o => o!.Consumer)!.ThenInclude(c => c!.PrimaryAddress)!.ThenInclude(a => a!.Region)
+            .Include(i => i.Order)!.ThenInclude(o => o!.Seller)!.ThenInclude(s => s!.Address)!.ThenInclude(a => a!.Region)
             .FirstOrDefaultAsync(i => i.Id == invoiceId, ct)
             ?? throw new InvalidOperationException($"Invoice {invoiceId} not found.");
 
@@ -35,6 +35,10 @@ public sealed class InvoicePdf(IDbContextFactory<FurniturePlannerContext> factor
         {
             rows.Add(new("Consumer VAT", invoice.Order.Consumer.VatNumber, "", "", ""));
         }
+        var sellerAddress = invoice.Order.Seller?.Address;
+        if (sellerAddress is not null) { rows.Add(new("Seller address", sellerAddress.ToOneLine(), "", "", "")); }
+        var buyerAddress = await BuyerAddressAsync(db, invoice.Order.Consumer, ct);
+        if (buyerAddress is not null) { rows.Add(new("Consumer address", buyerAddress.ToOneLine(), "", "", "")); }
         rows.Add(new("Issued", invoice.IssuedAt.ToString("yyyy-MM-dd"), "", "", ""));
         rows.Add(new("Due", invoice.DueDate.ToString("yyyy-MM-dd"), "", "", ""));
         rows.Add(new("", "", "", "", ""));
@@ -105,4 +109,17 @@ public sealed class InvoicePdf(IDbContextFactory<FurniturePlannerContext> factor
     }
 
     private static string Money(decimal amount) => amount.ToString("0.00", CultureInfo.InvariantCulture);
+
+    // Buyer address = consumer's own address, falling back to their default delivery-book entry.
+    // The invoice query's Include chain only reaches PrimaryAddress, so the book fallback is a
+    // separate lookup, only run when there's no primary address to show.
+    private static async Task<Address?> BuyerAddressAsync(FurniturePlannerContext db, Consumer? consumer, CancellationToken ct)
+    {
+        if (consumer is null) { return null; }
+        if (consumer.PrimaryAddress is not null) { return consumer.PrimaryAddress; }
+        var defaultBookEntry = await db.ConsumerDeliveryAddresses.AsNoTracking()
+            .Include(d => d.Address)!.ThenInclude(a => a!.Region)
+            .FirstOrDefaultAsync(d => d.ConsumerId == consumer.Id && d.IsDefault, ct);
+        return defaultBookEntry?.Address;
+    }
 }

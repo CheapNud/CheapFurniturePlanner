@@ -60,6 +60,10 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
     public DbSet<MarketVatRate> MarketVatRates => Set<MarketVatRate>();
     public DbSet<CreditNote> CreditNotes => Set<CreditNote>();
+    public DbSet<Region> Regions => Set<Region>();
+    public DbSet<Address> Addresses => Set<Address>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<ConsumerDeliveryAddress> ConsumerDeliveryAddresses => Set<ConsumerDeliveryAddress>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -220,6 +224,28 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasIndex(c => c.CreditNoteNumber).IsUnique();
             entity.Property(c => c.Reason).HasConversion<string>();
         });
+
+        modelBuilder.Entity<Region>().HasIndex(r => r.Code).IsUnique();
+        modelBuilder.Entity<Address>(entity =>
+        {
+            entity.HasOne(a => a.Region).WithMany().HasForeignKey(a => a.RegionId).OnDelete(DeleteBehavior.SetNull);
+        });
+        modelBuilder.Entity<Supplier>(entity =>
+        {
+            entity.HasIndex(s => s.Code).IsUnique();
+            entity.HasOne(s => s.Address).WithMany().HasForeignKey(s => s.AddressId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<ConsumerDeliveryAddress>(entity =>
+        {
+            entity.HasIndex(d => d.ConsumerId);
+            entity.HasOne<Consumer>().WithMany().HasForeignKey(d => d.ConsumerId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(d => d.Address).WithMany().HasForeignKey(d => d.AddressId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<Seller>().HasOne(s => s.Address).WithMany().HasForeignKey(s => s.AddressId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Consumer>().HasOne(c => c.PrimaryAddress).WithMany().HasForeignKey(c => c.PrimaryAddressId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Order>().HasOne(o => o.DeliveryAddress).WithMany().HasForeignKey(o => o.DeliveryAddressId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<OrderLine>().HasOne(l => l.Supplier).WithMany().HasForeignKey(l => l.SupplierId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<SupplierReport>().HasOne(r => r.Supplier).WithMany().HasForeignKey(r => r.SupplierId).OnDelete(DeleteBehavior.Restrict);
     }
 
     private static void SeedDefaultData(ModelBuilder modelBuilder)

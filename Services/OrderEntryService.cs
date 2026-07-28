@@ -28,6 +28,10 @@ public sealed class OrderEntryService(
         var year = DateTime.UtcNow.Year;
         var prefix = $"ORD-{year}-";
         var countThisYear = await db.Orders.CountAsync(o => o.OrderNumber.StartsWith(prefix), ct);
+        var defaultDelivery = await db.ConsumerDeliveryAddresses
+            .Where(d => d.ConsumerId == consumerId && d.IsDefault)
+            .Select(d => (int?)d.AddressId)
+            .FirstOrDefaultAsync(ct);
         var order = new Order
         {
             OrderNumber = $"{prefix}{countThisYear + 1:D4}",
@@ -35,6 +39,7 @@ public sealed class OrderEntryService(
             ConsumerId = consumerId,
             MarketCode = marketCode.Trim(),
             CreatedAt = DateTime.UtcNow,
+            DeliveryAddressId = defaultDelivery,
         };
         db.Orders.Add(order);
         await db.SaveChangesAsync(ct);
@@ -46,8 +51,30 @@ public sealed class OrderEntryService(
         await using var db = await factory.CreateDbContextAsync(ct);
         return await db.Orders.AsNoTracking()
             .Include(o => o.Seller).Include(o => o.Consumer)
-            .Include(o => o.Lines.OrderBy(l => l.DisplayIndex))
+            .Include(o => o.Lines.OrderBy(l => l.DisplayIndex)).ThenInclude(l => l.Supplier)
+            .Include(o => o.DeliveryAddress)!.ThenInclude(a => a!.Region)
             .FirstOrDefaultAsync(o => o.Id == orderId, ct);
+    }
+
+    // Draft-only: points the order at one of the consumer's address-book entries (or clears it).
+    // The book entry must belong to THIS order's consumer - the whole point of the book is that a
+    // seller can't accidentally ship to a different party's address.
+    public async Task SetDeliveryAddressAsync(int orderId, int? consumerDeliveryAddressId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var order = await RequireDraftAsync(db, orderId, ct);
+        if (consumerDeliveryAddressId is int bookEntryId)
+        {
+            var bookEntry = await db.ConsumerDeliveryAddresses.FirstOrDefaultAsync(d => d.Id == bookEntryId, ct)
+                ?? throw new InvalidOperationException($"Delivery address {bookEntryId} not found.");
+            if (bookEntry.ConsumerId != order.ConsumerId) { throw new InvalidOperationException("That address belongs to a different consumer."); }
+            order.DeliveryAddressId = bookEntry.AddressId;
+        }
+        else
+        {
+            order.DeliveryAddressId = null;
+        }
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<List<Order>> ListOrdersAsync(CancellationToken ct = default)
@@ -86,7 +113,9 @@ public sealed class OrderEntryService(
             AssignedCode = article.AssignedCode,
             Quantity = quantity,
             UnitPrice = unitPrice,
-            SupplierRef = article.SupplierRef,
+            SupplierId = article.SupplierRef is null
+                ? null
+                : await db.Suppliers.Where(s => s.Code == article.SupplierRef).Select(s => (int?)s.Id).FirstOrDefaultAsync(ct),
         };
         // Standalone lines never carry a catalogue element/price group, so no suggestion applies —
         // fields stay at their defaults (percent 0, manual false); a seller can still override manually.
@@ -278,7 +307,7 @@ public sealed class OrderEntryService(
         var order = await RequireDraftAsync(db, orderId, ct);
         var line = order.Lines.FirstOrDefault(l => l.Id == lineId)
             ?? throw new InvalidOperationException($"Line {lineId} not found on order {order.OrderNumber}.");
-        if (line.Kind != OrderLineKind.StandaloneArticle || line.SupplierRef is null)
+        if (line.Kind != OrderLineKind.StandaloneArticle || line.SupplierId is null)
         {
             throw new InvalidOperationException("Only dropship lines can ship straight to the consumer.");
         }

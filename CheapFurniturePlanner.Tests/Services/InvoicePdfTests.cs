@@ -81,6 +81,35 @@ public class InvoicePdfTests
     }
 
     [Fact]
+    public async Task InvoicePdf_ContainsBuyerAddressLine()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MarketVatRates.Add(new MarketVatRate { MarketCode = "BE", RatePercent = 21m });
+            await db.SaveChangesAsync();
+        }
+        var orderId = await SeedPlacedOrderAsync(factory);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var order = await db.Orders.Include(o => o.Consumer).FirstAsync(o => o.Id == orderId);
+            order.Consumer!.PrimaryAddress = new Address { Street = "Church Road", Number = "12", PostalCode = "9000", City = "Oakwood" };
+            await db.SaveChangesAsync();
+        }
+        var invoicing = new InvoicingService(factory, OfficeUser);
+        var invoice = await invoicing.CreateInvoiceAsync(orderId);
+
+        var pdf = new InvoicePdf(factory, new PdfExportService(new PdfTemplateService()), NewOutputRoot());
+        var filePath = await pdf.GenerateInvoiceAsync(invoice.Id);
+
+        using var readerDoc = new PdfDocument(new PdfReader(filePath));
+        var pageText = PdfTextExtractor.GetTextFromPage(readerDoc.GetFirstPage());
+        Assert.Contains("Church Road", pageText);
+        Assert.Contains("Oakwood", pageText);
+    }
+
+    [Fact]
     public async Task CreditNotePdf_ContainsNumberReasonAndAmount()
     {
         var (factory, conn) = await NewFactoryAsync();

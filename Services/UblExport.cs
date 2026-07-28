@@ -23,13 +23,14 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
         await using var db = await factory.CreateDbContextAsync(ct);
         var invoice = await db.Invoices
             .Include(i => i.Lines)
-            .Include(i => i.Order)!.ThenInclude(o => o!.Seller)
-            .Include(i => i.Order)!.ThenInclude(o => o!.Consumer)
+            .Include(i => i.Order)!.ThenInclude(o => o!.Seller)!.ThenInclude(s => s!.Address)!.ThenInclude(a => a!.Region)
+            .Include(i => i.Order)!.ThenInclude(o => o!.Consumer)!.ThenInclude(c => c!.PrimaryAddress)!.ThenInclude(a => a!.Region)
             .FirstOrDefaultAsync(i => i.Id == invoiceId, ct)
             ?? throw new InvalidOperationException($"Invoice {invoiceId} not found.");
 
+        var buyerAddress = await BuyerAddressAsync(db, invoice.Order?.Consumer, ct);
         var filePath = Path.Combine(outputRoot, $"{invoice.InvoiceNumber}.xml");
-        await _ublService.CreateInvoiceAsync(MapInvoice(invoice), filePath);
+        await _ublService.CreateInvoiceAsync(MapInvoice(invoice, buyerAddress), filePath);
         invoice.ExportedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return filePath;
@@ -43,12 +44,13 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
             ?? throw new InvalidOperationException($"Credit note {creditNoteId} not found.");
         var invoice = await db.Invoices
             .Include(i => i.Lines)
-            .Include(i => i.Order)!.ThenInclude(o => o!.Seller)
-            .Include(i => i.Order)!.ThenInclude(o => o!.Consumer)
+            .Include(i => i.Order)!.ThenInclude(o => o!.Seller)!.ThenInclude(s => s!.Address)!.ThenInclude(a => a!.Region)
+            .Include(i => i.Order)!.ThenInclude(o => o!.Consumer)!.ThenInclude(c => c!.PrimaryAddress)!.ThenInclude(a => a!.Region)
             .FirstAsync(i => i.Id == creditNote.InvoiceId, ct);
 
+        var buyerAddress = await BuyerAddressAsync(db, invoice.Order?.Consumer, ct);
         var filePath = Path.Combine(outputRoot, $"{creditNote.CreditNoteNumber}.xml");
-        await _ublService.CreateCreditNoteAsync(MapCreditNote(creditNote, invoice), filePath);
+        await _ublService.CreateCreditNoteAsync(MapCreditNote(creditNote, invoice, buyerAddress), filePath);
         creditNote.ExportedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return filePath;
@@ -76,7 +78,7 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
         return writtenPaths;
     }
 
-    private static UblInvoice MapInvoice(Invoice invoice)
+    private static UblInvoice MapInvoice(Invoice invoice, Address? buyerAddress)
     {
         // Per-line nets are rounded independently, but the header net (invoice.NetTotal) rounds
         // the sum once - on multi-line invoices those two roundings can land a cent apart. The
@@ -97,8 +99,8 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
             Id = invoice.InvoiceNumber,
             IssueDate = invoice.IssuedAt,
             DueDate = invoice.DueDate,
-            Seller = new UblParty { Name = invoice.Order?.Seller?.Name ?? "" },
-            Buyer = new UblParty { Name = invoice.Order?.Consumer?.Name ?? "", TaxId = invoice.Order?.Consumer?.VatNumber },
+            Seller = new UblParty { Name = invoice.Order?.Seller?.Name ?? "", Address = PartyAddress(invoice.Order?.Seller?.Address) },
+            Buyer = new UblParty { Name = invoice.Order?.Consumer?.Name ?? "", TaxId = invoice.Order?.Consumer?.VatNumber, Address = PartyAddress(buyerAddress) },
             TaxTotal = new UblTaxTotal
             {
                 TaxAmount = invoice.VatTotal,
@@ -125,15 +127,15 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
         };
     }
 
-    private static UblCreditNote MapCreditNote(CreditNote creditNote, Invoice invoice) => new()
+    private static UblCreditNote MapCreditNote(CreditNote creditNote, Invoice invoice, Address? buyerAddress) => new()
     {
         Id = creditNote.CreditNoteNumber,
         IssueDate = creditNote.IssuedAt,
         Note = creditNote.Note,
         CreditReason = creditNote.Reason.ToString(),
         BillingReferences = [invoice.InvoiceNumber],
-        Seller = new UblParty { Name = invoice.Order?.Seller?.Name ?? "" },
-        Buyer = new UblParty { Name = invoice.Order?.Consumer?.Name ?? "", TaxId = invoice.Order?.Consumer?.VatNumber },
+        Seller = new UblParty { Name = invoice.Order?.Seller?.Name ?? "", Address = PartyAddress(invoice.Order?.Seller?.Address) },
+        Buyer = new UblParty { Name = invoice.Order?.Consumer?.Name ?? "", TaxId = invoice.Order?.Consumer?.VatNumber, Address = PartyAddress(buyerAddress) },
         TaxTotal = new UblTaxTotal
         {
             TaxAmount = creditNote.VatAmount,
@@ -163,6 +165,30 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
     };
 
     private static UblTaxCategory VatCategory(decimal ratePercent) => new() { Id = ratePercent == 0m ? "Z" : "S", Percent = ratePercent };
+
+    private static UblAddress? PartyAddress(Address? address) => address is null ? null : new UblAddress
+    {
+        StreetName = address.Street,
+        BuildingNumber = address.Number,
+        PostBox = address.Box,
+        CityName = address.City,
+        PostalZone = address.PostalCode,
+        CountryCode = address.CountryCode,
+        CountrySubentity = address.Region?.Name,
+    };
+
+    // Buyer address = consumer's own address, falling back to their default delivery-book entry -
+    // same rule as InvoicePdf. The invoice query's Include chain only reaches PrimaryAddress, so
+    // the book fallback is a separate lookup, only run when there's no primary address to show.
+    private static async Task<Address?> BuyerAddressAsync(FurniturePlannerContext db, Consumer? consumer, CancellationToken ct)
+    {
+        if (consumer is null) { return null; }
+        if (consumer.PrimaryAddress is not null) { return consumer.PrimaryAddress; }
+        var defaultBookEntry = await db.ConsumerDeliveryAddresses.AsNoTracking()
+            .Include(d => d.Address)!.ThenInclude(a => a!.Region)
+            .FirstOrDefaultAsync(d => d.ConsumerId == consumer.Id && d.IsDefault, ct);
+        return defaultBookEntry?.Address;
+    }
 
     private async Task RequireAdminOrOfficeAsync()
     {

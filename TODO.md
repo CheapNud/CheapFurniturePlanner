@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapFurniturePlanner project work tracker
-  Last updated: 2026-07-27
+  Last updated: 2026-07-28
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -32,6 +32,7 @@ _Nothing blocking._
 
 ## Planned
 
+- [ ] (2026-07-28) supplies phase: drop the retired OrderLines/SupplierReports supplier-ref string columns and delete the startup absorber once every db has migrated through the address release [plan]
 - [ ] (2026-07-05) variant code: validate option/element codes exclude '-' and ':' separators (Domain/Pricing/VariantCode.cs) [audit]
 - [ ] (2026-07-05) pricing: enforce MaterialKind match between fabric color's price group and price group kind (Domain/Pricing/Engine/ResolveStage.cs) [audit]
 - [ ] (2026-07-05) pricing: add subtotal-stage rounding coverage (no market/test currently enables RoundStage.Subtotal) [audit]
@@ -41,6 +42,7 @@ _Nothing blocking._
 
 ## Future
 
+- [ ] (2026-07-28) addresses: filtered unique index on consumer delivery addresses (one default per consumer) as a db backstop; region delete has no end-to-end ui test; the shared blank-address helper is duplicated across the party dialogs; supplier addresses cannot be cleared back to none through the dialog [audit]
 - [ ] (2026-07-27) ubl export: enable strict validation once parties carry endpoint/tax ids; discounted lines will also need allowance-charge support upstream (unit price x quantity vs discounted line total) before the validator passes [plan]
 - [ ] (2026-07-26) upstream CheapAvaloniaBlazor: the embedded host serves 404 for /cheap-blazor-interop.js (seen in desktop run logs); whatever interop rides that script silently degrades — static asset wiring belongs in the library, not here [bug]
 - [ ] (2026-07-22) upstream CheapHelpers: make CheapAccountController.SignIn virtual (or add a failure-feedback redirect option) so consumers don't need a parallel sign-in action for login feedback [bug]

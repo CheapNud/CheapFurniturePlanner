@@ -60,7 +60,12 @@
             </MudRadioGroup>
             @if (_flow == ServiceFlow.External)
             {
-                <MudTextField T="string" @bind-Value="_supplierRef" Label="Supplier reference" />
+                <MudSelect T="int?" Label="Supplier" @bind-Value="_supplierId" Clearable="true">
+                    @foreach (var supplier in _suppliers)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)supplier.Id)">@supplier.Name</MudSelectItem>
+                    }
+                </MudSelect>
             }
 
             <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="OnFilesChanged" Accept=".jpg,.jpeg,.png,.webp">
@@ -86,6 +91,7 @@
     private List<Consumer> _consumers = [];
     private List<Order> _allOrders = [];
     private List<Order> _consumerOrders = [];
+    private List<Supplier> _suppliers = [];
     private List<OrderLine> _orderLines = [];
     private readonly HashSet<int> _selectedLineIds = [];
     private readonly List<IBrowserFile> _pendingPhotos = [];
@@ -94,7 +100,7 @@
     private int _openTicketCount;
     private string _problemDescription = "";
     private string? _visitAddress;
-    private string? _supplierRef;
+    private int? _supplierId;
     private ServiceFlow _flow = ServiceFlow.Undecided;
 
     private const long MaxPhotoBytes = 20 * 1024 * 1024;
@@ -103,12 +109,17 @@
     {
         _consumers = await Parties.ConsumersAsync();
         _allOrders = await Orders.ListOrdersAsync();
+        _suppliers = await Parties.SuppliersAsync();
     }
 
     private async Task OnConsumerChanged(int? consumerId)
     {
         _consumerId = consumerId;
         _consumerOrders = _allOrders.Where(o => o.ConsumerId == consumerId).ToList();
+        if (string.IsNullOrWhiteSpace(_visitAddress) && consumerId is int chosenConsumerId)
+        {
+            _visitAddress = await Tickets.DefaultVisitAddressAsync(chosenConsumerId);
+        }
         await OnOrderChanged(null);
     }
 
@@ -132,11 +143,11 @@
         {
             _selectedLineIds.Add(line.Id);
             // Dropship payoff: a supplier-backed line suggests the external flow and prefills
-            // the reference; the user can still override both.
-            if (line.SupplierRef is not null)
+            // the supplier; the user can still override both.
+            if (line.SupplierId is not null)
             {
                 _flow = ServiceFlow.External;
-                _supplierRef ??= line.SupplierRef;
+                _supplierId ??= line.SupplierId;
             }
         }
         else
@@ -148,7 +159,7 @@
     private static string LineLabel(OrderLine line)
     {
         var identity = line.AssignedCode ?? line.VariantCode ?? "article";
-        return line.SupplierRef is null ? identity : $"{identity} (dropship: {line.SupplierRef})";
+        return line.SupplierId is null ? identity : $"{identity} (dropship: {line.Supplier?.Name ?? "supplier"})";
     }
 
     private void OnFilesChanged(IReadOnlyList<IBrowserFile>? files)
@@ -180,7 +191,7 @@
                 .Where(l => _selectedLineIds.Contains(l.Id))
                 .Select(l => new ServiceLineInput(l.Id, LineLabel(l)))
                 .ToList();
-            var ticket = await Tickets.CreateTicketAsync(consumerId, _orderId, _problemDescription, _visitAddress, _flow, lineInputs, _supplierRef);
+            var ticket = await Tickets.CreateTicketAsync(consumerId, _orderId, _problemDescription, _visitAddress, _flow, lineInputs, _supplierId);
             foreach (var photo in _pendingPhotos)
             {
                 await using var upload = photo.OpenReadStream(MaxPhotoBytes);

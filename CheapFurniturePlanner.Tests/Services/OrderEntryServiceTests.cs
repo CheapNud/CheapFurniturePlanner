@@ -74,7 +74,7 @@ public class OrderEntryServiceTests
         var pinned = new PinnedCatalogueProvider(factory);
         var productionUnits = new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var orders = new OrderEntryService(factory, source, pinned, productionUnits);
-        var parties = new PartyService(factory);
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var seller = await parties.AddSellerAsync("Northwind Reseller", 1.2m);
         var consumer = await parties.AddConsumerAsync("Jane Consumer", "jane@example.com");
         return new Harness(publish, store, articles, parties, orders, seller, consumer);
@@ -121,7 +121,10 @@ public class OrderEntryServiceTests
         var line = Assert.Single(reloaded.Lines);
         Assert.Equal(79m, line.UnitPrice);
         Assert.Equal(158m, line.LineTotal);
-        Assert.Equal("SUP-X", line.SupplierRef);
+        // OrderEntryService no longer writes the legacy free-text ref - only SupplierAbsorber reads
+        // it, and only SupplierId is resolved here (null because no Supplier "SUP-X" exists yet).
+        Assert.Null(line.SupplierRef);
+        Assert.Null(line.SupplierId);
         Assert.Equal("ART-DROP", line.AssignedCode);
         Assert.Equal(OrderLineKind.StandaloneArticle, line.Kind);
     }
@@ -688,5 +691,72 @@ public class OrderEntryServiceTests
         Assert.Equal(OrderState.Cancelled, cancelledFromPlaced!.State);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Orders.CancelAsync(placedOrder.Id));
+    }
+
+    // -- Task 3 (AD-1): delivery addresses + supplier FK resolution --
+
+    [Fact]
+    public async Task CreateOrder_DefaultsDeliveryAddress_FromConsumerDefault()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var bookEntry = await harness.Parties.AddDeliveryAddressAsync(harness.Consumer.Id, "Home",
+            new Address { Street = "Main", Number = "1", PostalCode = "1000", City = "Springfield" });
+        var consumerWithoutBook = await harness.Parties.AddConsumerAsync("No Book", "nobook@example.com");
+
+        var orderWithDefault = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+        var orderWithoutBook = await harness.Orders.CreateOrderAsync(harness.Seller.Id, consumerWithoutBook.Id, "BE");
+
+        Assert.Equal(bookEntry.AddressId, orderWithDefault.DeliveryAddressId);
+        Assert.Null(orderWithoutBook.DeliveryAddressId);
+    }
+
+    [Fact]
+    public async Task SetDeliveryAddress_DraftOnly_MustBelongToConsumer()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var article = await StandaloneArticleAsync(harness);
+        var homeEntry = await harness.Parties.AddDeliveryAddressAsync(harness.Consumer.Id, "Home",
+            new Address { Street = "Main", Number = "1", PostalCode = "1000", City = "Springfield" });
+        var workEntry = await harness.Parties.AddDeliveryAddressAsync(harness.Consumer.Id, "Work",
+            new Address { Street = "Office", Number = "2", PostalCode = "2000", City = "Riverton" });
+        var otherConsumer = await harness.Parties.AddConsumerAsync("Other Consumer", "other@example.com");
+        var otherEntry = await harness.Parties.AddDeliveryAddressAsync(otherConsumer.Id, "Elsewhere",
+            new Address { Street = "Side St", Number = "3", PostalCode = "3000", City = "Milltown" });
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+        await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1);
+
+        await harness.Orders.SetDeliveryAddressAsync(order.Id, workEntry.Id);
+        var reloaded = await harness.Orders.GetOrderAsync(order.Id);
+        Assert.Equal(workEntry.AddressId, reloaded!.DeliveryAddressId);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Orders.SetDeliveryAddressAsync(order.Id, otherEntry.Id));
+
+        await harness.Orders.PlaceAsync(order.Id);
+        await Assert.ThrowsAsync<OrderPlacedException>(() => harness.Orders.SetDeliveryAddressAsync(order.Id, homeEntry.Id));
+    }
+
+    [Fact]
+    public async Task StandaloneLine_ResolvesSupplierId_ByArticleCode()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var supplier = await harness.Parties.AddSupplierAsync("LAMPCO", "Lampco Ltd");
+        await harness.Articles.AddStandaloneAsync(new Article { AssignedCode = "ART-LAMP", Name = "Lamp", ManualPrice = 49m, SupplierRef = "LAMPCO", State = TradeItemState.Active });
+        await harness.Publish.RepublishAsync();
+        var lampArticle = (await harness.Store.LoadArticlesAsync()).Single(a => a.AssignedCode == "ART-LAMP");
+        var unknownRefArticle = await StandaloneArticleAsync(harness); // SupplierRef "SUP-X" - no matching Supplier
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+
+        await harness.Orders.AddStandaloneLineAsync(order.Id, lampArticle.Id, 1);
+        await harness.Orders.AddStandaloneLineAsync(order.Id, unknownRefArticle.Id, 1);
+
+        var lines = (await harness.Orders.GetOrderAsync(order.Id))!.Lines.OrderBy(l => l.DisplayIndex).ToList();
+        Assert.Equal(supplier.Id, lines[0].SupplierId);
+        Assert.Null(lines[1].SupplierId);
     }
 }

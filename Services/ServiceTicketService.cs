@@ -14,7 +14,7 @@ public sealed record ServiceTicketSummary(int Id, string TicketNumber, string Co
 // no matter which page calls in. Reads (GetAsync/ListAsync) are open to any signed-in caller.
 public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerContext> factory, ICurrentUser currentUser)
 {
-    public async Task<ServiceTicket> CreateTicketAsync(int consumerId, int? orderId, string problemDescription, string? visitAddress, ServiceFlow flow, IReadOnlyList<ServiceLineInput> lines, string? supplierRef = null, CancellationToken ct = default)
+    public async Task<ServiceTicket> CreateTicketAsync(int consumerId, int? orderId, string problemDescription, string? visitAddress, ServiceFlow flow, IReadOnlyList<ServiceLineInput> lines, int? supplierId = null, CancellationToken ct = default)
     {
         await RequireAdminOrOfficeAsync();
         if (string.IsNullOrWhiteSpace(problemDescription)) { throw new InvalidOperationException("Problem description is required."); }
@@ -46,7 +46,7 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
         AddLog(db, ticket.Id, userId, $"Ticket {ticket.TicketNumber} created");
         if (flow != ServiceFlow.Undecided)
         {
-            await ApplyFlowAsync(db, ticket, flow, supplierRef, ct);
+            await ApplyFlowAsync(db, ticket, flow, supplierId, ct);
         }
         await db.SaveChangesAsync(ct);
         return ticket;
@@ -65,8 +65,21 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
         return await db.ServiceTickets.AsNoTracking()
             .Include(t => t.Consumer).Include(t => t.Order)
             .Include(t => t.Lines).Include(t => t.Logs.OrderBy(l => l.At)).Include(t => t.Photos)
-            .Include(t => t.InternalRepair).Include(t => t.SupplierReport)
+            .Include(t => t.InternalRepair)
+            .Include(t => t.SupplierReport)!.ThenInclude(r => r!.Supplier)!.ThenInclude(s => s!.Address)
             .FirstOrDefaultAsync(t => t.Id == ticketId, ct);
+    }
+
+    // Consumer's default delivery-address book entry, formatted for the intake page's visit
+    // address prefill; null when the consumer has no book entries yet.
+    public async Task<string?> DefaultVisitAddressAsync(int consumerId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var address = await db.ConsumerDeliveryAddresses.AsNoTracking()
+            .Where(d => d.ConsumerId == consumerId && d.IsDefault)
+            .Select(d => d.Address)
+            .FirstOrDefaultAsync(ct);
+        return address?.ToOneLine();
     }
 
     public async Task<List<ServiceTicketSummary>> ListAsync(string? assignedUserId = null, CancellationToken ct = default)
@@ -229,14 +242,14 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
         throw new InvalidOperationException("Only the assigned mechanic or an admin can edit execution details.");
     }
 
-    public async Task UpdateSupplierReportAsync(int ticketId, string supplierRef, string? supplierCaseNumber, CancellationToken ct = default)
+    public async Task UpdateSupplierReportAsync(int ticketId, int? supplierId, string? supplierCaseNumber, CancellationToken ct = default)
     {
         await RequireAdminOrOfficeAsync();
         await using var db = await factory.CreateDbContextAsync(ct);
         var ticket = await RequireTicketAsync(db, ticketId, ct);
         RequireOpen(ticket);
         var report = ticket.SupplierReport ?? throw new InvalidOperationException($"Ticket {ticket.TicketNumber} has no supplier report flow.");
-        report.SupplierRef = (supplierRef ?? "").Trim();
+        report.SupplierId = supplierId;
         report.SupplierCaseNumber = string.IsNullOrWhiteSpace(supplierCaseNumber) ? null : supplierCaseNumber.Trim();
         await db.SaveChangesAsync(ct);
     }
@@ -248,7 +261,7 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
         var ticket = await RequireTicketAsync(db, ticketId, ct);
         RequireOpen(ticket);
         var report = ticket.SupplierReport ?? throw new InvalidOperationException($"Ticket {ticket.TicketNumber} has no supplier report flow.");
-        if (string.IsNullOrWhiteSpace(report.SupplierRef)) { throw new InvalidOperationException("A supplier reference is required before reporting."); }
+        if (report.SupplierId is null) { throw new InvalidOperationException("Choose a supplier first."); }
 
         report.ReportedAt = DateTime.UtcNow;
         var userId = await RequireUserIdAsync();
@@ -282,7 +295,7 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
 
     // ----- shared internals (Tasks 3-5 add the flow-specific mutations below) -----
 
-    private async Task ApplyFlowAsync(FurniturePlannerContext db, ServiceTicket ticket, ServiceFlow flow, string? supplierRef, CancellationToken ct)
+    private async Task ApplyFlowAsync(FurniturePlannerContext db, ServiceTicket ticket, ServiceFlow flow, int? supplierId, CancellationToken ct)
     {
         ticket.Flow = flow;
         if (flow == ServiceFlow.Internal)
@@ -295,21 +308,21 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
             if (ticket.InternalRepair is not null) { db.InternalRepairs.Remove(ticket.InternalRepair); ticket.InternalRepair = null; }
             if (ticket.SupplierReport is null)
             {
-                // Dropship payoff: default the supplier reference from the first linked order
-                // line that carries one, unless the caller already provided it.
-                if (supplierRef is null)
+                // Dropship payoff: default the supplier from the first linked order line that
+                // carries one, unless the caller already provided it.
+                if (supplierId is null)
                 {
                     var lineIds = ticket.Lines.Where(l => l.OrderLineId != null).Select(l => l.OrderLineId!.Value).ToList();
-                    var refsByOrderLineId = await db.OrderLines
-                        .Where(ol => lineIds.Contains(ol.Id) && ol.SupplierRef != null)
-                        .Select(ol => new { ol.Id, ol.SupplierRef })
-                        .ToDictionaryAsync(x => x.Id, x => x.SupplierRef, ct);
-                    supplierRef = lineIds
-                        .Where(id => refsByOrderLineId.ContainsKey(id))
-                        .Select(id => refsByOrderLineId[id])
+                    var supplierIdsByOrderLineId = await db.OrderLines
+                        .Where(ol => lineIds.Contains(ol.Id) && ol.SupplierId != null)
+                        .Select(ol => new { ol.Id, ol.SupplierId })
+                        .ToDictionaryAsync(x => x.Id, x => x.SupplierId, ct);
+                    supplierId = lineIds
+                        .Where(id => supplierIdsByOrderLineId.ContainsKey(id))
+                        .Select(id => supplierIdsByOrderLineId[id])
                         .FirstOrDefault();
                 }
-                ticket.SupplierReport = new SupplierReport { TicketId = ticket.Id, SupplierRef = supplierRef ?? "" };
+                ticket.SupplierReport = new SupplierReport { TicketId = ticket.Id, SupplierId = supplierId };
             }
         }
     }

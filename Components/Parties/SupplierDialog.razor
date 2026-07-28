@@ -1,0 +1,45 @@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" />
+            <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" />
+            <AddressEditor Value="_address" ValueChanged="@(a => _address = a)" Regions="Regions" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Supplier? Supplier { get; set; }
+
+    [Parameter]
+    public List<Region> Regions { get; set; } = [];
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _code = string.Empty;
+    private string _name = string.Empty;
+    private Address _address = NewBlankAddress();
+
+    protected override void OnInitialized()
+    {
+        if (Supplier is not null)
+        {
+            _code = Supplier.Code;
+            _name = Supplier.Name;
+            _address = Supplier.Address ?? NewBlankAddress();
+        }
+    }
+
+    private static Address NewBlankAddress() => new() { Street = "", Number = "", PostalCode = "", City = "" };
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new Supplier { Code = _code.Trim(), Name = _name.Trim(), Address = _address }));
+}

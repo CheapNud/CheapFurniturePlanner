@@ -1,0 +1,71 @@
+<MudGrid>
+    <MudItem xs="12" sm="7">
+        <MudTextField T="string" Label="Street" Value="_working.Street" ValueChanged="@((string v) => Update(a => a.Street = v))" Required="true" />
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudTextField T="string" Label="Number" Value="_working.Number" ValueChanged="@((string v) => Update(a => a.Number = v))" Required="true" />
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudTextField T="string" Label="Box" Value="@(_working.Box ?? "")" ValueChanged="@((string v) => Update(a => a.Box = v))" />
+    </MudItem>
+    <MudItem xs="6" sm="3">
+        <MudTextField T="string" Label="Postal code" Value="_working.PostalCode" ValueChanged="@((string v) => Update(a => a.PostalCode = v))" Required="true" />
+    </MudItem>
+    <MudItem xs="6" sm="5">
+        <MudTextField T="string" Label="City" Value="_working.City" ValueChanged="@((string v) => Update(a => a.City = v))" Required="true" />
+    </MudItem>
+    <MudItem xs="6" sm="2">
+        <MudTextField T="string" Label="Country" Value="_working.CountryCode" ValueChanged="@((string v) => Update(a => a.CountryCode = v))" />
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudSelect T="int?" Label="Region" Value="_working.RegionId" ValueChanged="@((int? v) => Update(a => a.RegionId = v))" Clearable="true">
+            @foreach (var region in Regions)
+            {
+                <MudSelectItem T="int?" Value="@((int?)region.Id)">@region.Code — @region.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter]
+    public Address Value { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<Address> ValueChanged { get; set; }
+
+    [Parameter]
+    public List<Region> Regions { get; set; } = [];
+
+    // Edits a private clone, never the caller's object directly - a cancelled dialog must not leave
+    // stray mutations on an entity the caller (or EF) still holds a reference to. Re-syncs from Value
+    // only when the incoming reference actually changes; a controlled round trip (caller stores
+    // whatever Update() last emitted) means that never happens mid-edit.
+    private Address _working = NewBlankAddress();
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_working, Value))
+        {
+            _working = new Address
+            {
+                Id = Value.Id,
+                Street = Value.Street,
+                Number = Value.Number,
+                Box = Value.Box,
+                PostalCode = Value.PostalCode,
+                City = Value.City,
+                CountryCode = Value.CountryCode,
+                RegionId = Value.RegionId,
+            };
+        }
+    }
+
+    private Task Update(Action<Address> apply)
+    {
+        apply(_working);
+        return ValueChanged.InvokeAsync(_working);
+    }
+
+    private static Address NewBlankAddress() => new() { Street = "", Number = "", PostalCode = "", City = "" };
+}
