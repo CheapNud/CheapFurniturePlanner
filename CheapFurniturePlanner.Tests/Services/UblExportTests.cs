@@ -99,6 +99,31 @@ public class UblExportTests
     }
 
     [Fact]
+    public async Task UblExport_CarriesBuyerAddress()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await SeedVatAsync(factory, "BE", 21m);
+        var orderId = await SeedPlacedOrderAsync(factory, 0m, "BE", (100m, 1, 100m, 0m));
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var order = await db.Orders.Include(o => o.Consumer).FirstAsync(o => o.Id == orderId);
+            order.Consumer!.PrimaryAddress = new Address { Street = "Kerkstraat", Number = "12", PostalCode = "9000", City = "Gent" };
+            await db.SaveChangesAsync();
+        }
+        var invoicing = new InvoicingService(factory, OfficeUser);
+        var invoice = await invoicing.CreateInvoiceAsync(orderId);
+
+        var export = new UblExport(factory, OfficeUser, NewOutputRoot());
+        var filePath = await export.ExportInvoiceAsync(invoice.Id);
+
+        var document = XDocument.Load(filePath);
+        var customerParty = document.Descendants().First(e => e.Name.LocalName == "AccountingCustomerParty");
+        var postalAddress = customerParty.Descendants().First(e => e.Name.LocalName == "PostalAddress");
+        Assert.Contains("Kerkstraat", postalAddress.ToString());
+    }
+
+    [Fact]
     public async Task ExportCreditNote_ReferencesInvoice_AndStamps()
     {
         var (factory, conn) = await NewFactoryAsync();
