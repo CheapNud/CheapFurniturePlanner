@@ -8,7 +8,7 @@
     <MudText Typo="Typo.h6" Class="mb-2">Supplier report</MudText>
 
     <MudStack Spacing="2">
-        <MudTextField T="string" Label="Supplier reference" @bind-Value="_supplierRef" Disabled="@(!CanManage || !IsOpen)" />
+        <MudNumericField T="int?" Label="Supplier ID" @bind-Value="_supplierId" Disabled="@(!CanManage || !IsOpen)" />
         <MudTextField T="string" Label="Supplier case number" @bind-Value="_supplierCaseNumber" Disabled="@(!CanManage || !IsOpen)" />
         <MudStack Row="true" Spacing="2">
             <MudButton Variant="Variant.Outlined" OnClick="SaveReportAsync" Disabled="@(!CanManage || !IsOpen)">Save</MudButton>
@@ -37,7 +37,7 @@
     [Parameter] public bool CanManage { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
 
-    private string _supplierRef = "";
+    private int? _supplierId;
     private string? _supplierCaseNumber;
     private string _decision = "";
     private string? _decisionNote;
@@ -47,7 +47,7 @@
     protected override void OnParametersSet()
     {
         var report = Ticket.SupplierReport!;
-        _supplierRef = report.SupplierRef;
+        _supplierId = report.SupplierId;
         _supplierCaseNumber = report.SupplierCaseNumber;
         _decision = report.Decision ?? "";
         _decisionNote = report.DecisionNote;
@@ -57,7 +57,7 @@
     {
         try
         {
-            await Tickets.UpdateSupplierReportAsync(Ticket.Id, _supplierRef, _supplierCaseNumber);
+            await Tickets.UpdateSupplierReportAsync(Ticket.Id, _supplierId, _supplierCaseNumber);
             await OnChanged.InvokeAsync();
         }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
@@ -67,10 +67,10 @@
     {
         try
         {
-            await Tickets.UpdateSupplierReportAsync(Ticket.Id, _supplierRef, _supplierCaseNumber);
-            if (string.IsNullOrWhiteSpace(_supplierRef))
+            await Tickets.UpdateSupplierReportAsync(Ticket.Id, _supplierId, _supplierCaseNumber);
+            if (_supplierId is null)
             {
-                Snackbar.Add("A supplier reference is required before reporting.", Severity.Warning);
+                Snackbar.Add("Choose a supplier first.", Severity.Warning);
                 return;
             }
             var filePath = await ReportPdf.GenerateAsync(Ticket.Id);

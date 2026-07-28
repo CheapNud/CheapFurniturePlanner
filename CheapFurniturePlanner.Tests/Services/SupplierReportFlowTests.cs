@@ -33,33 +33,35 @@ public class SupplierReportFlowTests
         return (new TestDbContextFactory(options), connection);
     }
 
-    private static async Task<(int ConsumerId, int OrderId, int DropshipLineId)> SeedDropshipOrderAsync(IDbContextFactory<FurniturePlannerContext> factory)
+    private static async Task<(int ConsumerId, int OrderId, int DropshipLineId, int SupplierId)> SeedDropshipOrderAsync(IDbContextFactory<FurniturePlannerContext> factory)
     {
         await using var db = await factory.CreateDbContextAsync();
         var consumer = new Consumer { Name = "Jansen" };
         var seller = new Seller { Name = "Shop", Multiplier = 1m };
+        var supplier = new Supplier { Code = "LAMPCO-77", Name = "LAMPCO-77" };
         db.Consumers.Add(consumer);
         db.Sellers.Add(seller);
+        db.Suppliers.Add(supplier);
         await db.SaveChangesAsync();
         var order = new Order { OrderNumber = "ORD-2026-0001", SellerId = seller.Id, ConsumerId = consumer.Id, MarketCode = "BE" };
-        order.Lines.Add(new OrderLine { Kind = OrderLineKind.StandaloneArticle, DisplayIndex = 1, Quantity = 1, UnitPrice = 100m, LineTotal = 100m, SupplierRef = "LAMPCO-77" });
+        order.Lines.Add(new OrderLine { Kind = OrderLineKind.StandaloneArticle, DisplayIndex = 1, Quantity = 1, UnitPrice = 100m, LineTotal = 100m, SupplierId = supplier.Id });
         db.Orders.Add(order);
         await db.SaveChangesAsync();
-        return (consumer.Id, order.Id, order.Lines[0].Id);
+        return (consumer.Id, order.Id, order.Lines[0].Id, supplier.Id);
     }
 
     [Fact]
-    public async Task ExternalFlow_PrefillsSupplierRefFromDropshipLine()
+    public async Task ExternalFlow_PrefillsSupplierFromDropshipLine()
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var (consumerId, orderId, lineId) = await SeedDropshipOrderAsync(factory);
+        var (consumerId, orderId, lineId, supplierId) = await SeedDropshipOrderAsync(factory);
         var service = new ServiceTicketService(factory, new FakeCurrentUser("office-1", Roles.Office));
 
         var ticket = await service.CreateTicketAsync(consumerId, orderId, "lamp flickers", null, ServiceFlow.External, [new ServiceLineInput(lineId, "the lamp")]);
 
         var loaded = await service.GetAsync(ticket.Id);
-        Assert.Equal("LAMPCO-77", loaded!.SupplierReport!.SupplierRef);
+        Assert.Equal(supplierId, loaded!.SupplierReport!.SupplierId);
     }
 
     [Fact]
@@ -67,7 +69,7 @@ public class SupplierReportFlowTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var (consumerId, orderId, lineId) = await SeedDropshipOrderAsync(factory);
+        var (consumerId, orderId, lineId, _) = await SeedDropshipOrderAsync(factory);
         var service = new ServiceTicketService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var ticket = await service.CreateTicketAsync(consumerId, orderId, "lamp flickers", null, ServiceFlow.External, [new ServiceLineInput(lineId, "the lamp")]);
 
@@ -80,7 +82,7 @@ public class SupplierReportFlowTests
     }
 
     [Fact]
-    public async Task MarkReported_WithoutSupplierRef_Throws()
+    public async Task MarkReported_WithoutSupplier_Throws()
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
@@ -98,7 +100,7 @@ public class SupplierReportFlowTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var (consumerId, orderId, lineId) = await SeedDropshipOrderAsync(factory);
+        var (consumerId, orderId, lineId, _) = await SeedDropshipOrderAsync(factory);
         var service = new ServiceTicketService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var ticket = await service.CreateTicketAsync(consumerId, orderId, "lamp flickers", null, ServiceFlow.External, [new ServiceLineInput(lineId, "the lamp")]);
         await service.MarkReportedAsync(ticket.Id);
@@ -115,7 +117,7 @@ public class SupplierReportFlowTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var (consumerId, orderId, lineId) = await SeedDropshipOrderAsync(factory);
+        var (consumerId, orderId, lineId, _) = await SeedDropshipOrderAsync(factory);
         var service = new ServiceTicketService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var ticket = await service.CreateTicketAsync(consumerId, orderId, "lamp flickers", "Main St 1", ServiceFlow.External, [new ServiceLineInput(lineId, "the lamp")]);
 
@@ -128,5 +130,40 @@ public class SupplierReportFlowTests
         var pageText = PdfTextExtractor.GetTextFromPage(readerDoc.GetFirstPage());
         Assert.Contains(ticket.TicketNumber, pageText);
         Assert.Contains("LAMPCO-77", pageText);
+    }
+
+    [Fact]
+    public async Task ReportPdf_ContainsSupplierNameAndAddress()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        int consumerId, supplierId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var consumer = new Consumer { Name = "Jansen" };
+            var supplier = new Supplier
+            {
+                Code = "LAMPCO",
+                Name = "Lampco NV",
+                Address = new Address { Street = "Industrielaan", Number = "5", PostalCode = "9000", City = "Gent" },
+            };
+            db.Consumers.Add(consumer);
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            consumerId = consumer.Id;
+            supplierId = supplier.Id;
+        }
+        var service = new ServiceTicketService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var ticket = await service.CreateTicketAsync(consumerId, null, "lamp flickers", null, ServiceFlow.External, []);
+        await service.UpdateSupplierReportAsync(ticket.Id, supplierId, null);
+
+        var outputRoot = Path.Combine(Path.GetTempPath(), "sv1-pdf-tests", Guid.NewGuid().ToString("N"));
+        var pdf = new SupplierReportPdf(factory, new PdfExportService(new PdfTemplateService()), outputRoot);
+        var filePath = await pdf.GenerateAsync(ticket.Id);
+
+        using var readerDoc = new PdfDocument(new PdfReader(filePath));
+        var pageText = PdfTextExtractor.GetTextFromPage(readerDoc.GetFirstPage());
+        Assert.Contains("Lampco NV", pageText);
+        Assert.Contains("Industrielaan", pageText);
     }
 }

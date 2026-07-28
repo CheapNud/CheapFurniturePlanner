@@ -17,7 +17,8 @@ public sealed class SupplierReportPdf(IDbContextFactory<FurniturePlannerContext>
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         var ticket = await db.ServiceTickets.AsNoTracking()
-            .Include(t => t.Consumer).Include(t => t.Lines).Include(t => t.Photos).Include(t => t.SupplierReport)
+            .Include(t => t.Consumer).Include(t => t.Lines).Include(t => t.Photos)
+            .Include(t => t.SupplierReport)!.ThenInclude(r => r!.Supplier)!.ThenInclude(s => s!.Address)
             .FirstOrDefaultAsync(t => t.Id == ticketId, ct)
             ?? throw new InvalidOperationException($"Ticket {ticketId} not found.");
         var report = ticket.SupplierReport ?? throw new InvalidOperationException($"Ticket {ticket.TicketNumber} has no supplier report flow.");
@@ -26,9 +27,10 @@ public sealed class SupplierReportPdf(IDbContextFactory<FurniturePlannerContext>
         [
             new("Ticket", ticket.TicketNumber),
             new("Consumer", ticket.Consumer?.Name ?? ""),
-            new("Supplier reference", report.SupplierRef),
-            new("Problem", ticket.ProblemDescription),
+            new("Supplier", report.Supplier?.Name ?? ""),
         ];
+        if (report.Supplier?.Address is not null) { rows.Add(new("Supplier address", report.Supplier.Address.ToOneLine())); }
+        rows.Add(new("Problem", ticket.ProblemDescription));
         if (!string.IsNullOrWhiteSpace(ticket.VisitAddress)) { rows.Add(new("Address", ticket.VisitAddress)); }
         rows.AddRange(ticket.Lines.Select((line, index) => new ReportRow($"Item {index + 1}", line.Description)));
         rows.AddRange(ticket.Photos.Select((photo, index) => new ReportRow($"Photo {index + 1}", $"{photo.Kind}: {photo.FileName}")));
