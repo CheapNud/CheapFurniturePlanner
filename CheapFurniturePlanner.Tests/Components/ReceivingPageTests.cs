@@ -7,6 +7,7 @@ using CheapFurniturePlanner.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using MudBlazor;
 using MudBlazor.Services;
 using Xunit;
 using CheapFurniturePlanner.Tests.Services;
@@ -116,6 +117,31 @@ public class ReceivingPageTests : TestContext
             var reloaded = await units.UnitsForOrderAsync(orderId);
             Assert.Equal(ProductionUnitState.Arrived, reloaded.Single().State);
         });
+    }
+
+    [Fact]
+    public async Task Render_ReviewNote_ShowsTooltip()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
+        var units = new ProductionUnitService(factory, dock);
+        var (_, unitCodes) = await SeedPlacedOrderWithUnitsAsync(factory, units);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var unit = await db.ProductionUnits.SingleAsync(u => u.UnitCode == unitCodes.Single());
+            unit.ReviewNote = "Damaged in transit";
+            await db.SaveChangesAsync();
+        }
+        ConfigureServices(factory, units, dock);
+
+        var cut = Render<ReceivingPage>();
+
+        // MudTooltip only mounts its popover content on hover, so it never shows up in cut.Markup;
+        // TripPlanningUiTests hits the same wall and asserts through the component instance instead.
+        cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<MudTooltip>()));
+        var tooltip = cut.FindComponent<MudTooltip>();
+        Assert.Contains("Damaged in transit", tooltip.Instance.Text);
     }
 
     [Fact]

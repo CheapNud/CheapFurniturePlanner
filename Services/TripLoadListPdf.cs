@@ -1,4 +1,5 @@
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Models;
 using CheapHelpers.Services.DataExchange.Pdf;
 using CheapHelpers.Services.DataExchange.Pdf.Configuration;
 using CheapHelpers.Services.DataExchange.Pdf.Templates;
@@ -41,7 +42,7 @@ public sealed class TripLoadListPdf(IDbContextFactory<FurniturePlannerContext> f
                 if (ProductionUnitService.PromiseMissed(promised, trip.DepartureDate)) { promiseText += " !"; }
                 return new DocumentRow(
                     unit.LoadPosition?.ToString() ?? "",
-                    unit.UnitCode,
+                    unit.UnitCode + (unit.State == ProductionUnitState.Expected ? " (expected)" : ""),
                     order?.OrderNumber ?? "",
                     order?.Consumer?.Name ?? "",
                     order?.DeliveryAddress?.ToOneLine() ?? "",

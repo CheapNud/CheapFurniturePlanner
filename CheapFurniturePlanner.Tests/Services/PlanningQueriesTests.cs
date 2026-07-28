@@ -56,7 +56,7 @@ public class PlanningQueriesTests
         };
         if (regionId is not null)
         {
-            var address = new Address { Street = "Dockweg", Number = "1", PostalCode = "1000", City = "Brussel", RegionId = regionId };
+            var address = new Address { Street = "Dock Road", Number = "1", PostalCode = "1000", City = "Springfield", RegionId = regionId };
             db.Addresses.Add(address);
             await db.SaveChangesAsync();
             order.DeliveryAddressId = address.Id;
@@ -92,12 +92,18 @@ public class PlanningQueriesTests
             await db.SaveChangesAsync();
         }
 
+        // A still-Expected unit belongs in the pool too now that plan-ahead reachability widened the
+        // filter - spawn it after the Arrived backfill above so it stays Expected.
+        var northExpectedOrderId = await SeedOrderAsync(factory, OrderState.Placed, northRegionId);
+        await units.SpawnForOrderAsync(northExpectedOrderId);
+
         var northOnly = await units.AssignableUnitsAsync(northRegionId);
         var all = await units.AssignableUnitsAsync();
 
-        Assert.Single(northOnly);
-        Assert.Equal(northOrderId, northOnly[0].OrderId);
-        Assert.Equal(2, all.Count);
+        Assert.Equal(2, northOnly.Count);
+        Assert.Contains(northOnly, u => u.OrderId == northOrderId);
+        Assert.Contains(northOnly, u => u.OrderId == northExpectedOrderId && u.State == ProductionUnitState.Expected);
+        Assert.Equal(3, all.Count);
     }
 
     [Fact]

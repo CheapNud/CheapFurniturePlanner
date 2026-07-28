@@ -44,7 +44,7 @@ public class TripLoadListPdfTests
         await using var db = await factory.CreateDbContextAsync();
         var seller = new Seller { Name = "Shop", Multiplier = 1m };
         var consumer = new Consumer { Name = "Jansen" };
-        var address = new Address { Street = street, Number = "1", PostalCode = "1000", City = "Brussel", RegionId = regionId };
+        var address = new Address { Street = street, Number = "1", PostalCode = "1000", City = "Springfield", RegionId = regionId };
         db.Sellers.Add(seller);
         db.Consumers.Add(consumer);
         db.Addresses.Add(address);
@@ -82,8 +82,10 @@ public class TripLoadListPdfTests
         var units = new ProductionUnitService(factory, OfficeUser);
         var orderAId = await SeedOrderAsync(factory, "Missed Street", northRegionId, new DateTime(2026, 8, 15));
         var orderBId = await SeedOrderAsync(factory, "OnTime Street", northRegionId, null);
+        var orderCId = await SeedOrderAsync(factory, "Expected Street", northRegionId, null);
         await units.SpawnForOrderAsync(orderAId);
         await units.SpawnForOrderAsync(orderBId);
+        await units.SpawnForOrderAsync(orderCId);
 
         var trip = await units.CreateTripAsync();
         await units.UpdateTripAsync(trip.Id, new DateTime(2026, 8, 20), "Truck 1", "Driver Dan", northRegionId);
@@ -109,6 +111,11 @@ public class TripLoadListPdfTests
         await units.SetLoadPositionAsync(unitAId, 2);
         await units.SetLoadPositionAsync(unitBId, 1);
 
+        // Unit C is loaded straight from Expected (never arrived) - the provisional load list
+        // should flag it so the dock knows it's not on the shelf yet.
+        var unitCId = (await units.UnitsForOrderAsync(orderCId)).Single().Id;
+        await units.AssignToTripAsync(trip.Id, unitCId);
+
         var outputRoot = Path.Combine(Path.GetTempPath(), "dp1-pdf-tests", Guid.NewGuid().ToString("N"));
         var pdf = new TripLoadListPdf(factory, new PdfExportService(new PdfTemplateService()), outputRoot);
         var filePath = await pdf.GenerateAsync(trip.Id);
@@ -122,6 +129,7 @@ public class TripLoadListPdfTests
         Assert.Contains(unitBCode, pageText);
         Assert.Contains("OnTime Street", pageText);
         Assert.Contains("2026-08-15 !", pageText);
+        Assert.Contains("(expected)", pageText);
         Assert.True(pageText.IndexOf(unitBCode, StringComparison.Ordinal) < pageText.IndexOf(unitACode, StringComparison.Ordinal),
             "position-1 unit should appear before position-2 unit");
     }

@@ -47,7 +47,17 @@
             <MudTd DataLabel="Unit code">@context.UnitCode</MudTd>
             <MudTd DataLabel="Order">@context.Order?.OrderNumber</MudTd>
             <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
-            <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip></MudTd>
+            <MudTd DataLabel="State">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>
+                    @if (context.ReviewNote is not null)
+                    {
+                        <MudTooltip Text="@context.ReviewNote">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                        </MudTooltip>
+                    }
+                </MudStack>
+            </MudTd>
             <MudTd DataLabel="Trip">@context.Trip?.TripCode</MudTd>
             <MudTd>
                 @if (context.State == ProductionUnitState.Expected)

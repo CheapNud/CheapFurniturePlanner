@@ -197,7 +197,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         var unitsQuery = db.ProductionUnits.AsNoTracking()
             .Include(u => u.Order)!.ThenInclude(o => o!.Consumer)
             .Include(u => u.Order)!.ThenInclude(o => o!.DeliveryAddress)!.ThenInclude(a => a!.Region)
-            .Where(u => u.State == ProductionUnitState.Arrived && u.TripId == null)
+            .Where(u => (u.State == ProductionUnitState.Expected || u.State == ProductionUnitState.Arrived) && u.TripId == null)
             .AsQueryable();
         if (regionId is int wantedRegionId)
         {
@@ -252,7 +252,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         await using var db = await factory.CreateDbContextAsync(ct);
         var trip = await db.Trips.Include(t => t.Units).FirstOrDefaultAsync(t => t.Id == tripId, ct)
             ?? throw new InvalidOperationException($"Trip {tripId} not found.");
-        if (trip.State != TripState.Planning) { throw new InvalidOperationException($"Trip {trip.TripCode} has already departed."); }
+        if (trip.State != TripState.Planning) { throw new InvalidOperationException($"Trip {trip.TripCode} is no longer in planning."); }
         if (trip.Units.Count == 0) { throw new InvalidOperationException($"Trip {trip.TripCode} has no units loaded."); }
         var notArrived = trip.Units.Where(u => u.State == ProductionUnitState.Expected).Select(u => u.UnitCode).ToList();
         if (notArrived.Count > 0)
@@ -349,7 +349,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
     {
         var trip = await db.Trips.FirstOrDefaultAsync(t => t.Id == tripId, ct)
             ?? throw new InvalidOperationException($"Trip {tripId} not found.");
-        if (trip.State != TripState.Planning) { throw new InvalidOperationException($"Trip {trip.TripCode} has already departed."); }
+        if (trip.State != TripState.Planning) { throw new InvalidOperationException($"Trip {trip.TripCode} is no longer in planning."); }
         return trip;
     }
 

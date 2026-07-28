@@ -175,12 +175,16 @@ public class TripPlanningUiTests : TestContext
         var units = new ProductionUnitService(factory, dock);
         var (_, unitId, unitCode) = await SeedOrderWithUnitAsync(factory, units, regionId: null);
         var trip = await units.CreateTripAsync();
-        // The unit is still Expected (never arrived) - AssignToTripAsync permits that state, even
-        // though the pool UI (Arrived-only) never offers it; this exercises the Depart guard.
-        await units.AssignToTripAsync(trip.Id, unitId);
         ConfigureServices(factory, dock);
 
         var cut = Render<TripPage>(p => p.Add(x => x.Id, trip.Id));
+
+        // The unit is still Expected (never arrived) - AssignableUnitsAsync now offers Expected
+        // units too, so it shows up in the pool and gets loaded straight from the UI, exercising the
+        // Depart guard end-to-end instead of pre-assigning it through the service.
+        cut.WaitForAssertion(() => Assert.Contains(unitCode, cut.Markup));
+        var loadButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Load");
+        await cut.InvokeAsync(() => loadButton.Click());
 
         cut.WaitForAssertion(() =>
         {
@@ -190,6 +194,9 @@ public class TripPlanningUiTests : TestContext
 
         var tooltip = cut.FindComponent<MudTooltip>();
         Assert.Contains(unitCode, tooltip.Instance.Text);
+
+        var reloadedTrip = await units.GetTripAsync(trip.Id);
+        Assert.Contains(reloadedTrip!.Units, u => u.Id == unitId && u.State == ProductionUnitState.Expected);
     }
 
     [Fact]
