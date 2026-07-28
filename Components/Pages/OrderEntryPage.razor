@@ -136,7 +136,7 @@ else
             <MudTd DataLabel="Line total">@context.LineTotal.ToString("C2")</MudTd>
             <MudTd DataLabel="Supplier ref">@context.SupplierRef</MudTd>
             <MudTd DataLabel="Production">
-                @if (_order.State == OrderState.Draft && context.Kind == OrderLineKind.StandaloneArticle && context.SupplierRef is not null)
+                @if (_order.State == OrderState.Draft && context.Kind == OrderLineKind.StandaloneArticle && context.SupplierId is not null)
                 {
                     <MudSwitch T="bool" Value="@context.DeliverToWarehouse" Color="Color.Primary" Label="Via warehouse"
                                ValueChanged="@((bool viaWarehouse) => SetDeliverToWarehouseAsync(context.Id, viaWarehouse))" />

@@ -111,6 +111,7 @@ class Program
             migrateContext.Database.Migrate();
             RoleSeeder.SeedAsync(migrateContext).GetAwaiter().GetResult();
             scope.ServiceProvider.GetRequiredService<VariantNamingAbsorber>().AbsorbAsync().GetAwaiter().GetResult();
+            scope.ServiceProvider.GetRequiredService<SupplierAbsorber>().AbsorbAsync().GetAwaiter().GetResult();
 
             // Seed the authoring store from the embedded demo catalogue if it hasn't been seeded
             // already - the store is the sole authoring source from here on. This runs regardless
@@ -175,6 +176,7 @@ class Program
         builder.Services.AddScoped<ModelAuthoringService>();
         builder.Services.AddScoped<ArticleAuthoringService>();
         builder.Services.AddScoped<VariantNamingAbsorber>();
+        builder.Services.AddScoped<SupplierAbsorber>();
         builder.Services.AddScoped<ElementAuthoringService>();
         builder.Services.AddScoped<OptionAuthoringService>();
         builder.Services.AddScoped<BomAuthoringService>();

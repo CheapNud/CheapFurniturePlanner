@@ -201,13 +201,17 @@ public class ProductionUnitServiceTests
         var source = new DbCatalogueSource(factory);
         var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
         var articles = new ArticleAuthoringService(store, publish);
+        var parties = new PartyService(factory, OfficeUser);
+        // SetDeliverToWarehouseAsync now gates on the resolved Supplier FK, not the legacy ref
+        // string, so the dropship article needs a real Supplier "SUP-X" for AddStandaloneLineAsync
+        // to resolve SupplierId against.
+        await parties.AddSupplierAsync("SUP-X", "Sup X Wholesale");
         await articles.AddStandaloneAsync(new Article { AssignedCode = "ART-DROP", Name = "Pouf", ManualPrice = 79m, SupplierRef = "SUP-X", State = TradeItemState.Active });
         await publish.RepublishAsync();
 
         var pinned = new PinnedCatalogueProvider(factory);
         var units = new ProductionUnitService(factory, OfficeUser);
         var orders = new OrderEntryService(factory, source, pinned, units);
-        var parties = new PartyService(factory, OfficeUser);
         var seller = await parties.AddSellerAsync("Northwind Reseller", 1.2m);
         var consumer = await parties.AddConsumerAsync("Jane Consumer", "jane@example.com");
         var article = (await store.LoadArticlesAsync()).Single(a => a.AssignedCode == "ART-DROP");

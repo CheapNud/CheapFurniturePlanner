@@ -137,6 +137,10 @@ public class OrderProductionIntegrationTests : TestContext
         var (factory, conn) = NewFactory();
         using var _ = conn;
         var harness = await SeedAsync(factory);
+        // SetDeliverToWarehouseAsync now gates on the resolved Supplier FK, not the legacy ref
+        // string, so the dropship line needs a real Supplier "SUP-X" for AddStandaloneLineAsync
+        // to resolve SupplierId against.
+        await harness.Parties.AddSupplierAsync("SUP-X", "Sup X Wholesale");
         await harness.Articles.AddStandaloneAsync(new Article { AssignedCode = "ART-DROP", Name = "Pouf", ManualPrice = 79m, SupplierRef = "SUP-X", State = TradeItemState.Active });
         await harness.Publish.RepublishAsync();
         var article = (await harness.Store.LoadArticlesAsync()).Single(a => a.AssignedCode == "ART-DROP");
