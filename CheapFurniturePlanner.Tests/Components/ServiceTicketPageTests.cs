@@ -68,6 +68,7 @@ public class ServiceTicketPageTests : TestContext
         Services.AddSingleton(new ServicePhotoStore(photoRoot));
         Services.AddSingleton(new UserAdminService(factory, new PasswordHasher<FurnitureUser>()));
         Services.AddSingleton(sp => new SupplierReportPdf(factory, new PdfExportService(new PdfTemplateService()), pdfRoot));
+        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), who));
         JSInterop.Mode = JSRuntimeMode.Loose;
         Render<MudBlazor.MudDialogProvider>();
         Render<MudBlazor.MudPopoverProvider>();

@@ -51,7 +51,7 @@ public sealed class OrderEntryService(
         await using var db = await factory.CreateDbContextAsync(ct);
         return await db.Orders.AsNoTracking()
             .Include(o => o.Seller).Include(o => o.Consumer)
-            .Include(o => o.Lines.OrderBy(l => l.DisplayIndex))
+            .Include(o => o.Lines.OrderBy(l => l.DisplayIndex)).ThenInclude(l => l.Supplier)
             .Include(o => o.DeliveryAddress)!.ThenInclude(a => a!.Region)
             .FirstOrDefaultAsync(o => o.Id == orderId, ct);
     }

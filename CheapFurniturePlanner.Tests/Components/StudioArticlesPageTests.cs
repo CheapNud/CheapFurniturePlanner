@@ -1,4 +1,5 @@
 using Bunit;
+using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Components.Pages;
 using CheapFurniturePlanner.Data;
@@ -9,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor.Services;
 using Xunit;
+using CheapFurniturePlanner.Tests.Services;
 
 namespace CheapFurniturePlanner.Tests.Components;
 
@@ -58,6 +60,7 @@ public class StudioArticlesPageTests : TestContext
             sp.GetRequiredService<ICatalogueSource>(),
             sp.GetRequiredService<AuthoringCatalogueStore>()));
         Services.AddSingleton(sp => new ArticleAuthoringService(sp.GetRequiredService<AuthoringCatalogueStore>(), sp.GetRequiredService<ModelPublishService>()));
+        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
         JSInterop.Mode = JSRuntimeMode.Loose;
         Render<MudBlazor.MudDialogProvider>();
         Render<MudBlazor.MudPopoverProvider>();

@@ -7,6 +7,7 @@
 
 @inject AuthoringCatalogueStore AuthoringCatalogueStore
 @inject ArticleAuthoringService ArticleAuthoringService
+@inject PartyService Parties
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -37,7 +38,13 @@
                 <MudTd DataLabel="Code">@context.AssignedCode</MudTd>
                 <MudTd DataLabel="Name">@context.Name</MudTd>
                 <MudTd DataLabel="Manual price">@context.ManualPrice</MudTd>
-                <MudTd DataLabel="Supplier">@context.SupplierRef</MudTd>
+                <MudTd DataLabel="Supplier">
+                    @context.SupplierRef
+                    @if (UnknownSupplier(context))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">unknown supplier code</MudChip>
+                    }
+                </MudTd>
                 <MudTd DataLabel="State">
                     <MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>
                 </MudTd>
@@ -80,8 +87,13 @@
 @code {
     private List<Article> _standalone = [];
     private List<Article> _catalogueBacked = [];
+    private List<Supplier> _suppliers = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _suppliers = await Parties.SuppliersAsync();
+        await ReloadAsync();
+    }
 
     private async Task ReloadAsync()
     {
@@ -89,6 +101,9 @@
         _standalone = articles.Where(a => !a.IsCatalogueBacked()).ToList();
         _catalogueBacked = articles.Where(a => a.IsCatalogueBacked()).ToList();
     }
+
+    private bool UnknownSupplier(Article article) =>
+        article.SupplierRef is not null && !_suppliers.Any(s => s.Code == article.SupplierRef);
 
     private static Color StateColor(TradeItemState state) => state switch
     {

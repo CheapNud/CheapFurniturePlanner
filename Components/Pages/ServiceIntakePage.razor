@@ -60,7 +60,12 @@
             </MudRadioGroup>
             @if (_flow == ServiceFlow.External)
             {
-                <MudNumericField T="int?" @bind-Value="_supplierId" Label="Supplier ID" />
+                <MudSelect T="int?" Label="Supplier" @bind-Value="_supplierId" Clearable="true">
+                    @foreach (var supplier in _suppliers)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)supplier.Id)">@supplier.Name</MudSelectItem>
+                    }
+                </MudSelect>
             }
 
             <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="OnFilesChanged" Accept=".jpg,.jpeg,.png,.webp">
@@ -86,6 +91,7 @@
     private List<Consumer> _consumers = [];
     private List<Order> _allOrders = [];
     private List<Order> _consumerOrders = [];
+    private List<Supplier> _suppliers = [];
     private List<OrderLine> _orderLines = [];
     private readonly HashSet<int> _selectedLineIds = [];
     private readonly List<IBrowserFile> _pendingPhotos = [];
@@ -103,12 +109,17 @@
     {
         _consumers = await Parties.ConsumersAsync();
         _allOrders = await Orders.ListOrdersAsync();
+        _suppliers = await Parties.SuppliersAsync();
     }
 
     private async Task OnConsumerChanged(int? consumerId)
     {
         _consumerId = consumerId;
         _consumerOrders = _allOrders.Where(o => o.ConsumerId == consumerId).ToList();
+        if (string.IsNullOrWhiteSpace(_visitAddress) && consumerId is int chosenConsumerId)
+        {
+            _visitAddress = await Tickets.DefaultVisitAddressAsync(chosenConsumerId);
+        }
         await OnOrderChanged(null);
     }
 

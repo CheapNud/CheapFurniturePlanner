@@ -1,6 +1,7 @@
 @using CheapFurniturePlanner.Models
 @using CheapFurniturePlanner.Services
 @inject ServiceTicketService Tickets
+@inject PartyService Parties
 @inject SupplierReportPdf ReportPdf
 @inject ISnackbar Snackbar
 
@@ -8,7 +9,13 @@
     <MudText Typo="Typo.h6" Class="mb-2">Supplier report</MudText>
 
     <MudStack Spacing="2">
-        <MudNumericField T="int?" Label="Supplier ID" @bind-Value="_supplierId" Disabled="@(!CanManage || !IsOpen)" />
+        <MudSelect T="int?" Label="Supplier" @bind-Value="_supplierId" Disabled="@(!CanManage || !IsOpen)">
+            <MudSelectItem T="int?" Value="@((int?)null)">—</MudSelectItem>
+            @foreach (var supplier in _suppliers)
+            {
+                <MudSelectItem T="int?" Value="@((int?)supplier.Id)">@supplier.Name</MudSelectItem>
+            }
+        </MudSelect>
         <MudTextField T="string" Label="Supplier case number" @bind-Value="_supplierCaseNumber" Disabled="@(!CanManage || !IsOpen)" />
         <MudStack Row="true" Spacing="2">
             <MudButton Variant="Variant.Outlined" OnClick="SaveReportAsync" Disabled="@(!CanManage || !IsOpen)">Save</MudButton>
@@ -41,8 +48,11 @@
     private string? _supplierCaseNumber;
     private string _decision = "";
     private string? _decisionNote;
+    private List<Supplier> _suppliers = [];
 
     private bool IsOpen => Ticket.State is ServiceTicketState.New or ServiceTicketState.InProgress;
+
+    protected override async Task OnInitializedAsync() => _suppliers = await Parties.SuppliersAsync();
 
     protected override void OnParametersSet()
     {
