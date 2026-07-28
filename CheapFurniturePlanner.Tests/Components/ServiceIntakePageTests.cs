@@ -55,7 +55,7 @@ public class ServiceIntakePageTests : TestContext
             sp.GetRequiredService<ICatalogueSource>(),
             sp.GetRequiredService<PinnedCatalogueProvider>(),
             sp.GetRequiredService<ProductionUnitService>()));
-        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
+        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), who));
         JSInterop.Mode = JSRuntimeMode.Loose;
         Render<MudBlazor.MudDialogProvider>();
         Render<MudBlazor.MudPopoverProvider>();

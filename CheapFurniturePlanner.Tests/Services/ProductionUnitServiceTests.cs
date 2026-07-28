@@ -207,7 +207,7 @@ public class ProductionUnitServiceTests
         var pinned = new PinnedCatalogueProvider(factory);
         var units = new ProductionUnitService(factory, OfficeUser);
         var orders = new OrderEntryService(factory, source, pinned, units);
-        var parties = new PartyService(factory);
+        var parties = new PartyService(factory, OfficeUser);
         var seller = await parties.AddSellerAsync("Northwind Reseller", 1.2m);
         var consumer = await parties.AddConsumerAsync("Jane Consumer", "jane@example.com");
         var article = (await store.LoadArticlesAsync()).Single(a => a.AssignedCode == "ART-DROP");

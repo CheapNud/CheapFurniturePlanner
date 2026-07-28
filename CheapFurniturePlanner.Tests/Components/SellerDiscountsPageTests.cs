@@ -1,4 +1,5 @@
 using Bunit;
+using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Components.Pages;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Models;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor.Services;
 using Xunit;
+using CheapFurniturePlanner.Tests.Services;
 
 namespace CheapFurniturePlanner.Tests.Components;
 
@@ -38,7 +40,7 @@ public class SellerDiscountsPageTests : TestContext
     {
         Services.AddMudServices();
         Services.AddSingleton(factory);
-        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
+        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
         Services.AddSingleton(sp => new DiscountService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         JSInterop.Mode = JSRuntimeMode.Loose;
         Render<MudBlazor.MudDialogProvider>();
@@ -50,7 +52,7 @@ public class SellerDiscountsPageTests : TestContext
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var parties = new PartyService(factory);
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var seller = await parties.AddSellerAsync("Alpha", 1m);
         var discounts = new DiscountService(factory);
         await discounts.AddRuleAsync(new DiscountRule { SellerId = seller.Id, Scope = DiscountScope.Model, ModelCode = "M1", RatePercent = 10m });
@@ -73,7 +75,7 @@ public class SellerDiscountsPageTests : TestContext
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var parties = new PartyService(factory);
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var seller = await parties.AddSellerAsync("Beta", 1m);
         var discounts = new DiscountService(factory);
         await discounts.AddRuleAsync(new DiscountRule

@@ -40,7 +40,7 @@ public class PartiesPageTests : TestContext
     {
         Services.AddMudServices();
         Services.AddSingleton(factory);
-        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
+        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
         JSInterop.Mode = JSRuntimeMode.Loose;
         Render<MudBlazor.MudDialogProvider>();
         Render<MudBlazor.MudPopoverProvider>();
@@ -67,7 +67,7 @@ public class PartiesPageTests : TestContext
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var parties = new PartyService(factory);
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         await parties.AddSellerAsync("Alpha", 1.1m);
         ConfigureServices(factory);
 
@@ -81,7 +81,7 @@ public class PartiesPageTests : TestContext
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var parties = new PartyService(factory);
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var seller = await parties.AddSellerAsync("Beta", 1m);
         var consumer = await parties.AddConsumerAsync("Gamma", "gamma@example.com");
         var orders = new OrderEntryService(factory, new DbCatalogueSource(factory), new PinnedCatalogueProvider(factory),

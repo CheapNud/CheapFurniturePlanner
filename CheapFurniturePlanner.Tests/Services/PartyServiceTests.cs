@@ -1,3 +1,4 @@
+using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Services;
 using Microsoft.Data.Sqlite;
@@ -33,7 +34,7 @@ public class PartyServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = new PartyService(factory);
+        var service = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
 
         await service.AddSellerAsync("  Alpha  ", 1.2m);
 
@@ -49,7 +50,7 @@ public class PartyServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = new PartyService(factory);
+        var service = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
 
         var consumer = await service.AddConsumerAsync("  Bram  ", "  ");
         Assert.Equal("Bram", consumer.Name);
@@ -68,7 +69,7 @@ public class PartyServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = new PartyService(factory);
+        var service = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var seller = await service.AddSellerAsync("Original", 1m);
 
         await service.UpdateSellerAsync(seller.Id, "Renamed", 2.5m);
@@ -85,7 +86,7 @@ public class PartyServiceTests
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
-        var service = new PartyService(factory);
+        var service = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var seller = await service.AddSellerAsync("Deletable", 1m);
         var consumer = await service.AddConsumerAsync("Deletable", null);
 

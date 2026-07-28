@@ -66,7 +66,7 @@ public class OrderProductionIntegrationTests : TestContext
         var source = new DbCatalogueSource(factory);
         var publish = new ModelPublishService(factory, new CataloguePublishService(factory, source), source, store);
         var articles = new ArticleAuthoringService(store, publish);
-        var parties = new PartyService(factory);
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var pinned = new PinnedCatalogueProvider(factory);
         var productionUnits = new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var orders = new OrderEntryService(factory, source, pinned, productionUnits);
@@ -89,7 +89,7 @@ public class OrderProductionIntegrationTests : TestContext
             sp.GetRequiredService<ICatalogueSource>(),
             sp.GetRequiredService<PinnedCatalogueProvider>(),
             sp.GetRequiredService<ProductionUnitService>()));
-        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
+        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
         Services.AddSingleton(sp => new DiscountService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new InvoicingService(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));

@@ -74,7 +74,7 @@ public class OrderEntryServiceTests
         var pinned = new PinnedCatalogueProvider(factory);
         var productionUnits = new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var orders = new OrderEntryService(factory, source, pinned, productionUnits);
-        var parties = new PartyService(factory);
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var seller = await parties.AddSellerAsync("Northwind Reseller", 1.2m);
         var consumer = await parties.AddConsumerAsync("Jane Consumer", "jane@example.com");
         return new Harness(publish, store, articles, parties, orders, seller, consumer);
