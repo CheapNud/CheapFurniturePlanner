@@ -54,6 +54,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         var openUnits = await db.ProductionUnits
             .Where(u => u.OrderId == orderId && (u.State == ProductionUnitState.Expected || u.State == ProductionUnitState.Arrived))
             .ToListAsync(ct);
+        var affectedTripIds = openUnits.Where(u => u.TripId is not null).Select(u => u.TripId!.Value).Distinct().ToList();
         foreach (var unit in openUnits)
         {
             unit.State = ProductionUnitState.Cancelled;
@@ -61,6 +62,15 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
             unit.LoadPosition = null;
         }
         await db.SaveChangesAsync(ct);
+
+        if (affectedTripIds.Count > 0)
+        {
+            var affectedTrips = await db.Trips.Include(t => t.Units)
+                .Where(t => affectedTripIds.Contains(t.Id) && t.State == TripState.Departed)
+                .ToListAsync(ct);
+            foreach (var trip in affectedTrips) { TryCompleteTrip(trip); }
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     public async Task<List<ProductionUnit>> ListUnitsAsync(string? orderNumberFilter = null, ProductionUnitState? stateFilter = null, CancellationToken ct = default)
@@ -150,7 +160,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         return trip;
     }
 
-    public async Task UpdateTripAsync(int tripId, DateTime? departureDate, string? truckName, string? driverName, CancellationToken ct = default)
+    public async Task UpdateTripAsync(int tripId, DateTime? departureDate, string? truckName, string? driverName, int? regionId, CancellationToken ct = default)
     {
         await RequireWarehouseStaffAsync();
         await using var db = await factory.CreateDbContextAsync(ct);
@@ -158,13 +168,14 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         trip.DepartureDate = departureDate;
         trip.TruckName = string.IsNullOrWhiteSpace(truckName) ? null : truckName.Trim();
         trip.DriverName = string.IsNullOrWhiteSpace(driverName) ? null : driverName.Trim();
+        trip.RegionId = regionId;
         await db.SaveChangesAsync(ct);
     }
 
     public async Task<List<Trip>> ListTripsAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.Trips.AsNoTracking().Include(t => t.Units).OrderByDescending(t => t.TripCode).ToListAsync(ct);
+        return await db.Trips.AsNoTracking().Include(t => t.Units).Include(t => t.Region).OrderByDescending(t => t.TripCode).ToListAsync(ct);
     }
 
     public async Task<Trip?> GetTripAsync(int tripId, CancellationToken ct = default)
@@ -172,6 +183,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         await using var db = await factory.CreateDbContextAsync(ct);
         return await db.Trips.AsNoTracking()
             .Include(t => t.Units.OrderBy(u => u.LoadPosition)).ThenInclude(u => u.Order)!.ThenInclude(o => o!.Consumer)
+            .Include(t => t.Region)
             .FirstOrDefaultAsync(t => t.Id == tripId, ct);
     }
 
@@ -191,7 +203,10 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         await using var db = await factory.CreateDbContextAsync(ct);
         await RequirePlanningTripAsync(db, tripId, ct);
         var unit = await RequireUnitAsync(db, unitId, ct);
-        if (unit.State != ProductionUnitState.Arrived) { throw new InvalidOperationException($"Unit {unit.UnitCode} has not arrived."); }
+        if (unit.State is not (ProductionUnitState.Expected or ProductionUnitState.Arrived))
+        {
+            throw new InvalidOperationException($"Unit {unit.UnitCode} cannot be planned ({unit.State}).");
+        }
         if (unit.TripId is not null) { throw new InvalidOperationException($"Unit {unit.UnitCode} is already on a trip."); }
         unit.TripId = tripId;
         await db.SaveChangesAsync(ct);
@@ -230,13 +245,58 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
             ?? throw new InvalidOperationException($"Trip {tripId} not found.");
         if (trip.State != TripState.Planning) { throw new InvalidOperationException($"Trip {trip.TripCode} has already departed."); }
         if (trip.Units.Count == 0) { throw new InvalidOperationException($"Trip {trip.TripCode} has no units loaded."); }
+        var notArrived = trip.Units.Where(u => u.State == ProductionUnitState.Expected).Select(u => u.UnitCode).ToList();
+        if (notArrived.Count > 0)
+        {
+            throw new InvalidOperationException($"Trip {trip.TripCode} cannot depart - not yet arrived: {string.Join(", ", notArrived)}.");
+        }
         trip.State = TripState.Departed;
         trip.DepartedAt = DateTime.UtcNow;
-        foreach (var unit in trip.Units)
-        {
-            unit.State = ProductionUnitState.Delivered;
-        }
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task ConfirmDeliveredAsync(int unitId, CancellationToken ct = default)
+    {
+        await RequireWarehouseStaffAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var unit = await RequireUnitAsync(db, unitId, ct);
+        var trip = await RequireDepartedTripAsync(db, unit, ct);
+        unit.State = ProductionUnitState.Delivered;
+        TryCompleteTrip(trip);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task ConfirmFailedAsync(int unitId, string reason, CancellationToken ct = default)
+    {
+        await RequireWarehouseStaffAsync();
+        if (string.IsNullOrWhiteSpace(reason)) { throw new InvalidOperationException("A failure reason is required."); }
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var unit = await RequireUnitAsync(db, unitId, ct);
+        var trip = await RequireDepartedTripAsync(db, unit, ct);
+        unit.TripId = null;
+        unit.LoadPosition = null;
+        unit.ReviewNote = reason.Trim();
+        trip.Units.Remove(unit);
+        TryCompleteTrip(trip);
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task<Trip> RequireDepartedTripAsync(FurniturePlannerContext db, ProductionUnit unit, CancellationToken ct)
+    {
+        if (unit.TripId is not int tripId) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not on a trip."); }
+        var trip = await db.Trips.Include(t => t.Units).FirstAsync(t => t.Id == tripId, ct);
+        if (trip.State != TripState.Departed) { throw new InvalidOperationException($"Trip {trip.TripCode} is not out for delivery."); }
+        if (unit.State != ProductionUnitState.Arrived) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not awaiting confirmation."); }
+        return trip;
+    }
+
+    private static void TryCompleteTrip(Trip trip)
+    {
+        if (trip.State == TripState.Departed && trip.Units.All(u => u.State == ProductionUnitState.Delivered))
+        {
+            trip.State = TripState.Completed;
+            trip.CompletedAt = DateTime.UtcNow;
+        }
     }
 
     public async Task DeleteTripAsync(int tripId, CancellationToken ct = default)

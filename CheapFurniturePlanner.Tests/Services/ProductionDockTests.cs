@@ -182,18 +182,31 @@ public class ProductionDockTests
         await using (var db = await factory.CreateDbContextAsync())
         {
             var reloadedUnits = await db.ProductionUnits.Where(u => u.Id == units[0].Id || u.Id == units[1].Id).ToListAsync();
-            Assert.All(reloadedUnits, u => Assert.Equal(ProductionUnitState.Delivered, u.State));
+            Assert.All(reloadedUnits, u => Assert.Equal(ProductionUnitState.Arrived, u.State));
+            Assert.All(reloadedUnits, u => Assert.NotNull(u.TripId));
             var reloadedTrip = await db.Trips.SingleAsync(t => t.Id == trip.Id);
             Assert.Equal(TripState.Departed, reloadedTrip.State);
             Assert.NotNull(reloadedTrip.DepartedAt);
         }
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateTripAsync(trip.Id, null, "Truck 1", "Driver 1"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateTripAsync(trip.Id, null, "Truck 1", "Driver 1", null));
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.AssignToTripAsync(trip.Id, units[0].Id));
+
+        await service.ConfirmDeliveredAsync(units[0].Id);
+        await service.ConfirmDeliveredAsync(units[1].Id);
+
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var reloadedUnits = await db.ProductionUnits.Where(u => u.Id == units[0].Id || u.Id == units[1].Id).ToListAsync();
+            Assert.All(reloadedUnits, u => Assert.Equal(ProductionUnitState.Delivered, u.State));
+            var reloadedTrip = await db.Trips.SingleAsync(t => t.Id == trip.Id);
+            Assert.Equal(TripState.Completed, reloadedTrip.State);
+            Assert.NotNull(reloadedTrip.CompletedAt);
+        }
     }
 
     [Fact]
-    public async Task Assign_RequiresArrivedUnassigned()
+    public async Task Assign_AcceptsExpectedAndArrived_RejectsAssigned()
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
@@ -201,10 +214,12 @@ public class ProductionDockTests
         var units = await SeedSpawnedUnitsAsync(factory, service, 2);
         var trip = await service.CreateTripAsync();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => service.AssignToTripAsync(trip.Id, units[0].Id));
-
-        await service.ArriveAsync(units[0].Id);
+        // Plan-ahead: a still-Expected unit can be loaded before it arrives.
         await service.AssignToTripAsync(trip.Id, units[0].Id);
+
+        await service.ArriveAsync(units[1].Id);
+        await service.AssignToTripAsync(trip.Id, units[1].Id);
+
         var otherTrip = await service.CreateTripAsync();
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.AssignToTripAsync(otherTrip.Id, units[0].Id));
     }
@@ -251,5 +266,218 @@ public class ProductionDockTests
         var tripC = await service.CreateTripAsync();
 
         Assert.Equal($"TRP-{DateTime.UtcNow.Year}-0003", tripC.TripCode);
+    }
+
+    [Fact]
+    public async Task Depart_WithExpectedAboard_Throws_NamingLaggards()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser);
+        var units = await SeedSpawnedUnitsAsync(factory, service, 2);
+        var trip = await service.CreateTripAsync();
+
+        await service.ArriveAsync(units[0].Id);
+        await service.AssignToTripAsync(trip.Id, units[0].Id);
+        await service.AssignToTripAsync(trip.Id, units[1].Id); // still Expected - plan-ahead
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => service.DepartAsync(trip.Id));
+
+        Assert.Contains(units[1].UnitCode, failure.Message);
+        Assert.DoesNotContain(units[0].UnitCode, failure.Message);
+    }
+
+    [Fact]
+    public async Task Depart_SetsDepartedOnly_UnitsStayArrivedInTransit()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser);
+        var units = await SeedSpawnedUnitsAsync(factory, service, 1);
+        var orderId = units[0].OrderId;
+        await service.ArriveAsync(units[0].Id);
+        var trip = await service.CreateTripAsync();
+        await service.AssignToTripAsync(trip.Id, units[0].Id);
+
+        await service.DepartAsync(trip.Id);
+
+        await using var db = await factory.CreateDbContextAsync();
+        var reloaded = await db.ProductionUnits.SingleAsync(u => u.Id == units[0].Id);
+        Assert.Equal(ProductionUnitState.Arrived, reloaded.State);
+        Assert.NotNull(reloaded.TripId);
+        var reloadedTrip = await db.Trips.SingleAsync(t => t.Id == trip.Id);
+        Assert.Equal(TripState.Departed, reloadedTrip.State);
+        Assert.Equal(ProductionPhase.Ready, await service.PhaseForOrderAsync(orderId));
+    }
+
+    [Fact]
+    public async Task ConfirmFailed_RequiresReason_ReleasesWithNote_Replannable()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser);
+        var units = await SeedSpawnedUnitsAsync(factory, service, 1);
+        await service.ArriveAsync(units[0].Id);
+        var trip = await service.CreateTripAsync();
+        await service.AssignToTripAsync(trip.Id, units[0].Id);
+        await service.DepartAsync(trip.Id);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ConfirmFailedAsync(units[0].Id, "   "));
+
+        await service.ConfirmFailedAsync(units[0].Id, "refused at door");
+
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var reloaded = await db.ProductionUnits.SingleAsync(u => u.Id == units[0].Id);
+            Assert.Null(reloaded.TripId);
+            Assert.Null(reloaded.LoadPosition);
+            Assert.Equal(ProductionUnitState.Arrived, reloaded.State);
+            Assert.Equal("refused at door", reloaded.ReviewNote);
+        }
+
+        var newTrip = await service.CreateTripAsync();
+        await service.AssignToTripAsync(newTrip.Id, units[0].Id);
+    }
+
+    [Fact]
+    public async Task AutoComplete_OnLastConfirmation_AndAllFailedCase()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser);
+        var units = await SeedSpawnedUnitsAsync(factory, service, 2);
+        await service.ArriveAsync(units[0].Id);
+        await service.ArriveAsync(units[1].Id);
+        var trip = await service.CreateTripAsync();
+        await service.AssignToTripAsync(trip.Id, units[0].Id);
+        await service.AssignToTripAsync(trip.Id, units[1].Id);
+        await service.DepartAsync(trip.Id);
+
+        await service.ConfirmDeliveredAsync(units[0].Id);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            Assert.Equal(TripState.Departed, (await db.Trips.SingleAsync(t => t.Id == trip.Id)).State);
+        }
+
+        await service.ConfirmFailedAsync(units[1].Id, "damaged in transit");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var reloadedTrip = await db.Trips.SingleAsync(t => t.Id == trip.Id);
+            Assert.Equal(TripState.Completed, reloadedTrip.State);
+            Assert.NotNull(reloadedTrip.CompletedAt);
+        }
+
+        // Separate trip: the only unit fails -> Completed immediately, nothing aboard.
+        var soloUnits = await SeedSpawnedUnitsAsync(factory, service, 1);
+        await service.ArriveAsync(soloUnits[0].Id);
+        var soloTrip = await service.CreateTripAsync();
+        await service.AssignToTripAsync(soloTrip.Id, soloUnits[0].Id);
+        await service.DepartAsync(soloTrip.Id);
+
+        await service.ConfirmFailedAsync(soloUnits[0].Id, "customer refused");
+
+        await using var checkDb = await factory.CreateDbContextAsync();
+        var reloadedSoloTrip = await checkDb.Trips.SingleAsync(t => t.Id == soloTrip.Id);
+        Assert.Equal(TripState.Completed, reloadedSoloTrip.State);
+    }
+
+    [Fact]
+    public async Task Confirm_GuardsDepartedTripAndWarehouseStaff()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser);
+        var units = await SeedSpawnedUnitsAsync(factory, service, 1);
+        await service.ArriveAsync(units[0].Id);
+        var trip = await service.CreateTripAsync();
+        await service.AssignToTripAsync(trip.Id, units[0].Id);
+
+        // Trip still Planning - not out for delivery yet.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ConfirmDeliveredAsync(units[0].Id));
+
+        var mechanicService = new ProductionUnitService(factory, MechanicUser);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => mechanicService.ConfirmDeliveredAsync(units[0].Id));
+    }
+
+    [Fact]
+    public async Task CancelCascade_InTransitUnit_CompletesTheTrip()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser);
+        var unitsA = await SeedSpawnedUnitsAsync(factory, service, 1);
+        var unitsB = await SeedSpawnedUnitsAsync(factory, service, 1);
+        var orderIdA = unitsA[0].OrderId;
+        await service.ArriveAsync(unitsA[0].Id);
+        await service.ArriveAsync(unitsB[0].Id);
+        var trip = await service.CreateTripAsync();
+        await service.AssignToTripAsync(trip.Id, unitsA[0].Id);
+        await service.AssignToTripAsync(trip.Id, unitsB[0].Id);
+        await service.DepartAsync(trip.Id);
+
+        await service.CancelForOrderAsync(orderIdA);
+
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var reloadedA = await db.ProductionUnits.SingleAsync(u => u.Id == unitsA[0].Id);
+            Assert.Equal(ProductionUnitState.Cancelled, reloadedA.State);
+            Assert.Null(reloadedA.TripId);
+            var reloadedTrip = await db.Trips.SingleAsync(t => t.Id == trip.Id);
+            Assert.Equal(TripState.Departed, reloadedTrip.State);
+        }
+
+        await service.ConfirmDeliveredAsync(unitsB[0].Id);
+
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var reloadedTrip = await db.Trips.SingleAsync(t => t.Id == trip.Id);
+            Assert.Equal(TripState.Completed, reloadedTrip.State);
+        }
+
+        // ALSO: a trip whose only unit's order is cancelled - the cascade itself completes it.
+        var soloUnits = await SeedSpawnedUnitsAsync(factory, service, 1);
+        var soloOrderId = soloUnits[0].OrderId;
+        await service.ArriveAsync(soloUnits[0].Id);
+        var soloTrip = await service.CreateTripAsync();
+        await service.AssignToTripAsync(soloTrip.Id, soloUnits[0].Id);
+        await service.DepartAsync(soloTrip.Id);
+
+        await service.CancelForOrderAsync(soloOrderId);
+
+        await using var checkDb = await factory.CreateDbContextAsync();
+        var reloadedSoloTrip = await checkDb.Trips.SingleAsync(t => t.Id == soloTrip.Id);
+        Assert.Equal(TripState.Completed, reloadedSoloTrip.State);
+    }
+
+    [Fact]
+    public async Task UpdateTrip_SetsRegion_PlanningOnly()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser);
+        int regionId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var region = new Region { Code = "NW", Name = "Northwest" };
+            db.Regions.Add(region);
+            await db.SaveChangesAsync();
+            regionId = region.Id;
+        }
+        var trip = await service.CreateTripAsync();
+
+        await service.UpdateTripAsync(trip.Id, null, null, null, regionId);
+
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var reloaded = await db.Trips.SingleAsync(t => t.Id == trip.Id);
+            Assert.Equal(regionId, reloaded.RegionId);
+        }
+
+        var units = await SeedSpawnedUnitsAsync(factory, service, 1);
+        await service.ArriveAsync(units[0].Id);
+        await service.AssignToTripAsync(trip.Id, units[0].Id);
+        await service.DepartAsync(trip.Id);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdateTripAsync(trip.Id, null, null, null, regionId));
     }
 }

@@ -103,6 +103,7 @@
     private DateTime? _departureDate;
     private string? _truckName;
     private string? _driverName;
+    private int? _regionId;
 
     private bool IsPlanning => _trip!.State == TripState.Planning;
 
@@ -116,6 +117,7 @@
             _departureDate = _trip.DepartureDate;
             _truckName = _trip.TruckName;
             _driverName = _trip.DriverName;
+            _regionId = _trip.RegionId;
             _assignable = _trip.State == TripState.Planning ? await Units.AssignableUnitsAsync() : [];
         }
         StateHasChanged();
@@ -127,7 +129,7 @@
 
     private async Task SaveFieldsAsync()
     {
-        try { await Units.UpdateTripAsync(Id, _departureDate, _truckName, _driverName); }
+        try { await Units.UpdateTripAsync(Id, _departureDate, _truckName, _driverName, _regionId); }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
 
@@ -153,7 +155,7 @@
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Depart trip",
-            $"Depart {_trip!.TripCode} with {_trip.Units.Count} unit(s)? Their orders become delivered.",
+            $"Depart {_trip!.TripCode} with {_trip.Units.Count} unit(s)?",
             yesText: "Depart", cancelText: "Back");
         if (confirmed != true) { return; }
         try { await Units.DepartAsync(Id); await ReloadAsync(); }
