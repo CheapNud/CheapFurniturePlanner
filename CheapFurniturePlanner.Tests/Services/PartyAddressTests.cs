@@ -46,9 +46,9 @@ public class PartyAddressTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.AddRegionAsync("NORTH", "Duplicate"));
 
-        await service.UpdateRegionAsync(region.Id, "NORTH", "Noord");
+        await service.UpdateRegionAsync(region.Id, "NORTH", "NORTH");
         var renamed = Assert.Single(await service.RegionsAsync());
-        Assert.Equal("Noord", renamed.Name);
+        Assert.Equal("NORTH", renamed.Name);
 
         var unreferenced = await service.AddRegionAsync("SOUTH", "South");
         await service.DeleteRegionAsync(unreferenced.Id);
@@ -60,7 +60,7 @@ public class PartyAddressTests
             Street = "Main St",
             Number = "1",
             PostalCode = "1000",
-            City = "Brussels",
+            City = "Springfield",
             RegionId = region.Id,
         });
 
@@ -74,7 +74,7 @@ public class PartyAddressTests
         using var _ = conn;
         var service = NewService(factory);
 
-        var supplier = await service.AddSupplierAsync("LAMPCO", "Lampco NV");
+        var supplier = await service.AddSupplierAsync("LAMPCO", "Lampco Ltd");
         Assert.Equal("LAMPCO", supplier.Code);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.AddSupplierAsync("LAMPCO", "Duplicate"));
@@ -121,9 +121,9 @@ public class PartyAddressTests
         var supplier = await service.AddSupplierAsync("SUP1", "Supplier One");
         var consumer = await service.AddConsumerAsync("Consumer1", null);
 
-        await service.SetSellerAddressAsync(seller.Id, new Address { Street = "First St", Number = "1", PostalCode = "1000", City = "Brussels" });
-        await service.SetSupplierAddressAsync(supplier.Id, new Address { Street = "First St", Number = "1", PostalCode = "1000", City = "Brussels" });
-        await service.SetConsumerPrimaryAddressAsync(consumer.Id, new Address { Street = "First St", Number = "1", PostalCode = "1000", City = "Brussels" });
+        await service.SetSellerAddressAsync(seller.Id, new Address { Street = "First St", Number = "1", PostalCode = "1000", City = "Springfield" });
+        await service.SetSupplierAddressAsync(supplier.Id, new Address { Street = "First St", Number = "1", PostalCode = "1000", City = "Springfield" });
+        await service.SetConsumerPrimaryAddressAsync(consumer.Id, new Address { Street = "First St", Number = "1", PostalCode = "1000", City = "Springfield" });
 
         int sellerAddressId, supplierAddressId, consumerAddressId;
         await using (var db = await factory.CreateDbContextAsync())
@@ -134,16 +134,16 @@ public class PartyAddressTests
         }
 
         // Upsert again with new street values - same AddressId, new values.
-        await service.SetSellerAddressAsync(seller.Id, new Address { Street = "Second St", Number = "2", PostalCode = "2000", City = "Ghent" });
-        await service.SetSupplierAddressAsync(supplier.Id, new Address { Street = "Second St", Number = "2", PostalCode = "2000", City = "Ghent" });
-        await service.SetConsumerPrimaryAddressAsync(consumer.Id, new Address { Street = "Second St", Number = "2", PostalCode = "2000", City = "Ghent" });
+        await service.SetSellerAddressAsync(seller.Id, new Address { Street = "Second St", Number = "2", PostalCode = "2000", City = "Harborville" });
+        await service.SetSupplierAddressAsync(supplier.Id, new Address { Street = "Second St", Number = "2", PostalCode = "2000", City = "Harborville" });
+        await service.SetConsumerPrimaryAddressAsync(consumer.Id, new Address { Street = "Second St", Number = "2", PostalCode = "2000", City = "Harborville" });
 
         await using (var db = await factory.CreateDbContextAsync())
         {
             var sellerRow = await db.Sellers.AsNoTracking().Include(s => s.Address).FirstAsync(s => s.Id == seller.Id);
             Assert.Equal(sellerAddressId, sellerRow.AddressId);
             Assert.Equal("Second St", sellerRow.Address!.Street);
-            Assert.Equal("Ghent", sellerRow.Address.City);
+            Assert.Equal("Harborville", sellerRow.Address.City);
 
             var supplierRow = await db.Suppliers.AsNoTracking().Include(s => s.Address).FirstAsync(s => s.Id == supplier.Id);
             Assert.Equal(supplierAddressId, supplierRow.AddressId);
@@ -163,10 +163,10 @@ public class PartyAddressTests
         var service = NewService(factory);
         var consumer = await service.AddConsumerAsync("Consumer1", null);
 
-        var entryA = await service.AddDeliveryAddressAsync(consumer.Id, "Home", new Address { Street = "A St", Number = "1", PostalCode = "1000", City = "Brussels" });
+        var entryA = await service.AddDeliveryAddressAsync(consumer.Id, "Home", new Address { Street = "A St", Number = "1", PostalCode = "1000", City = "Springfield" });
         Assert.True(entryA.IsDefault);
 
-        var entryB = await service.AddDeliveryAddressAsync(consumer.Id, "Work", new Address { Street = "B St", Number = "2", PostalCode = "2000", City = "Ghent" });
+        var entryB = await service.AddDeliveryAddressAsync(consumer.Id, "Work", new Address { Street = "B St", Number = "2", PostalCode = "2000", City = "Harborville" });
         Assert.False(entryB.IsDefault);
 
         await service.SetDefaultDeliveryAddressAsync(entryB.Id);
@@ -210,7 +210,7 @@ public class PartyAddressTests
         var service = NewService(factory);
 
         var seller = await service.AddSellerAsync("Seller1", 1m);
-        await service.SetSellerAddressAsync(seller.Id, new Address { Street = "Main St", Number = "1", PostalCode = "1000", City = "Brussels" });
+        await service.SetSellerAddressAsync(seller.Id, new Address { Street = "Main St", Number = "1", PostalCode = "1000", City = "Springfield" });
 
         var reloaded = Assert.Single(await service.SellersAsync(), s => s.Id == seller.Id);
         Assert.NotNull(reloaded.Address);
@@ -226,11 +226,11 @@ public class PartyAddressTests
         var service = NewService(factory);
 
         var consumer = await service.AddConsumerAsync("Consumer1", null);
-        await service.SetConsumerPrimaryAddressAsync(consumer.Id, new Address { Street = "Kerkstraat", Number = "1", PostalCode = "9000", City = "Gent" });
+        await service.SetConsumerPrimaryAddressAsync(consumer.Id, new Address { Street = "Church Road", Number = "1", PostalCode = "9000", City = "Oakwood" });
 
         var reloaded = Assert.Single(await service.ConsumersAsync(), c => c.Id == consumer.Id);
         Assert.NotNull(reloaded.PrimaryAddress);
-        Assert.Equal("Kerkstraat", reloaded.PrimaryAddress!.Street);
+        Assert.Equal("Church Road", reloaded.PrimaryAddress!.Street);
     }
 
     [Fact]

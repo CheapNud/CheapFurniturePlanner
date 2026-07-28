@@ -112,9 +112,9 @@ public class AddressUiRippleTests : TestContext
         // First entry auto-defaults (mirrors CreateOrderAsync's default-address lookup), so the
         // order starts pointed at "Home" - the test then switches it to "Work" through the UI.
         var home = await harness.Parties.AddDeliveryAddressAsync(harness.Consumer.Id, "Home",
-            new Address { Street = "Kerkstraat", Number = "1", PostalCode = "9000", City = "Gent" });
+            new Address { Street = "Church Road", Number = "1", PostalCode = "9000", City = "Oakwood" });
         var work = await harness.Parties.AddDeliveryAddressAsync(harness.Consumer.Id, "Work",
-            new Address { Street = "Marktplein", Number = "2", PostalCode = "9000", City = "Gent" });
+            new Address { Street = "Market Square", Number = "2", PostalCode = "9000", City = "Oakwood" });
         await harness.Articles.AddStandaloneAsync(new Article { AssignedCode = "ART-DROP", Name = "Pouf", ManualPrice = 79m, State = TradeItemState.Active });
         await harness.Publish.RepublishAsync();
         var article = (await harness.Store.LoadArticlesAsync()).Single(a => a.AssignedCode == "ART-DROP");

@@ -159,7 +159,7 @@
     private static string LineLabel(OrderLine line)
     {
         var identity = line.AssignedCode ?? line.VariantCode ?? "article";
-        return line.SupplierId is null ? identity : $"{identity} (dropship: supplier #{line.SupplierId})";
+        return line.SupplierId is null ? identity : $"{identity} (dropship: {line.Supplier?.Name ?? "supplier"})";
     }
 
     private void OnFilesChanged(IReadOnlyList<IBrowserFile>? files)

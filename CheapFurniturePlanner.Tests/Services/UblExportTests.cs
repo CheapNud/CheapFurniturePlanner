@@ -108,7 +108,7 @@ public class UblExportTests
         await using (var db = await factory.CreateDbContextAsync())
         {
             var order = await db.Orders.Include(o => o.Consumer).FirstAsync(o => o.Id == orderId);
-            order.Consumer!.PrimaryAddress = new Address { Street = "Kerkstraat", Number = "12", PostalCode = "9000", City = "Gent" };
+            order.Consumer!.PrimaryAddress = new Address { Street = "Church Road", Number = "12", PostalCode = "9000", City = "Oakwood" };
             await db.SaveChangesAsync();
         }
         var invoicing = new InvoicingService(factory, OfficeUser);
@@ -120,7 +120,7 @@ public class UblExportTests
         var document = XDocument.Load(filePath);
         var customerParty = document.Descendants().First(e => e.Name.LocalName == "AccountingCustomerParty");
         var postalAddress = customerParty.Descendants().First(e => e.Name.LocalName == "PostalAddress");
-        Assert.Contains("Kerkstraat", postalAddress.ToString());
+        Assert.Contains("Church Road", postalAddress.ToString());
     }
 
     [Fact]

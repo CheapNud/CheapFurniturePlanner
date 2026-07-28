@@ -94,7 +94,7 @@ public class InvoicePdfTests
         await using (var db = await factory.CreateDbContextAsync())
         {
             var order = await db.Orders.Include(o => o.Consumer).FirstAsync(o => o.Id == orderId);
-            order.Consumer!.PrimaryAddress = new Address { Street = "Kerkstraat", Number = "12", PostalCode = "9000", City = "Gent" };
+            order.Consumer!.PrimaryAddress = new Address { Street = "Church Road", Number = "12", PostalCode = "9000", City = "Oakwood" };
             await db.SaveChangesAsync();
         }
         var invoicing = new InvoicingService(factory, OfficeUser);
@@ -105,8 +105,8 @@ public class InvoicePdfTests
 
         using var readerDoc = new PdfDocument(new PdfReader(filePath));
         var pageText = PdfTextExtractor.GetTextFromPage(readerDoc.GetFirstPage());
-        Assert.Contains("Kerkstraat", pageText);
-        Assert.Contains("Gent", pageText);
+        Assert.Contains("Church Road", pageText);
+        Assert.Contains("Oakwood", pageText);
     }
 
     [Fact]

@@ -702,7 +702,7 @@ public class OrderEntryServiceTests
         using var _ = conn;
         var harness = await NewOrderHarnessAsync(factory);
         var bookEntry = await harness.Parties.AddDeliveryAddressAsync(harness.Consumer.Id, "Home",
-            new Address { Street = "Main", Number = "1", PostalCode = "1000", City = "Brussels" });
+            new Address { Street = "Main", Number = "1", PostalCode = "1000", City = "Springfield" });
         var consumerWithoutBook = await harness.Parties.AddConsumerAsync("No Book", "nobook@example.com");
 
         var orderWithDefault = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
@@ -720,12 +720,12 @@ public class OrderEntryServiceTests
         var harness = await NewOrderHarnessAsync(factory);
         var article = await StandaloneArticleAsync(harness);
         var homeEntry = await harness.Parties.AddDeliveryAddressAsync(harness.Consumer.Id, "Home",
-            new Address { Street = "Main", Number = "1", PostalCode = "1000", City = "Brussels" });
+            new Address { Street = "Main", Number = "1", PostalCode = "1000", City = "Springfield" });
         var workEntry = await harness.Parties.AddDeliveryAddressAsync(harness.Consumer.Id, "Work",
-            new Address { Street = "Office", Number = "2", PostalCode = "2000", City = "Antwerp" });
+            new Address { Street = "Office", Number = "2", PostalCode = "2000", City = "Riverton" });
         var otherConsumer = await harness.Parties.AddConsumerAsync("Other Consumer", "other@example.com");
         var otherEntry = await harness.Parties.AddDeliveryAddressAsync(otherConsumer.Id, "Elsewhere",
-            new Address { Street = "Side St", Number = "3", PostalCode = "3000", City = "Leuven" });
+            new Address { Street = "Side St", Number = "3", PostalCode = "3000", City = "Milltown" });
         var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
         await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1);
 

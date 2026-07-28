@@ -89,7 +89,7 @@ public class ProductionUnitServiceTests
         var service = new ProductionUnitService(factory, OfficeUser);
         var orderId = await SeedOrderAsync(factory, OrderState.Placed,
             new OrderLine { DisplayIndex = 0, Kind = OrderLineKind.ConfiguredElement, Quantity = 1, DeliverToWarehouse = true },
-            new OrderLine { DisplayIndex = 1, Kind = OrderLineKind.StandaloneArticle, Quantity = 1, SupplierRef = "SUP-X", DeliverToWarehouse = false });
+            new OrderLine { DisplayIndex = 1, Kind = OrderLineKind.StandaloneArticle, Quantity = 1, DeliverToWarehouse = false });
 
         await service.SpawnForOrderAsync(orderId);
         await service.SpawnForOrderAsync(orderId);

@@ -144,8 +144,8 @@ public class SupplierReportFlowTests
             var supplier = new Supplier
             {
                 Code = "LAMPCO",
-                Name = "Lampco NV",
-                Address = new Address { Street = "Industrielaan", Number = "5", PostalCode = "9000", City = "Gent" },
+                Name = "Lampco Ltd",
+                Address = new Address { Street = "Factory Lane", Number = "5", PostalCode = "9000", City = "Oakwood" },
             };
             db.Consumers.Add(consumer);
             db.Suppliers.Add(supplier);
@@ -163,7 +163,7 @@ public class SupplierReportFlowTests
 
         using var readerDoc = new PdfDocument(new PdfReader(filePath));
         var pageText = PdfTextExtractor.GetTextFromPage(readerDoc.GetFirstPage());
-        Assert.Contains("Lampco NV", pageText);
-        Assert.Contains("Industrielaan", pageText);
+        Assert.Contains("Lampco Ltd", pageText);
+        Assert.Contains("Factory Lane", pageText);
     }
 }

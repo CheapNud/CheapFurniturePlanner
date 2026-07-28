@@ -129,7 +129,7 @@ public class PartiesAddressUiTests : TestContext
 
         // Reference the region from a seller's address so the delete guard fires.
         var seller = await parties.AddSellerAsync("Refs", 1m);
-        await parties.SetSellerAddressAsync(seller.Id, new Address { Street = "Main", Number = "1", PostalCode = "1000", City = "Brussels", RegionId = region.Id });
+        await parties.SetSellerAddressAsync(seller.Id, new Address { Street = "Main", Number = "1", PostalCode = "1000", City = "Springfield", RegionId = region.Id });
 
         // Deleting through the service throws; the tab surfaces this as a Snackbar. Assert the
         // guard at the service boundary (mirrors PartiesPageTests.DeleteSellerWithOrders_ThrowsAtService).
@@ -148,7 +148,7 @@ public class PartiesAddressUiTests : TestContext
         using var _ = conn;
         var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var seller = await parties.AddSellerAsync("Seller1", 1m);
-        await parties.SetSellerAddressAsync(seller.Id, new Address { Street = "Main St", Number = "1", PostalCode = "1000", City = "Brussels" });
+        await parties.SetSellerAddressAsync(seller.Id, new Address { Street = "Main St", Number = "1", PostalCode = "1000", City = "Springfield" });
 
         var dialogProvider = ConfigureServices(factory);
         var cut = Render<PartiesPage>();
@@ -178,8 +178,8 @@ public class PartiesAddressUiTests : TestContext
         using var _ = conn;
         var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var consumer = await parties.AddConsumerAsync("Jansen", null);
-        var first = await parties.AddDeliveryAddressAsync(consumer.Id, "Home", new Address { Street = "Kerkstraat", Number = "1", PostalCode = "9000", City = "Gent" });
-        var second = await parties.AddDeliveryAddressAsync(consumer.Id, "Work", new Address { Street = "Marktplein", Number = "2", PostalCode = "9000", City = "Gent" });
+        var first = await parties.AddDeliveryAddressAsync(consumer.Id, "Home", new Address { Street = "Church Road", Number = "1", PostalCode = "9000", City = "Oakwood" });
+        var second = await parties.AddDeliveryAddressAsync(consumer.Id, "Work", new Address { Street = "Market Square", Number = "2", PostalCode = "9000", City = "Oakwood" });
         Assert.True(first.IsDefault);
         Assert.False(second.IsDefault);
 

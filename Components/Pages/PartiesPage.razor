@@ -259,7 +259,10 @@
         try
         {
             var added = await PartyService.AddSupplierAsync(supplier.Code, supplier.Name);
-            await PartyService.SetSupplierAddressAsync(added.Id, supplier.Address!);
+            if (!string.IsNullOrWhiteSpace(supplier.Address?.Street) || !string.IsNullOrWhiteSpace(supplier.Address?.City))
+            {
+                await PartyService.SetSupplierAddressAsync(added.Id, supplier.Address!);
+            }
         }
         catch (InvalidOperationException ex)
         {
@@ -277,7 +280,10 @@
         try
         {
             await PartyService.UpdateSupplierAsync(existing.Id, supplier.Code, supplier.Name);
-            await PartyService.SetSupplierAddressAsync(existing.Id, supplier.Address!);
+            if (!string.IsNullOrWhiteSpace(supplier.Address?.Street) || !string.IsNullOrWhiteSpace(supplier.Address?.City))
+            {
+                await PartyService.SetSupplierAddressAsync(existing.Id, supplier.Address!);
+            }
         }
         catch (InvalidOperationException ex)
         {

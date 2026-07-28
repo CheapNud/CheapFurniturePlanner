@@ -5,7 +5,7 @@ public enum OrderLineKind { ConfiguredElement, StandaloneArticle }
 // A line snapshots what was ordered and at what price. Configured-element lines carry the full
 // configuration (SelectionsJson + FabricColorCode) plus the bridge result: ArticleId/AssignedCode
 // when the variant was named, otherwise AssignedCode null and VariantCode (the composed code) is
-// the production identity. Standalone lines carry the article's flat ManualPrice and SupplierRef.
+// the production identity. Standalone lines carry the article's flat ManualPrice and SupplierId.
 public class OrderLine
 {
     public int Id { get; set; }
