@@ -183,18 +183,27 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         await using var db = await factory.CreateDbContextAsync(ct);
         return await db.Trips.AsNoTracking()
             .Include(t => t.Units.OrderBy(u => u.LoadPosition)).ThenInclude(u => u.Order)!.ThenInclude(o => o!.Consumer)
+            .Include(t => t.Units.OrderBy(u => u.LoadPosition)).ThenInclude(u => u.Order)!.ThenInclude(o => o!.DeliveryAddress)
             .Include(t => t.Region)
             .FirstOrDefaultAsync(t => t.Id == tripId, ct);
     }
 
-    public async Task<List<ProductionUnit>> AssignableUnitsAsync(CancellationToken ct = default)
+    // regionId null means "every region" (the soft filter the dock uses before a trip has one
+    // assigned); set, it keeps only units whose order ships to that region - no address means
+    // never assignable to a region-scoped trip.
+    public async Task<List<ProductionUnit>> AssignableUnitsAsync(int? regionId = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.ProductionUnits.AsNoTracking()
+        var unitsQuery = db.ProductionUnits.AsNoTracking()
             .Include(u => u.Order)!.ThenInclude(o => o!.Consumer)
+            .Include(u => u.Order)!.ThenInclude(o => o!.DeliveryAddress)!.ThenInclude(a => a!.Region)
             .Where(u => u.State == ProductionUnitState.Arrived && u.TripId == null)
-            .OrderBy(u => u.UnitCode)
-            .ToListAsync(ct);
+            .AsQueryable();
+        if (regionId is int wantedRegionId)
+        {
+            unitsQuery = unitsQuery.Where(u => u.Order!.DeliveryAddress != null && u.Order.DeliveryAddress.RegionId == wantedRegionId);
+        }
+        return await unitsQuery.OrderBy(u => u.UnitCode).ToListAsync(ct);
     }
 
     public async Task AssignToTripAsync(int tripId, int unitId, CancellationToken ct = default)
@@ -319,6 +328,12 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         if (active.Any(u => u.State == ProductionUnitState.Expected)) { return ProductionPhase.InProduction; }
         return active.All(u => u.State == ProductionUnitState.Delivered) ? ProductionPhase.Delivered : ProductionPhase.Ready;
     }
+
+    // A trip's departure date only counts as missing the promise once it's actually later than the
+    // day the consumer was promised - same-day departure is on time, and an unset promise or
+    // departure date is nothing to warn about yet.
+    public static bool PromiseMissed(DateTime? promised, DateTime? departure) =>
+        promised is not null && departure is not null && departure.Value.Date > promised.Value.Date;
 
     private static void Arrive(ProductionUnit unit)
     {
