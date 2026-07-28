@@ -1,0 +1,26 @@
+<MudDialog>
+    <DialogContent>
+        <AddressEditor Value="_address" ValueChanged="@(a => _address = a)" Regions="Regions" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Address Address { get; set; } = default!;
+
+    [Parameter]
+    public List<Region> Regions { get; set; } = [];
+
+    private Address _address = default!;
+
+    protected override void OnInitialized() => _address = Address;
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(_address));
+}

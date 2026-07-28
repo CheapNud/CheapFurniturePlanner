@@ -1,66 +1,125 @@
 @page "/parties"
 @attribute [Authorize(Roles = Roles.AdminOrOffice)]
 @using CheapFurniturePlanner.Components.Orders
+@using CheapFurniturePlanner.Components.Parties
 @inject PartyService PartyService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <PageTitle>Parties - Cheap Furniture Planner</PageTitle>
 
-<MudStack Spacing="6">
-    <MudStack Spacing="3">
-        <MudText Typo="Typo.h6">Sellers</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddSellerAsync())">
-            Add seller
-        </MudButton>
-        <MudTable Items="@_sellers" Hover="true" Striped="true" Dense="true" Elevation="2" T="Seller">
-            <HeaderContent>
-                <MudTh>Name</MudTh>
-                <MudTh>Multiplier</MudTh>
-                <MudTh>Actions</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Name">@context.Name</MudTd>
-                <MudTd DataLabel="Multiplier">@context.Multiplier</MudTd>
-                <MudTd DataLabel="Actions">
-                    <MudStack Row="true" Spacing="1">
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAsync(context))">Edit</MudButton>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSellerAsync(context))">Delete</MudButton>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Href="@($"/parties/{context.Id}/discounts")">Discounts</MudButton>
-                    </MudStack>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-    </MudStack>
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+    <MudTabPanel Text="Sellers">
+        <MudStack Spacing="3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddSellerAsync())">
+                Add seller
+            </MudButton>
+            <MudTable Items="@_sellers" Hover="true" Striped="true" Dense="true" Elevation="2" T="Seller">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Multiplier</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Multiplier">@context.Multiplier</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true" Spacing="1">
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAsync(context))">Edit</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAddressAsync(context))">Address</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSellerAsync(context))">Delete</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Href="@($"/parties/{context.Id}/discounts")">Discounts</MudButton>
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudStack>
+    </MudTabPanel>
 
-    <MudStack Spacing="3">
-        <MudText Typo="Typo.h6">Consumers</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddConsumerAsync())">
-            Add consumer
-        </MudButton>
-        <MudTable Items="@_consumers" Hover="true" Striped="true" Dense="true" Elevation="2" T="Consumer">
-            <HeaderContent>
-                <MudTh>Name</MudTh>
-                <MudTh>Contact</MudTh>
-                <MudTh>Actions</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Name">@context.Name</MudTd>
-                <MudTd DataLabel="Contact">@context.Contact</MudTd>
-                <MudTd DataLabel="Actions">
-                    <MudStack Row="true" Spacing="1">
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditConsumerAsync(context))">Edit</MudButton>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteConsumerAsync(context))">Delete</MudButton>
-                    </MudStack>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
-    </MudStack>
-</MudStack>
+    <MudTabPanel Text="Consumers">
+        <MudStack Spacing="3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddConsumerAsync())">
+                Add consumer
+            </MudButton>
+            <MudTable Items="@_consumers" Hover="true" Striped="true" Dense="true" Elevation="2" T="Consumer">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Contact</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Contact">@context.Contact</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true" Spacing="1">
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditConsumerAsync(context))">Edit</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditConsumerAddressesAsync(context))">Addresses</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteConsumerAsync(context))">Delete</MudButton>
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudStack>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Suppliers">
+        <MudStack Spacing="3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddSupplierAsync())">
+                Add supplier
+            </MudButton>
+            <MudTable Items="@_suppliers" Hover="true" Striped="true" Dense="true" Elevation="2" T="Supplier">
+                <HeaderContent>
+                    <MudTh>Code</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Address</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Code">@context.Code</MudTd>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Address">@context.Address?.ToOneLine()</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true" Spacing="1">
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSupplierAsync(context))">Edit</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSupplierAsync(context))">Delete</MudButton>
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudStack>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Regions">
+        <MudStack Spacing="3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddRegionAsync())">
+                Add region
+            </MudButton>
+            <MudTable Items="@_regions" Hover="true" Striped="true" Dense="true" Elevation="2" T="Region">
+                <HeaderContent>
+                    <MudTh>Code</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Code">@context.Code</MudTd>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true" Spacing="1">
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditRegionAsync(context))">Edit</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteRegionAsync(context))">Delete</MudButton>
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudStack>
+    </MudTabPanel>
+</MudTabs>
 
 @code {
     private List<Seller> _sellers = [];
     private List<Consumer> _consumers = [];
+    private List<Supplier> _suppliers = [];
+    private List<Region> _regions = [];
 
     protected override async Task OnInitializedAsync() => await ReloadAsync();
 
@@ -68,7 +127,11 @@
     {
         _sellers = await PartyService.SellersAsync();
         _consumers = await PartyService.ConsumersAsync();
+        _suppliers = await PartyService.SuppliersAsync();
+        _regions = await PartyService.RegionsAsync();
     }
+
+    // --- Sellers ---
 
     private async Task AddSellerAsync()
     {
@@ -114,6 +177,25 @@
         await ReloadAsync();
     }
 
+    private async Task EditSellerAddressAsync(Seller existing)
+    {
+        var parameters = new DialogParameters<SellerAddressDialog> { { d => d.Address, existing.Address ?? NewBlankAddress() }, { d => d.Regions, _regions } };
+        var dialogRef = await DialogService.ShowAsync<SellerAddressDialog>($"{existing.Name} — address", parameters);
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not Address address) { return; }
+        try
+        {
+            await PartyService.SetSellerAddressAsync(existing.Id, address);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    // --- Consumers ---
+
     private async Task AddConsumerAsync()
     {
         var parameters = new DialogParameters<ConsumerDialog> { { d => d.SubmitLabel, "Add" } };
@@ -157,4 +239,118 @@
         }
         await ReloadAsync();
     }
+
+    private async Task EditConsumerAddressesAsync(Consumer existing)
+    {
+        var parameters = new DialogParameters<ConsumerAddressBookDialog> { { d => d.Consumer, existing }, { d => d.Regions, _regions } };
+        var dialogRef = await DialogService.ShowAsync<ConsumerAddressBookDialog>($"{existing.Name} — addresses", parameters);
+        await dialogRef.Result;
+        await ReloadAsync();
+    }
+
+    // --- Suppliers ---
+
+    private async Task AddSupplierAsync()
+    {
+        var parameters = new DialogParameters<SupplierDialog> { { d => d.SubmitLabel, "Add" }, { d => d.Regions, _regions } };
+        var dialogRef = await DialogService.ShowAsync<SupplierDialog>("Add supplier", parameters);
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not Supplier supplier) { return; }
+        try
+        {
+            var added = await PartyService.AddSupplierAsync(supplier.Code, supplier.Name);
+            await PartyService.SetSupplierAddressAsync(added.Id, supplier.Address!);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task EditSupplierAsync(Supplier existing)
+    {
+        var parameters = new DialogParameters<SupplierDialog> { { d => d.Supplier, existing }, { d => d.SubmitLabel, "Save" }, { d => d.Regions, _regions } };
+        var dialogRef = await DialogService.ShowAsync<SupplierDialog>("Edit supplier", parameters);
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not Supplier supplier) { return; }
+        try
+        {
+            await PartyService.UpdateSupplierAsync(existing.Id, supplier.Code, supplier.Name);
+            await PartyService.SetSupplierAddressAsync(existing.Id, supplier.Address!);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task DeleteSupplierAsync(Supplier existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete supplier", $"Delete '{existing.Name}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try
+        {
+            await PartyService.DeleteSupplierAsync(existing.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    // --- Regions ---
+
+    private async Task AddRegionAsync()
+    {
+        var parameters = new DialogParameters<RegionDialog> { { d => d.SubmitLabel, "Add" } };
+        var dialogRef = await DialogService.ShowAsync<RegionDialog>("Add region", parameters);
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not Region region) { return; }
+        try
+        {
+            await PartyService.AddRegionAsync(region.Code, region.Name);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task EditRegionAsync(Region existing)
+    {
+        var parameters = new DialogParameters<RegionDialog> { { d => d.Region, existing }, { d => d.SubmitLabel, "Save" } };
+        var dialogRef = await DialogService.ShowAsync<RegionDialog>("Edit region", parameters);
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not Region region) { return; }
+        try
+        {
+            await PartyService.UpdateRegionAsync(existing.Id, region.Code, region.Name);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task DeleteRegionAsync(Region existing)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete region", $"Delete '{existing.Code}'?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try
+        {
+            await PartyService.DeleteRegionAsync(existing.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private static Address NewBlankAddress() => new() { Street = "", Number = "", PostalCode = "", City = "" };
 }

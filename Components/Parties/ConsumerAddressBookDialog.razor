@@ -1,0 +1,164 @@
+@inject PartyService PartyService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="4">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1">Primary address</MudText>
+                <AddressEditor Value="_primaryAddress" ValueChanged="@(a => _primaryAddress = a)" Regions="Regions" />
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@SavePrimaryAsync">Save primary address</MudButton>
+            </MudStack>
+
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1">Delivery addresses</MudText>
+                <MudTable Items="@_book" Hover="true" Dense="true" Elevation="0" T="ConsumerDeliveryAddress">
+                    <HeaderContent>
+                        <MudTh>Label</MudTh>
+                        <MudTh>Address</MudTh>
+                        <MudTh>Default</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Label">@context.Label</MudTd>
+                        <MudTd DataLabel="Address">@context.Address?.ToOneLine()</MudTd>
+                        <MudTd DataLabel="Default">@(context.IsDefault ? "Default" : "")</MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudStack Row="true" Spacing="1">
+                                @if (!context.IsDefault)
+                                {
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SetDefaultAsync(context))">Set default</MudButton>
+                                }
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => StartEdit(context))">Edit</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => RemoveAsync(context))">Remove</MudButton>
+                            </MudStack>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+
+                @if (_formOpen)
+                {
+                    <MudStack Spacing="2">
+                        <MudTextField T="string" Label="Label" Value="_label" ValueChanged="@((string v) => _label = v)" Required="true" />
+                        <AddressEditor Value="_entryAddress" ValueChanged="@(a => _entryAddress = a)" Regions="Regions" />
+                        <MudStack Row="true" Spacing="1">
+                            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@SubmitEntryAsync">@(_editingId is null ? "Add" : "Save")</MudButton>
+                            <MudButton OnClick="@(() => _formOpen = false)">Cancel</MudButton>
+                        </MudStack>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" OnClick="@StartAdd">Add address</MudButton>
+                }
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Close())">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Consumer Consumer { get; set; } = default!;
+
+    [Parameter]
+    public List<Region> Regions { get; set; } = [];
+
+    private Address _primaryAddress = default!;
+    private List<ConsumerDeliveryAddress> _book = [];
+
+    private bool _formOpen;
+    private int? _editingId;
+    private string _label = string.Empty;
+    private Address _entryAddress = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _primaryAddress = Consumer.PrimaryAddress ?? NewBlankAddress();
+        await ReloadBookAsync();
+    }
+
+    private async Task ReloadBookAsync() => _book = await PartyService.DeliveryAddressesAsync(Consumer.Id);
+
+    private async Task SavePrimaryAsync()
+    {
+        try
+        {
+            await PartyService.SetConsumerPrimaryAddressAsync(Consumer.Id, _primaryAddress);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private void StartAdd()
+    {
+        _formOpen = true;
+        _editingId = null;
+        _label = string.Empty;
+        _entryAddress = NewBlankAddress();
+    }
+
+    private void StartEdit(ConsumerDeliveryAddress entry)
+    {
+        _formOpen = true;
+        _editingId = entry.Id;
+        _label = entry.Label;
+        _entryAddress = entry.Address ?? NewBlankAddress();
+    }
+
+    private async Task SubmitEntryAsync()
+    {
+        try
+        {
+            if (_editingId is int id)
+            {
+                await PartyService.UpdateDeliveryAddressAsync(id, _label, _entryAddress);
+            }
+            else
+            {
+                await PartyService.AddDeliveryAddressAsync(Consumer.Id, _label, _entryAddress);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _formOpen = false;
+        await ReloadBookAsync();
+    }
+
+    private async Task SetDefaultAsync(ConsumerDeliveryAddress entry)
+    {
+        try
+        {
+            await PartyService.SetDefaultDeliveryAddressAsync(entry.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadBookAsync();
+    }
+
+    private async Task RemoveAsync(ConsumerDeliveryAddress entry)
+    {
+        try
+        {
+            await PartyService.RemoveDeliveryAddressAsync(entry.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadBookAsync();
+    }
+
+    private static Address NewBlankAddress() => new() { Street = "", Number = "", PostalCode = "", City = "" };
+}
