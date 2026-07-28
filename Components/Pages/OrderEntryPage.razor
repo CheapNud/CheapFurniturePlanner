@@ -38,6 +38,11 @@ else
                     <MudSelectItem T="int?" Value="@((int?)entry.Id)">@($"{entry.Label} — {entry.Address!.ToOneLine()}")</MudSelectItem>
                 }
             </MudSelect>
+            @* Unlike its Draft-only neighbors above, this stays enabled once Placed too: the office
+               promises/reschedules a delivery date while production is running, not just up front.
+               Only Cancelled disables it - see OrderEntryService.SetPromisedDeliveryDateAsync. *@
+            <MudDatePicker Label="Promised delivery" Date="@_order.PromisedDeliveryDate" DateChanged="SetPromisedDeliveryDateAsync"
+                           Disabled="@(_order.State == OrderState.Cancelled)" Clearable="true" />
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudChip T="string" Size="Size.Small">@(_order.PinnedCatalogueVersion ?? "not pinned yet")</MudChip>
                 <MudText Typo="Typo.subtitle1">Total: @OrderEntryService.OrderTotal(_order).ToString("C2")</MudText>
@@ -210,6 +215,19 @@ else
         catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+
+    private async Task SetPromisedDeliveryDateAsync(DateTime? promisedDate)
+    {
+        try
+        {
+            await OrderEntryService.SetPromisedDeliveryDateAsync(OrderId, promisedDate);
+        }
+        catch (InvalidOperationException failure)
+        {
+            Snackbar.Add(failure.Message, Severity.Error);
         }
         await ReloadAsync();
     }

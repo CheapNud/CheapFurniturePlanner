@@ -5,6 +5,8 @@
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize(Roles = Roles.WarehouseStaff)]
 @inject ProductionUnitService Units
+@inject PartyService Parties
+@inject TripLoadListPdf LoadListPdf
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -23,10 +25,14 @@
             <MudText Typo="Typo.h4">@_trip.TripCode</MudText>
             <MudChip T="string" Size="Size.Small" Color="@(IsPlanning ? Color.Info : Color.Success)">@_trip.State</MudChip>
             <MudSpacer />
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GenerateLoadListAsync">Load list</MudButton>
             @if (IsPlanning)
             {
                 <MudButton Color="Color.Error" Variant="Variant.Outlined" Disabled="@(_trip.Units.Count > 0)" OnClick="DeleteAsync">Delete</MudButton>
-                <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.LocalShipping" OnClick="DepartAsync">Depart</MudButton>
+                <MudTooltip Text="@string.Join(", ", ExpectedUnitCodes)">
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.LocalShipping"
+                               Disabled="@(ExpectedUnitCodes.Count > 0)" OnClick="DepartAsync">Depart</MudButton>
+                </MudTooltip>
             }
         </MudStack>
 
@@ -37,20 +43,37 @@
                     <MudDatePicker Label="Departure date" Date="_departureDate" DateChanged="OnFieldsChangedDate" Disabled="@(!IsPlanning)" />
                     <MudTextField T="string" Label="Truck" Value="_truckName" ValueChanged="OnTruckChanged" Disabled="@(!IsPlanning)" />
                     <MudTextField T="string" Label="Driver" Value="_driverName" ValueChanged="OnDriverChanged" Disabled="@(!IsPlanning)" />
+                    <MudSelect T="int?" Label="Region" Value="_regionId" ValueChanged="OnRegionChanged" Disabled="@(!IsPlanning)" Clearable="true">
+                        <MudSelectItem T="int?" Value="@((int?)null)">—</MudSelectItem>
+                        @foreach (var region in _regions)
+                        {
+                            <MudSelectItem T="int?" Value="@((int?)region.Id)">@region.Code — @region.Name</MudSelectItem>
+                        }
+                    </MudSelect>
                     @if (_trip.DepartedAt is DateTime departedAt)
                     {
                         <MudText Typo="Typo.body2" Class="mt-2">Departed @departedAt.ToString("yyyy-MM-dd HH:mm")</MudText>
+                    }
+                    @if (_trip.CompletedAt is DateTime completedAt)
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-1">Completed @completedAt.ToString("yyyy-MM-dd HH:mm")</MudText>
                     }
                 </MudPaper>
 
                 @if (IsPlanning)
                 {
                     <MudPaper Class="pa-4">
-                        <MudText Typo="Typo.h6" Class="mb-2">Arrived units</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudText Typo="Typo.h6">Plannable units</MudText>
+                            <MudSpacer />
+                            <MudSwitch T="bool" Value="_showAllRegions" ValueChanged="OnShowAllRegionsChanged" Label="All regions" Color="Color.Primary" />
+                        </MudStack>
                         @foreach (var candidate in _assignable)
                         {
                             <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+                                <MudChip T="string" Size="Size.Small" Color="@UnitStateColor(candidate.State)">@candidate.State</MudChip>
                                 <MudText>@candidate.UnitCode — @candidate.Order?.Consumer?.Name</MudText>
+                                <MudText Typo="Typo.caption">@candidate.Order?.DeliveryAddress?.Region?.Code</MudText>
                                 <MudSpacer />
                                 <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => AssignAsync(candidate.Id))">Load</MudButton>
                             </MudStack>
@@ -72,19 +95,56 @@
                             <MudTh>Unit</MudTh>
                             <MudTh>Order</MudTh>
                             <MudTh>Consumer</MudTh>
+                            <MudTh>Promise</MudTh>
                             <MudTh></MudTh>
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Position">
                                 <MudNumericField T="int?" Value="@context.LoadPosition" ValueChanged="@((int? position) => SetPositionAsync(context.Id, position))" Disabled="@(!IsPlanning)" Margin="Margin.Dense" />
                             </MudTd>
-                            <MudTd DataLabel="Unit">@context.UnitCode</MudTd>
+                            <MudTd DataLabel="Unit">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudChip T="string" Size="Size.Small" Color="@UnitStateColor(context.State)">@context.State</MudChip>
+                                    <MudText>@context.UnitCode</MudText>
+                                </MudStack>
+                            </MudTd>
                             <MudTd DataLabel="Order">@context.Order?.OrderNumber</MudTd>
                             <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
+                            <MudTd DataLabel="Promise">
+                                @if (context.Order?.PromisedDeliveryDate is DateTime promised)
+                                {
+                                    if (ProductionUnitService.PromiseMissed(promised, _trip.DepartureDate))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">@promised.ToString("yyyy-MM-dd")</MudChip>
+                                    }
+                                    else
+                                    {
+                                        @promised.ToString("yyyy-MM-dd")
+                                    }
+                                }
+                            </MudTd>
                             <MudTd>
                                 @if (IsPlanning)
                                 {
                                     <MudButton Size="Size.Small" OnClick="@(() => ReleaseAsync(context.Id))">Release</MudButton>
+                                }
+                                else if (IsDeparted && context.State == ProductionUnitState.Arrived)
+                                {
+                                    @if (_failingUnitId == context.Id)
+                                    {
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudTextField T="string" @bind-Value="_failReason" Label="Reason" Immediate="true" Margin="Margin.Dense" />
+                                            <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => ConfirmFailedAsync(context.Id))">Confirm</MudButton>
+                                            <MudButton Size="Size.Small" OnClick="CancelFail">Cancel</MudButton>
+                                        </MudStack>
+                                    }
+                                    else
+                                    {
+                                        <MudStack Row="true" Spacing="1">
+                                            <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" OnClick="@(() => ConfirmDeliveredAsync(context.Id))">Delivered</MudButton>
+                                            <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined" OnClick="@(() => StartFail(context.Id))">Failed</MudButton>
+                                        </MudStack>
+                                    }
                                 }
                             </MudTd>
                         </RowTemplate>
@@ -100,13 +160,24 @@
 
     private Trip? _trip;
     private List<ProductionUnit> _assignable = [];
+    private List<Region> _regions = [];
     private DateTime? _departureDate;
     private string? _truckName;
     private string? _driverName;
+    private int? _regionId;
+    private bool _showAllRegions;
+    private int? _failingUnitId;
+    private string _failReason = "";
 
     private bool IsPlanning => _trip!.State == TripState.Planning;
+    private bool IsDeparted => _trip!.State == TripState.Departed;
+    private List<string> ExpectedUnitCodes => _trip!.Units.Where(u => u.State == ProductionUnitState.Expected).Select(u => u.UnitCode).ToList();
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        _regions = await Parties.RegionsAsync();
+        await ReloadAsync();
+    }
 
     private async Task ReloadAsync()
     {
@@ -116,18 +187,42 @@
             _departureDate = _trip.DepartureDate;
             _truckName = _trip.TruckName;
             _driverName = _trip.DriverName;
-            _assignable = _trip.State == TripState.Planning ? await Units.AssignableUnitsAsync() : [];
+            _regionId = _trip.RegionId;
+            _failingUnitId = null;
+            _failReason = "";
+            await ReloadPoolAsync();
         }
         StateHasChanged();
+    }
+
+    private async Task ReloadPoolAsync()
+    {
+        _assignable = _trip!.State == TripState.Planning
+            ? await Units.AssignableUnitsAsync(_showAllRegions ? null : _trip.RegionId)
+            : [];
     }
 
     private Task OnFieldsChangedDate(DateTime? departureDate) { _departureDate = departureDate; return SaveFieldsAsync(); }
     private Task OnTruckChanged(string? truckName) { _truckName = truckName; return SaveFieldsAsync(); }
     private Task OnDriverChanged(string? driverName) { _driverName = driverName; return SaveFieldsAsync(); }
 
+    private async Task OnRegionChanged(int? regionId)
+    {
+        _regionId = regionId;
+        _trip!.RegionId = regionId;
+        await SaveFieldsAsync();
+        await ReloadPoolAsync();
+    }
+
+    private async Task OnShowAllRegionsChanged(bool showAll)
+    {
+        _showAllRegions = showAll;
+        await ReloadPoolAsync();
+    }
+
     private async Task SaveFieldsAsync()
     {
-        try { await Units.UpdateTripAsync(Id, _departureDate, _truckName, _driverName); }
+        try { await Units.UpdateTripAsync(Id, _departureDate, _truckName, _driverName, _regionId); }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
 
@@ -153,7 +248,7 @@
     {
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Depart trip",
-            $"Depart {_trip!.TripCode} with {_trip.Units.Count} unit(s)? Their orders become delivered.",
+            $"Depart {_trip!.TripCode} with {_trip.Units.Count} unit(s)?",
             yesText: "Depart", cancelText: "Back");
         if (confirmed != true) { return; }
         try { await Units.DepartAsync(Id); await ReloadAsync(); }
@@ -165,4 +260,39 @@
         try { await Units.DeleteTripAsync(Id); Navigation.NavigateTo("/trips"); }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
+
+    private async Task GenerateLoadListAsync()
+    {
+        try
+        {
+            var filePath = await LoadListPdf.GenerateAsync(Id);
+            Snackbar.Add($"Load list written to {filePath}", Severity.Success);
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task ConfirmDeliveredAsync(int unitId)
+    {
+        try { await Units.ConfirmDeliveredAsync(unitId); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private void StartFail(int unitId) { _failingUnitId = unitId; _failReason = ""; }
+
+    private void CancelFail() { _failingUnitId = null; _failReason = ""; }
+
+    private async Task ConfirmFailedAsync(int unitId)
+    {
+        try { await Units.ConfirmFailedAsync(unitId, _failReason); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private static Color UnitStateColor(ProductionUnitState unitState) => unitState switch
+    {
+        ProductionUnitState.Expected => Color.Warning,
+        ProductionUnitState.Arrived => Color.Info,
+        ProductionUnitState.Delivered => Color.Success,
+        _ => Color.Default,
+    };
 }

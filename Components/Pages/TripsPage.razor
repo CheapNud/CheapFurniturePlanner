@@ -23,6 +23,7 @@
             <MudTh>Trip</MudTh>
             <MudTh>Departure</MudTh>
             <MudTh>Truck</MudTh>
+            <MudTh>Region</MudTh>
             <MudTh>State</MudTh>
             <MudTh>Units</MudTh>
         </HeaderContent>
@@ -30,7 +31,8 @@
             <MudTd DataLabel="Trip">@context.TripCode</MudTd>
             <MudTd DataLabel="Departure">@(context.DepartureDate?.ToString("yyyy-MM-dd") ?? "—")</MudTd>
             <MudTd DataLabel="Truck">@context.TruckName</MudTd>
-            <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@(context.State == TripState.Departed ? Color.Success : Color.Info)">@context.State</MudChip></MudTd>
+            <MudTd DataLabel="Region">@context.Region?.Code</MudTd>
+            <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip></MudTd>
             <MudTd DataLabel="Units">@context.Units.Count</MudTd>
         </RowTemplate>
     </MudTable>
@@ -50,4 +52,11 @@
         }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
+
+    private static Color StateColor(TripState state) => state switch
+    {
+        TripState.Completed => Color.Success,
+        TripState.Departed => Color.Warning,
+        _ => Color.Info,
+    };
 }

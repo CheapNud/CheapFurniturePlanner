@@ -301,6 +301,19 @@ public sealed class OrderEntryService(
         await productionUnits.CancelForOrderAsync(orderId, ct);
     }
 
+    // Deliberately NOT RequireDraftAsync: the office promises a delivery date only once an order is
+    // Placed (production is running), and may reschedule it later - Draft is allowed too so the date
+    // can be set up front. Only Cancelled is off-limits, since there's nothing left to deliver.
+    public async Task SetPromisedDeliveryDateAsync(int orderId, DateTime? promisedDate, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == orderId, ct)
+            ?? throw new InvalidOperationException($"Order {orderId} not found.");
+        if (order.State == OrderState.Cancelled) { throw new InvalidOperationException($"Order {order.OrderNumber} is cancelled."); }
+        order.PromisedDeliveryDate = promisedDate;
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task SetDeliverToWarehouseAsync(int orderId, int lineId, bool deliverToWarehouse, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);

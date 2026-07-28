@@ -4,6 +4,7 @@ using CheapFurniturePlanner.Components.Pages;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
+using CheapHelpers.Services.DataExchange.Pdf;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -16,10 +17,13 @@ using CheapFurniturePlanner.Tests.Services;
 namespace CheapFurniturePlanner.Tests.Components;
 
 // Task 5: /trips lists trips and creates new ones via ProductionUnitService.CreateTripAsync;
-// /trips/{Id} assigns arrived units, tracks load position and departs (delivering every loaded
-// unit). Harness mirrors ReceivingPageTests (bUnit + in-memory SQLite, units spawned through the
-// real service). The Depart confirm dialog is a MudMessageBox rendered under MudDialogProvider,
-// same click-through-confirm-button pattern as StudioElementBomPageTests.DeleteLine_ThroughConfirm_RemovesIt.
+// /trips/{Id} assigns arrived units, tracks load position, departs and confirms delivery per
+// unit through the UI (Task 2's ConfirmDeliveredAsync/ConfirmFailedAsync). Harness mirrors
+// ReceivingPageTests (bUnit + in-memory SQLite, units spawned through the real service), plus
+// PartyService (region select) and TripLoadListPdf (load-list button) so TripPage's injected
+// dependencies resolve. The Depart confirm dialog is a MudMessageBox rendered under
+// MudDialogProvider, same click-through-confirm-button pattern as
+// StudioElementBomPageTests.DeleteLine_ThroughConfirm_RemovesIt.
 public class TripPagesTests : TestContext
 {
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
@@ -73,10 +77,13 @@ public class TripPagesTests : TestContext
     // its descendant, not the page's, so callers must query it (as StudioElementBomPageTests does).
     private IRenderedComponent<MudDialogProvider> ConfigureServices(IDbContextFactory<FurniturePlannerContext> factory, ProductionUnitService units, ICurrentUser who)
     {
+        var pdfRoot = Path.Combine(Path.GetTempPath(), "dp1-trip-pdf-tests", Guid.NewGuid().ToString("N"));
         Services.AddMudServices();
         Services.AddSingleton(factory);
         Services.AddSingleton(who);
         Services.AddSingleton(units);
+        Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), who));
+        Services.AddSingleton(sp => new TripLoadListPdf(factory, new PdfExportService(new PdfTemplateService()), pdfRoot));
         JSInterop.Mode = JSRuntimeMode.Loose;
         var dialogProvider = Render<MudDialogProvider>();
         Render<MudPopoverProvider>();
@@ -84,7 +91,7 @@ public class TripPagesTests : TestContext
     }
 
     [Fact]
-    public async Task TripDetail_AssignAndDepart_DeliversUnits()
+    public async Task TripDetail_AssignDepartConfirm_DeliversUnits()
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
@@ -120,8 +127,23 @@ public class TripPagesTests : TestContext
         await pendingClick;
 
         cut.WaitForAssertion(() => Assert.Contains("Departed", cut.Markup));
+        var afterDepart = await units.UnitsForOrderAsync(orderId);
+        Assert.All(afterDepart, u => Assert.Equal(ProductionUnitState.Arrived, u.State));
+
+        // Task 5 wires the confirmation UI: each unit's row gets a "Delivered" button once the
+        // trip is Departed - click it for both units instead of calling the service directly.
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("button").Count(b => b.TextContent.Trim() == "Delivered")));
+        for (var confirmed = 0; confirmed < 2; confirmed++)
+        {
+            var deliverButton = cut.FindAll("button").First(b => b.TextContent.Trim() == "Delivered");
+            await cut.InvokeAsync(() => deliverButton.Click());
+            var expectedRemaining = 1 - confirmed;
+            cut.WaitForAssertion(() => Assert.Equal(expectedRemaining, cut.FindAll("button").Count(b => b.TextContent.Trim() == "Delivered")));
+        }
+
         var reloaded = await units.UnitsForOrderAsync(orderId);
         Assert.All(reloaded, u => Assert.Equal(ProductionUnitState.Delivered, u.State));
+        cut.WaitForAssertion(() => Assert.Contains("Completed", cut.Markup));
     }
 
     [Fact]

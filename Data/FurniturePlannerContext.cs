@@ -209,6 +209,7 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         {
             entity.HasIndex(t => t.TripCode).IsUnique();
             entity.Property(t => t.State).HasConversion<string>();
+            entity.HasOne(t => t.Region).WithMany().HasForeignKey(t => t.RegionId).OnDelete(DeleteBehavior.SetNull);
         });
         modelBuilder.Entity<Invoice>(entity =>
         {

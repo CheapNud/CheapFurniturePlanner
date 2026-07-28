@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapFurniturePlanner project work tracker
-  Last updated: 2026-07-28
+  Last updated: 2026-07-29
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -42,6 +42,7 @@ _Nothing blocking._
 
 ## Future
 
+- [ ] (2026-07-29) planning polish: multi-laggard depart error untested for the comma join; trip region select double-clear affordance; failed-delivery confirm overwrites any earlier receiving note; pool empty-state text still says arrived-only [audit]
 - [ ] (2026-07-28) addresses: filtered unique index on consumer delivery addresses (one default per consumer) as a db backstop; region delete has no end-to-end ui test; the shared blank-address helper is duplicated across the party dialogs; supplier addresses cannot be cleared back to none through the dialog [audit]
 - [ ] (2026-07-27) ubl export: enable strict validation once parties carry endpoint/tax ids; discounted lines will also need allowance-charge support upstream (unit price x quantity vs discounted line total) before the validator passes [plan]
 - [ ] (2026-07-26) upstream CheapAvaloniaBlazor: the embedded host serves 404 for /cheap-blazor-interop.js (seen in desktop run logs); whatever interop rides that script silently degrades — static asset wiring belongs in the library, not here [bug]
