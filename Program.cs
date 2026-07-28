@@ -201,6 +201,10 @@ class Program
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<IPdfExportService>(),
             Path.Combine(GetAppDataPath(), "reports")));
+        builder.Services.AddScoped(sp => new TripLoadListPdf(
+            sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
+            sp.GetRequiredService<IPdfExportService>(),
+            Path.Combine(GetAppDataPath(), "reports")));
         builder.Services.AddScoped(sp => new UblExport(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<ICurrentUser>(),
