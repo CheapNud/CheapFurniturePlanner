@@ -199,6 +199,40 @@ public class PartyAddressTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.RemoveDeliveryAddressAsync(entryA.Id));
     }
 
+    // Regression: SellersAsync() must Include the Address navigation (mirrors SuppliersAsync).
+    // Without it, callers like PartiesPage see Address == null for a seller that already has one,
+    // the address dialog opens blank, and saving wipes the real address via ApplyAddress.
+    [Fact]
+    public async Task SellersAsync_IncludesAddress()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var service = NewService(factory);
+
+        var seller = await service.AddSellerAsync("Seller1", 1m);
+        await service.SetSellerAddressAsync(seller.Id, new Address { Street = "Main St", Number = "1", PostalCode = "1000", City = "Brussels" });
+
+        var reloaded = Assert.Single(await service.SellersAsync(), s => s.Id == seller.Id);
+        Assert.NotNull(reloaded.Address);
+        Assert.Equal("Main St", reloaded.Address!.Street);
+    }
+
+    // Same regression for ConsumersAsync() / PrimaryAddress (mirrors SuppliersAsync).
+    [Fact]
+    public async Task ConsumersAsync_IncludesPrimaryAddress()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var service = NewService(factory);
+
+        var consumer = await service.AddConsumerAsync("Consumer1", null);
+        await service.SetConsumerPrimaryAddressAsync(consumer.Id, new Address { Street = "Kerkstraat", Number = "1", PostalCode = "9000", City = "Gent" });
+
+        var reloaded = Assert.Single(await service.ConsumersAsync(), c => c.Id == consumer.Id);
+        Assert.NotNull(reloaded.PrimaryAddress);
+        Assert.Equal("Kerkstraat", reloaded.PrimaryAddress!.Street);
+    }
+
     [Fact]
     public async Task Guards_MechanicRejected()
     {

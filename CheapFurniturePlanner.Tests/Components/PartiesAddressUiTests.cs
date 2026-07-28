@@ -137,6 +137,40 @@ public class PartiesAddressUiTests : TestContext
         Assert.Contains(await parties.RegionsAsync(), r => r.Id == region.Id);
     }
 
+    // Regression: SellersAsync() used to omit the Address navigation, so the seller's Address
+    // dialog opened blank for a seller that already had a saved address, and saving without any
+    // edit wiped the real street to "" via PartyService.ApplyAddress. Sellers tab (index 0) is
+    // active by default, so no ActivateTab call is needed here.
+    [Fact]
+    public async Task SellerAddressDialog_SaveWithoutEditing_PreservesExistingAddress()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var seller = await parties.AddSellerAsync("Seller1", 1m);
+        await parties.SetSellerAddressAsync(seller.Id, new Address { Street = "Main St", Number = "1", PostalCode = "1000", City = "Brussels" });
+
+        var dialogProvider = ConfigureServices(factory);
+        var cut = Render<PartiesPage>();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.FindAll("button").SingleOrDefault(b => b.TextContent.Trim() == "Address")));
+
+        var addressButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Address");
+        var pendingClick = cut.InvokeAsync(() => addressButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<SellerAddressDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<SellerAddressDialog>();
+
+        // Save immediately - no field is touched, so the dialog's own AddressEditor never fires
+        // ValueChanged and the object round-tripped back out is exactly what the dialog was opened
+        // with (existing.Address ?? blank). Pre-fix that was blank; post-fix it's the real address.
+        var saveButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Save");
+        await cut.InvokeAsync(() => saveButton.Click());
+        await pendingClick;
+
+        var reloaded = await parties.SellersAsync();
+        Assert.Equal("Main St", reloaded.Single(s => s.Id == seller.Id).Address!.Street);
+    }
+
     [Fact]
     public async Task AddressBook_SetDefault_Flips()
     {

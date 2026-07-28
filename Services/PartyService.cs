@@ -15,13 +15,17 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
     public async Task<List<Seller>> SellersAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.Sellers.AsNoTracking().OrderBy(s => s.Name).ToListAsync(ct);
+        return await db.Sellers.AsNoTracking()
+            .Include(s => s.Address)!.ThenInclude(a => a!.Region)
+            .OrderBy(s => s.Name).ToListAsync(ct);
     }
 
     public async Task<List<Consumer>> ConsumersAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
-        return await db.Consumers.AsNoTracking().OrderBy(c => c.Name).ToListAsync(ct);
+        return await db.Consumers.AsNoTracking()
+            .Include(c => c.PrimaryAddress)!.ThenInclude(a => a!.Region)
+            .OrderBy(c => c.Name).ToListAsync(ct);
     }
 
     public async Task<Seller> AddSellerAsync(string name, decimal multiplier, CancellationToken ct = default)
