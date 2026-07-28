@@ -25,7 +25,10 @@ public class OrderLine
     public decimal DiscountPercent { get; set; }
     public string? DiscountSource { get; set; }
     public bool DiscountIsManual { get; set; }
+    // absorb source only - populated data lives on SupplierId; column drops next phase
     public string? SupplierRef { get; set; }
+    public int? SupplierId { get; set; }
+    public Supplier? Supplier { get; set; }
 
     // Per-line dropship choice: configured lines are always delivered to our warehouse; a
     // standalone dropship line can instead ship straight to the consumer (false = no units

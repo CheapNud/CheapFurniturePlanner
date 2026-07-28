@@ -6,4 +6,6 @@ public class Consumer
     public required string Name { get; set; }
     public string? Contact { get; set; }
     public string? VatNumber { get; set; }
+    public int? PrimaryAddressId { get; set; }
+    public Address? PrimaryAddress { get; set; }
 }

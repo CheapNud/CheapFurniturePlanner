@@ -15,6 +15,8 @@ public class Order
     public int ConsumerId { get; set; }
     public Consumer? Consumer { get; set; }
     public required string MarketCode { get; set; }
+    public int? DeliveryAddressId { get; set; }
+    public Address? DeliveryAddress { get; set; }
     public string? PinnedCatalogueVersion { get; set; }
     public string? PinnedContentHash { get; set; }
     public OrderState State { get; set; } = OrderState.Draft;
