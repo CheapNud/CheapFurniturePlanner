@@ -22,6 +22,9 @@ public class Order
     public OrderState State { get; set; } = OrderState.Draft;
     public DateTime CreatedAt { get; set; }
     public DateTime? PlacedAt { get; set; }
+    // Promised to the consumer, set by the office - NEVER derived from a trip's departure date
+    // (the legacy system silently equated the two; planning surfaces a warning instead).
+    public DateTime? PromisedDeliveryDate { get; set; }
     public decimal OrderDiscountPercent { get; set; }
     public List<OrderLine> Lines { get; set; } = [];
 }
