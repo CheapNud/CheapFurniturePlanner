@@ -23,7 +23,7 @@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
             <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to trips" OnClick="@(() => Navigation.NavigateTo("/trips"))" />
             <MudText Typo="Typo.h4">@_trip.TripCode</MudText>
-            <MudChip T="string" Size="Size.Small" Color="@(IsPlanning ? Color.Info : Color.Success)">@_trip.State</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(_trip.State)">@_trip.State</MudChip>
             <MudSpacer />
             <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GenerateLoadListAsync">Load list</MudButton>
             @if (IsPlanning)

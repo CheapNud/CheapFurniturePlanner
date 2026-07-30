@@ -5,7 +5,7 @@
 
 <MudStack Spacing="3">
     <MudTextField T="string" Label="Search" Value="_search" ValueChanged="@((string searchText) => _search = searchText)" />
-    <MudTable Items="@FilteredArticles" Hover="true" Striped="true" Dense="true" Elevation="0" T="Article">
+    <MudTable Items="@FilteredArticles" Hover="true" Dense="true" Elevation="0" T="Article">
         <HeaderContent>
             <MudTh>Code</MudTh>
             <MudTh>Type</MudTh>
