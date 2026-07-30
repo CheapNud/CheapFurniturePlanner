@@ -21,7 +21,7 @@
     else
     {
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/invoices"))" />
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to invoices" OnClick="@(() => Navigation.NavigateTo("/invoices"))" />
             <MudText Typo="Typo.h4">@_invoice.InvoiceNumber</MudText>
             <MudChip T="string" Size="Size.Small" Color="@(_invoice.IsPaid ? Color.Success : Color.Warning)">@(_invoice.IsPaid ? "Paid" : "Open")</MudChip>
             <MudSpacer />

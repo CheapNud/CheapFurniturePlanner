@@ -1,0 +1,15 @@
+<MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-8">
+    <MudIcon Icon="@Icon" Size="Size.Large" />
+    <MudText Typo="Typo.body1">@Text</MudText>
+    @if (ActionText is not null)
+    {
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="OnAction">@ActionText</MudButton>
+    }
+</MudStack>
+
+@code {
+    [Parameter] public string Icon { get; set; } = Icons.Material.Filled.Inbox;
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+    [Parameter] public string? ActionText { get; set; }
+    [Parameter] public EventCallback OnAction { get; set; }
+}

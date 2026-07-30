@@ -8,6 +8,7 @@
 @inject UblExport Exporter
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <PageTitle>Invoices</PageTitle>
 
@@ -64,7 +65,7 @@
             <RowTemplate>
                 <MudTd DataLabel="Market">@context.MarketCode</MudTd>
                 <MudTd DataLabel="Rate %">@context.RatePercent.ToString("0.##")</MudTd>
-                <MudTd><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => DeleteRateAsync(context.Id))" /></MudTd>
+                <MudTd><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Title="Delete rate" OnClick="@(() => DeleteRateAsync(context.Id))" /></MudTd>
             </RowTemplate>
         </MudTable>
     </MudPaper>
@@ -97,6 +98,8 @@
 
     private async Task DeleteRateAsync(int vatRateId)
     {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete rate", "Delete this VAT rate?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
         try
         {
             await Invoicing.DeleteVatRateAsync(vatRateId);

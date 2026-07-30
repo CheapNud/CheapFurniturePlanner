@@ -22,7 +22,7 @@
     else
     {
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/service"))" />
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to service" OnClick="@(() => Navigation.NavigateTo("/service"))" />
             <MudText Typo="Typo.h4">@_ticket.TicketNumber</MudText>
             <MudChip T="string" Size="Size.Small">@_ticket.Flow</MudChip>
             <MudChip T="string" Size="Size.Small" Color="@StateColor(_ticket.State)">@_ticket.State</MudChip>

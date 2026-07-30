@@ -49,7 +49,7 @@
             <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
             <MudTd DataLabel="State">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                    <MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip>
                     @if (context.ReviewNote is not null)
                     {
                         <MudTooltip Text="@context.ReviewNote">
@@ -134,12 +134,4 @@
         try { await Units.UndoArriveAsync(unitId); await LoadAsync(); }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
-
-    private static Color StateColor(ProductionUnitState unitState) => unitState switch
-    {
-        ProductionUnitState.Expected => Color.Info,
-        ProductionUnitState.Arrived => Color.Warning,
-        ProductionUnitState.Delivered => Color.Success,
-        _ => Color.Default,
-    };
 }
