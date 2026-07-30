@@ -12,46 +12,34 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<PageTitle>Options - @ElementCode - Cheap Furniture Planner</PageTitle>
+<PageTitle>Options - @ElementCode</PageTitle>
 
-<MudPaper Elevation="2" Class="pa-4 mb-4">
-    <MudStack Spacing="3">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-            <MudText Typo="Typo.h5">Options — @ModelCode / @ElementCode</MudText>
-            <MudButton Variant="Variant.Text"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.ArrowBack"
-                       Href="@($"/studio/{ModelCode}/elements")">
-                Back to elements
-            </MudButton>
-        </MudStack>
-
-        @if (_element is not null)
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to elements" Href="@($"/studio/{ModelCode}/elements")" />
+        <MudText Typo="Typo.h4">Options — @ModelCode / @ElementCode</MudText>
+        <MudSpacer />
+        @if (_element is not null && _state == TradeItemState.Draft)
         {
-            @if (_state != TradeItemState.Draft)
-            {
-                <MudAlert Severity="Severity.Warning">frozen — model is @_state</MudAlert>
-            }
-            else
-            {
-                <MudStack Row="true" Spacing="2">
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.Add"
-                               OnClick="@(() => AddChoiceAsync())">
-                        Add choice option
-                    </MudButton>
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Secondary"
-                               StartIcon="@Icons.Material.Filled.Add"
-                               OnClick="@(() => AddFabricAsync())">
-                        Add fabric option
-                    </MudButton>
-                </MudStack>
-            }
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => AddChoiceAsync())">
+                Add choice option
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Secondary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => AddFabricAsync())">
+                Add fabric option
+            </MudButton>
         }
     </MudStack>
-</MudPaper>
+
+    @if (_element is not null && _state != TradeItemState.Draft)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-4">frozen — model is @_state</MudAlert>
+    }
 
 @if (_notFound)
 {
@@ -61,9 +49,13 @@ else if (_element is null)
 {
     <MudProgressCircular Indeterminate="true" />
 }
+else if (_element.Options.Count == 0)
+{
+    <EmptyState Text="No options on this element." />
+}
 else
 {
-    <MudTable Items="@_element.Options" Hover="true" Striped="true" Dense="true" Elevation="2">
+    <MudTable Items="@_element.Options" Hover="true" Dense="true">
         <HeaderContent>
             <MudTh>Code</MudTh>
             <MudTh>Kind</MudTh>
@@ -115,6 +107,7 @@ else
         </RowTemplate>
     </MudTable>
 }
+</MudContainer>
 
 @code {
     [Parameter]
@@ -128,7 +121,17 @@ else
     private TradeItemState _state;
     private IReadOnlyList<string> _fabricGroupCodes = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync()
     {
