@@ -9,21 +9,23 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 
-<PageTitle>Furniture Catalog - Cheap Furniture Planner</PageTitle>
+<PageTitle>Furniture Catalog</PageTitle>
 
-<!-- Header -->
-<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
-    <MudText Typo="Typo.h4">Furniture Catalog</MudText>
-    <MudButton Variant="Variant.Filled"
-               Color="Color.Primary"
-               StartIcon="@Icons.Material.Filled.Add"
-               OnClick="OpenAddFurnitureDialog">
-        Add Furniture
-    </MudButton>
-</MudStack>
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <!-- Header -->
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Furniture Catalog</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenAddFurnitureDialog">
+            Add Furniture
+        </MudButton>
+    </MudStack>
 
-<!-- Search and Filter -->
-<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <!-- Search and Filter -->
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
     <MudGrid AlignItems="AlignItems.Center">
         <MudItem xs="12" sm="6" md="4">
             <MudTextField @bind-Value="_searchTerm"
@@ -94,7 +96,7 @@
         <MudCard Elevation="1" Class="pa-4 text-center">
             <MudStack Spacing="2" AlignItems="AlignItems.Center">
                 <MudIcon Icon="@Icons.Material.Filled.AttachMoney" Color="Color.Success" Size="Size.Large" />
-                <MudText Typo="Typo.h5" Color="Color.Success">@_averagePrice.ToString("C0")</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Success">@_averagePrice.ToString("C2")</MudText>
                 <MudText Typo="Typo.subtitle2">Average Price</MudText>
             </MudStack>
         </MudCard>
@@ -113,37 +115,14 @@
 <!-- Furniture Grid -->
 @if (_loading)
 {
-    <MudContainer Class="pa-8 text-center">
-        <MudStack Spacing="4" AlignItems="AlignItems.Center">
-            <MudProgressCircular Size="Size.Large" Indeterminate="true" />
-            <MudText Typo="Typo.h6">Loading furniture catalog...</MudText>
-        </MudStack>
-    </MudContainer>
+    <MudProgressCircular Indeterminate="true" />
 }
 else if (!_filteredFurniture.Any())
 {
-    <MudPaper Elevation="1" Class="pa-8 text-center">
-        <MudStack Spacing="4" AlignItems="AlignItems.Center">
-            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Secondary" />
-            <MudText Typo="Typo.h6">No furniture found</MudText>
-            <MudText Typo="Typo.body1">
-                @if (string.IsNullOrEmpty(_searchTerm) && !_selectedType.HasValue)
-                {
-                    <text>Your furniture catalog is empty.</text>
-                }
-                else
-                {
-                    <text>No furniture matches your search criteria.</text>
-                }
-            </MudText>
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="OpenAddFurnitureDialog">
-                Add Your First Furniture Item
-            </MudButton>
-        </MudStack>
-    </MudPaper>
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff"
+                Text="@(string.IsNullOrEmpty(_searchTerm) && !_selectedType.HasValue ? "Your furniture catalog is empty." : "No furniture matches your search criteria.")"
+                ActionText="Add Your First Furniture Item"
+                OnAction="OpenAddFurnitureDialog" />
 }
 else
 {
@@ -190,7 +169,7 @@ else
 
                     <MudCardContent>
                         <MudStack Spacing="2">
-                            <MudChip T="bool" Size="Size.Small" Color="Color.Primary">@furniture.Type</MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@furniture.Type</MudChip>
 
                             @if (!string.IsNullOrEmpty(furniture.Description))
                             {
@@ -218,11 +197,11 @@ else
                                 <MudStack Row="true" Spacing="1">
                                     @if (!string.IsNullOrEmpty(furniture.Material))
                                     {
-                                        <MudChip T="bool" Size="Size.Small" Variant="Variant.Outlined">@furniture.Material</MudChip>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@furniture.Material</MudChip>
                                     }
                                     @if (!string.IsNullOrEmpty(furniture.Color))
                                     {
-                                        <MudChip T="bool" Size="Size.Small" Variant="Variant.Outlined">@furniture.Color</MudChip>
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@furniture.Color</MudChip>
                                     }
                                 </MudStack>
                             }
@@ -230,7 +209,7 @@ else
                             @if (furniture.Price.HasValue)
                             {
                                 <MudText Typo="Typo.h6" Color="Color.Primary">
-                                    @furniture.Price.Value.ToString("C")
+                                    @furniture.Price.Value.ToString("C2")
                                 </MudText>
                             }
                         </MudStack>
@@ -254,6 +233,7 @@ else
         }
     </MudGrid>
 }
+</MudContainer>
 
 <!-- Add/Edit Furniture Dialog -->
 <MudDialog @bind-Visible="_furnitureDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Large })">
@@ -439,7 +419,7 @@ else
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error loading furniture catalog: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
         }
         finally
         {

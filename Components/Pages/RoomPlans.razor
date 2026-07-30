@@ -9,21 +9,23 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 
-<PageTitle>Room Plans - Cheap Furniture Planner</PageTitle>
+<PageTitle>Room Plans</PageTitle>
 
-<!-- Header -->
-<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
-    <MudText Typo="Typo.h4">Room Plans</MudText>
-    <MudButton Variant="Variant.Filled" 
-              Color="Color.Primary" 
-              StartIcon="@Icons.Material.Filled.Add"
-              OnClick="OpenNewRoomPlanDialog">
-        New Room Plan
-    </MudButton>
-</MudStack>
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <!-- Header -->
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Room Plans</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled"
+                  Color="Color.Primary"
+                  StartIcon="@Icons.Material.Filled.Add"
+                  OnClick="OpenNewRoomPlanDialog">
+            New Room Plan
+        </MudButton>
+    </MudStack>
 
-<!-- Search and Filter -->
-<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <!-- Search and Filter -->
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
     <MudGrid AlignItems="AlignItems.Center">
         <MudItem xs="12" sm="6" md="4">
             <MudTextField @bind-Value="_searchTerm"
@@ -68,37 +70,14 @@
 <!-- Room Plans Display -->
 @if (_loading)
 {
-    <MudContainer Class="pa-8 text-center">
-        <MudStack Spacing="4" AlignItems="AlignItems.Center">
-            <MudProgressCircular Size="Size.Large" Indeterminate="true" />
-            <MudText Typo="Typo.h6">Loading room plans...</MudText>
-        </MudStack>
-    </MudContainer>
+    <MudProgressCircular Indeterminate="true" />
 }
 else if (!_filteredRoomPlans.Any())
 {
-    <MudPaper Elevation="1" Class="pa-8 text-center">
-        <MudStack Spacing="4" AlignItems="AlignItems.Center">
-            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Secondary" />
-            <MudText Typo="Typo.h6">No room plans found</MudText>
-            <MudText Typo="Typo.body1">
-                @if (string.IsNullOrEmpty(_searchTerm))
-                {
-                    <text>You haven't created any room plans yet.</text>
-                }
-                else
-                {
-                    <text>No room plans match your search criteria.</text>
-                }
-            </MudText>
-            <MudButton Variant="Variant.Filled" 
-                      Color="Color.Primary" 
-                      StartIcon="@Icons.Material.Filled.Add"
-                      OnClick="OpenNewRoomPlanDialog">
-                Create Your First Room Plan
-            </MudButton>
-        </MudStack>
-    </MudPaper>
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff"
+                Text="@(string.IsNullOrEmpty(_searchTerm) ? "You haven't created any room plans yet." : "No room plans match your search criteria.")"
+                ActionText="Create Your First Room Plan"
+                OnAction="OpenNewRoomPlanDialog" />
 }
 else
 {
@@ -152,13 +131,13 @@ else
                                 </MudStack>
                                 
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    Created: @roomPlan.CreatedAt.ToString("MMM dd, yyyy")
+                                    Created: @roomPlan.CreatedAt.ToString("yyyy-MM-dd")
                                 </MudText>
-                                
+
                                 @if (roomPlan.UpdatedAt.HasValue)
                                 {
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        Updated: @roomPlan.UpdatedAt.Value.ToString("MMM dd, yyyy")
+                                        Updated: @roomPlan.UpdatedAt.Value.ToString("yyyy-MM-dd")
                                     </MudText>
                                 }
                             </MudStack>
@@ -180,11 +159,9 @@ else
     else
     {
         <!-- Table View -->
-        <MudTable Items="@_filteredRoomPlans" 
-                  Hover="true" 
-                  Striped="true" 
-                  Dense="true"
-                  Elevation="2">
+        <MudTable Items="@_filteredRoomPlans"
+                  Hover="true"
+                  Dense="true">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="new Func<RoomPlanViewModel, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
                 <MudTh>Description</MudTh>
@@ -210,14 +187,14 @@ else
                     <MudText Typo="Typo.body2">@context.Width × @context.Height @context.Unit</MudText>
                 </MudTd>
                 <MudTd DataLabel="Items">
-            <MudChip T=bool Size="Size.Small" Color="Color.Primary">@context.FurnitureItems.Count</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context.FurnitureItems.Count</MudChip>
                 </MudTd>
                 <MudTd DataLabel="Created">
-                    <MudText Typo="Typo.body2">@context.CreatedAt.ToString("MMM dd, yyyy")</MudText>
+                    <MudText Typo="Typo.body2">@context.CreatedAt.ToString("yyyy-MM-dd")</MudText>
                 </MudTd>
                 <MudTd DataLabel="Updated">
                     <MudText Typo="Typo.body2">
-                        @((context.UpdatedAt ?? context.CreatedAt).ToString("MMM dd, yyyy"))
+                        @((context.UpdatedAt ?? context.CreatedAt).ToString("yyyy-MM-dd"))
                     </MudText>
                 </MudTd>
                 <MudTd DataLabel="Actions">
@@ -248,6 +225,7 @@ else
         </MudTable>
     }
 }
+</MudContainer>
 
 <!-- New/Edit Room Plan Dialog -->
 <MudDialog @bind-Visible="_roomPlanDialogOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium })">
@@ -373,7 +351,7 @@ else
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error loading room plans: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
         }
         finally
         {
