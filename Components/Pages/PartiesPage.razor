@@ -6,114 +6,173 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<PageTitle>Parties - Cheap Furniture Planner</PageTitle>
+<PageTitle>Parties</PageTitle>
 
-<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
-    <MudTabPanel Text="Sellers">
-        <MudStack Spacing="3">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddSellerAsync())">
-                Add seller
-            </MudButton>
-            <MudTable Items="@_sellers" Hover="true" Striped="true" Dense="true" Elevation="2" T="Seller">
-                <HeaderContent>
-                    <MudTh>Name</MudTh>
-                    <MudTh>Multiplier</MudTh>
-                    <MudTh>Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Name">@context.Name</MudTd>
-                    <MudTd DataLabel="Multiplier">@context.Multiplier</MudTd>
-                    <MudTd DataLabel="Actions">
-                        <MudStack Row="true" Spacing="1">
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAsync(context))">Edit</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAddressAsync(context))">Address</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSellerAsync(context))">Delete</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Href="@($"/parties/{context.Id}/discounts")">Discounts</MudButton>
-                        </MudStack>
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudStack>
-    </MudTabPanel>
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Parties</MudText>
+        <MudSpacer />
+    </MudStack>
 
-    <MudTabPanel Text="Consumers">
-        <MudStack Spacing="3">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddConsumerAsync())">
-                Add consumer
-            </MudButton>
-            <MudTable Items="@_consumers" Hover="true" Striped="true" Dense="true" Elevation="2" T="Consumer">
-                <HeaderContent>
-                    <MudTh>Name</MudTh>
-                    <MudTh>Contact</MudTh>
-                    <MudTh>Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Name">@context.Name</MudTd>
-                    <MudTd DataLabel="Contact">@context.Contact</MudTd>
-                    <MudTd DataLabel="Actions">
-                        <MudStack Row="true" Spacing="1">
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditConsumerAsync(context))">Edit</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditConsumerAddressesAsync(context))">Addresses</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteConsumerAsync(context))">Delete</MudButton>
-                        </MudStack>
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudStack>
-    </MudTabPanel>
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+        <MudTabPanel Text="Sellers">
+            <MudStack Spacing="3">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">Sellers</MudText>
+                    @if (_sellers.Count > 0)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddSellerAsync())">
+                            Add seller
+                        </MudButton>
+                    }
+                </MudStack>
+                @if (_sellers.Count == 0)
+                {
+                    <EmptyState Text="No sellers yet." ActionText="Add seller" OnAction="@(() => AddSellerAsync())" />
+                }
+                else
+                {
+                <MudTable Items="@_sellers" Hover="true" Dense="true" T="Seller">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Multiplier</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Multiplier">@context.Multiplier</MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudStack Row="true" Spacing="1">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAsync(context))">Edit</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAddressAsync(context))">Address</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSellerAsync(context))">Delete</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Href="@($"/parties/{context.Id}/discounts")">Discounts</MudButton>
+                            </MudStack>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+                }
+            </MudStack>
+        </MudTabPanel>
 
-    <MudTabPanel Text="Suppliers">
-        <MudStack Spacing="3">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddSupplierAsync())">
-                Add supplier
-            </MudButton>
-            <MudTable Items="@_suppliers" Hover="true" Striped="true" Dense="true" Elevation="2" T="Supplier">
-                <HeaderContent>
-                    <MudTh>Code</MudTh>
-                    <MudTh>Name</MudTh>
-                    <MudTh>Address</MudTh>
-                    <MudTh>Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Code">@context.Code</MudTd>
-                    <MudTd DataLabel="Name">@context.Name</MudTd>
-                    <MudTd DataLabel="Address">@context.Address?.ToOneLine()</MudTd>
-                    <MudTd DataLabel="Actions">
-                        <MudStack Row="true" Spacing="1">
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSupplierAsync(context))">Edit</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSupplierAsync(context))">Delete</MudButton>
-                        </MudStack>
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudStack>
-    </MudTabPanel>
+        <MudTabPanel Text="Consumers">
+            <MudStack Spacing="3">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">Consumers</MudText>
+                    @if (_consumers.Count > 0)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddConsumerAsync())">
+                            Add consumer
+                        </MudButton>
+                    }
+                </MudStack>
+                @if (_consumers.Count == 0)
+                {
+                    <EmptyState Text="No consumers yet." ActionText="Add consumer" OnAction="@(() => AddConsumerAsync())" />
+                }
+                else
+                {
+                <MudTable Items="@_consumers" Hover="true" Dense="true" T="Consumer">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Contact</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Contact">@context.Contact</MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudStack Row="true" Spacing="1">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditConsumerAsync(context))">Edit</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditConsumerAddressesAsync(context))">Addresses</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteConsumerAsync(context))">Delete</MudButton>
+                            </MudStack>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+                }
+            </MudStack>
+        </MudTabPanel>
 
-    <MudTabPanel Text="Regions">
-        <MudStack Spacing="3">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddRegionAsync())">
-                Add region
-            </MudButton>
-            <MudTable Items="@_regions" Hover="true" Striped="true" Dense="true" Elevation="2" T="Region">
-                <HeaderContent>
-                    <MudTh>Code</MudTh>
-                    <MudTh>Name</MudTh>
-                    <MudTh>Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Code">@context.Code</MudTd>
-                    <MudTd DataLabel="Name">@context.Name</MudTd>
-                    <MudTd DataLabel="Actions">
-                        <MudStack Row="true" Spacing="1">
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditRegionAsync(context))">Edit</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteRegionAsync(context))">Delete</MudButton>
-                        </MudStack>
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudStack>
-    </MudTabPanel>
-</MudTabs>
+        <MudTabPanel Text="Suppliers">
+            <MudStack Spacing="3">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">Suppliers</MudText>
+                    @if (_suppliers.Count > 0)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddSupplierAsync())">
+                            Add supplier
+                        </MudButton>
+                    }
+                </MudStack>
+                @if (_suppliers.Count == 0)
+                {
+                    <EmptyState Text="No suppliers yet." ActionText="Add supplier" OnAction="@(() => AddSupplierAsync())" />
+                }
+                else
+                {
+                <MudTable Items="@_suppliers" Hover="true" Dense="true" T="Supplier">
+                    <HeaderContent>
+                        <MudTh>Code</MudTh>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Address</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Code">@context.Code</MudTd>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Address">@context.Address?.ToOneLine()</MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudStack Row="true" Spacing="1">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSupplierAsync(context))">Edit</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSupplierAsync(context))">Delete</MudButton>
+                            </MudStack>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+                }
+            </MudStack>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Regions">
+            <MudStack Spacing="3">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6">Regions</MudText>
+                    @if (_regions.Count > 0)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddRegionAsync())">
+                            Add region
+                        </MudButton>
+                    }
+                </MudStack>
+                @if (_regions.Count == 0)
+                {
+                    <EmptyState Text="No regions yet." ActionText="Add region" OnAction="@(() => AddRegionAsync())" />
+                }
+                else
+                {
+                <MudTable Items="@_regions" Hover="true" Dense="true" T="Region">
+                    <HeaderContent>
+                        <MudTh>Code</MudTh>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Code">@context.Code</MudTd>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudStack Row="true" Spacing="1">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditRegionAsync(context))">Edit</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteRegionAsync(context))">Delete</MudButton>
+                            </MudStack>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+                }
+            </MudStack>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
 
 @code {
     private List<Seller> _sellers = [];
@@ -121,7 +180,17 @@
     private List<Supplier> _suppliers = [];
     private List<Region> _regions = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync()
     {

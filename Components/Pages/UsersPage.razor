@@ -5,14 +5,27 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<PageTitle>Users - Cheap Furniture Planner</PageTitle>
+<PageTitle>Users</PageTitle>
 
-<MudStack Spacing="3">
-    <MudText Typo="Typo.h6">Users</MudText>
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddUserAsync())">
-        Add user
-    </MudButton>
-    <MudTable Items="@_users" Hover="true" Striped="true" Dense="true" Elevation="2" T="UserSummary">
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Users</MudText>
+        <MudSpacer />
+        @if (_users.Count > 0)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddUserAsync())">
+                Add user
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (_users.Count == 0)
+    {
+        <EmptyState Text="No users yet." ActionText="Add user" OnAction="@(() => AddUserAsync())" />
+    }
+    else
+    {
+    <MudTable Items="@_users" Hover="true" Dense="true" T="UserSummary">
         <HeaderContent>
             <MudTh>Name</MudTh>
             <MudTh>Username</MudTh>
@@ -32,14 +45,7 @@
                 </MudStack>
             </MudTd>
             <MudTd DataLabel="State">
-                @if (context.IsDeactivated)
-                {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Default">Deactivated</MudChip>
-                }
-                else
-                {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
-                }
+                <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForActive(!context.IsDeactivated)">@(context.IsDeactivated ? "Deactivated" : "Active")</MudChip>
             </MudTd>
             <MudTd DataLabel="Actions">
                 <MudStack Row="true" Spacing="1">
@@ -57,12 +63,23 @@
             </MudTd>
         </RowTemplate>
     </MudTable>
-</MudStack>
+    }
+</MudContainer>
 
 @code {
     private List<UserSummary> _users = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync() => _users = await UserAdminService.ListAsync();
 

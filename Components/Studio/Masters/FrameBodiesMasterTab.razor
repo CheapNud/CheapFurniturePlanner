@@ -7,8 +7,17 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add frame body</MudButton>
-    <MudTable Items="@_frameBodies" Hover="true" Striped="true" Dense="true" Elevation="2" T="FrameBody">
+    @if (_frameBodies.Count > 0)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add frame body</MudButton>
+    }
+    @if (_frameBodies.Count == 0)
+    {
+        <EmptyState Text="No frame bodies yet." ActionText="Add frame body" OnAction="@(() => AddAsync())" />
+    }
+    else
+    {
+    <MudTable Items="@_frameBodies" Hover="true" Dense="true" T="FrameBody">
         <HeaderContent>
             <MudTh>Code</MudTh>
             <MudTh>Price</MudTh>
@@ -31,12 +40,23 @@
             </MudTd>
         </RowTemplate>
     </MudTable>
+    }
 </MudStack>
 
 @code {
     private List<FrameBody> _frameBodies = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync() => _frameBodies = (await AuthoringCatalogueStore.LoadAsync()).FrameBodies;
 

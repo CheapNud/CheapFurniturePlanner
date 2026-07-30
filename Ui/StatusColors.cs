@@ -59,6 +59,14 @@ public static class StatusColors
         _ => Color.Success,
     };
 
+    public static Color For(PriceVersionStatus versionStatus) => versionStatus switch
+    {
+        PriceVersionStatus.Effective => Color.Success,
+        PriceVersionStatus.Scheduled => Color.Warning,
+        _ => Color.Default,
+    };
+
     public static Color ForPaid(bool isPaid) => isPaid ? Color.Success : Color.Info;
     public static Color ForSettled(bool isSettled) => isSettled ? Color.Success : Color.Info;
+    public static Color ForActive(bool isActive) => isActive ? Color.Success : Color.Default;
 }

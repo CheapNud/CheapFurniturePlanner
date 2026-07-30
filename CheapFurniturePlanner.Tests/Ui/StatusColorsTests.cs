@@ -57,6 +57,13 @@ public class StatusColorsTests
         Assert.Equal(expected, StatusColors.For(phase));
 
     [Theory]
+    [InlineData(PriceVersionStatus.Effective, Color.Success)]
+    [InlineData(PriceVersionStatus.Scheduled, Color.Warning)]
+    [InlineData(PriceVersionStatus.Superseded, Color.Default)]
+    public void For_PriceVersionStatus_MapsToExpectedColor(PriceVersionStatus status, Color expected) =>
+        Assert.Equal(expected, StatusColors.For(status));
+
+    [Theory]
     [InlineData(true, Color.Success)]
     [InlineData(false, Color.Info)]
     public void ForPaid_MapsToExpectedColor(bool isPaid, Color expected) =>
@@ -67,4 +74,10 @@ public class StatusColorsTests
     [InlineData(false, Color.Info)]
     public void ForSettled_MapsToExpectedColor(bool isSettled, Color expected) =>
         Assert.Equal(expected, StatusColors.ForSettled(isSettled));
+
+    [Theory]
+    [InlineData(true, Color.Success)]
+    [InlineData(false, Color.Default)]
+    public void ForActive_MapsToExpectedColor(bool isActive, Color expected) =>
+        Assert.Equal(expected, StatusColors.ForActive(isActive));
 }

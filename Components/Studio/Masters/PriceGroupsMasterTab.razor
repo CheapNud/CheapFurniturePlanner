@@ -7,8 +7,17 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add price group</MudButton>
-    <MudTable Items="@_priceGroups" Hover="true" Striped="true" Dense="true" Elevation="2" T="PriceGroup">
+    @if (_priceGroups.Count > 0)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add price group</MudButton>
+    }
+    @if (_priceGroups.Count == 0)
+    {
+        <EmptyState Text="No price groups yet." ActionText="Add price group" OnAction="@(() => AddAsync())" />
+    }
+    else
+    {
+    <MudTable Items="@_priceGroups" Hover="true" Dense="true" T="PriceGroup">
         <HeaderContent>
             <MudTh>Code</MudTh>
             <MudTh>Kind</MudTh>
@@ -29,12 +38,23 @@
             </MudTd>
         </RowTemplate>
     </MudTable>
+    }
 </MudStack>
 
 @code {
     private List<PriceGroup> _priceGroups = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync() => _priceGroups = (await AuthoringCatalogueStore.LoadAsync()).PriceGroups;
 

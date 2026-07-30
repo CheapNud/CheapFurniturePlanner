@@ -7,8 +7,17 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add rule</MudButton>
-    <MudTable Items="@_rows" Hover="true" Striped="true" Dense="true" Elevation="2" T="RuleRow">
+    @if (_rows.Count > 0)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add rule</MudButton>
+    }
+    @if (_rows.Count == 0)
+    {
+        <EmptyState Text="No combination pricing rules yet." ActionText="Add rule" OnAction="@(() => AddAsync())" />
+    }
+    else
+    {
+    <MudTable Items="@_rows" Hover="true" Dense="true" T="RuleRow">
         <HeaderContent>
             <MudTh>Required selections</MudTh>
             <MudTh>Adjustment</MudTh>
@@ -25,6 +34,7 @@
             </MudTd>
         </RowTemplate>
     </MudTable>
+    }
 </MudStack>
 
 @code {
@@ -32,7 +42,17 @@
 
     private List<RuleRow> _rows = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync()
     {
