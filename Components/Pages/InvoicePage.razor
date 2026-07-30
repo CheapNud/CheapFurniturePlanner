@@ -3,7 +3,6 @@
 @using CheapFurniturePlanner.Models
 @using CheapFurniturePlanner.Services
 @using Microsoft.AspNetCore.Authorization
-@using System.Globalization
 @attribute [Authorize(Roles = Roles.AdminOrOffice)]
 @inject InvoicingService Invoicing
 @inject InvoicePdf Pdf
@@ -23,7 +22,7 @@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
             <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to invoices" OnClick="@(() => Navigation.NavigateTo("/invoices"))" />
             <MudText Typo="Typo.h4">@_invoice.InvoiceNumber</MudText>
-            <MudChip T="string" Size="Size.Small" Color="@(_invoice.IsPaid ? Color.Success : Color.Warning)">@(_invoice.IsPaid ? "Paid" : "Open")</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForPaid(_invoice.IsPaid)">@(_invoice.IsPaid ? "Paid" : "Open")</MudChip>
             <MudSpacer />
             @if (!_invoice.IsPaid)
             {
@@ -97,19 +96,26 @@
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateCreditAsync">Create</MudButton>
                 </MudStack>
             }
-            @foreach (var creditNote in _invoice.CreditNotes)
+            @if (_invoice.CreditNotes.Count == 0)
             {
-                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
-                    <MudText>@creditNote.CreditNoteNumber — @creditNote.Reason — @Money(creditNote.GrossAmount)</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="@(creditNote.IsSettled ? Color.Success : Color.Warning)">@(creditNote.IsSettled ? "Settled" : "Open")</MudChip>
-                    <MudSpacer />
-                    <MudButton Size="Size.Small" OnClick="@(() => CreditPdfAsync(creditNote.Id))">PDF</MudButton>
-                    <MudButton Size="Size.Small" OnClick="@(() => ExportCreditXmlAsync(creditNote.Id))">Export XML</MudButton>
-                    @if (!creditNote.IsSettled)
-                    {
-                        <MudButton Size="Size.Small" OnClick="@(() => SettleAsync(creditNote.Id))">Mark settled</MudButton>
-                    }
-                </MudStack>
+                <EmptyState Text="No credit notes" />
+            }
+            else
+            {
+                @foreach (var creditNote in _invoice.CreditNotes)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+                        <MudText>@creditNote.CreditNoteNumber — @creditNote.Reason — @Money(creditNote.GrossAmount)</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForSettled(creditNote.IsSettled)">@(creditNote.IsSettled ? "Settled" : "Open")</MudChip>
+                        <MudSpacer />
+                        <MudButton Size="Size.Small" OnClick="@(() => CreditPdfAsync(creditNote.Id))">PDF</MudButton>
+                        <MudButton Size="Size.Small" OnClick="@(() => ExportCreditXmlAsync(creditNote.Id))">Export XML</MudButton>
+                        @if (!creditNote.IsSettled)
+                        {
+                            <MudButton Size="Size.Small" OnClick="@(() => SettleAsync(creditNote.Id))">Mark settled</MudButton>
+                        }
+                    </MudStack>
+                }
             }
         </MudPaper>
     }
@@ -125,7 +131,17 @@
     private decimal _creditGross;
     private string? _creditNoteText;
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync()
     {
@@ -133,7 +149,7 @@
         StateHasChanged();
     }
 
-    private static string Money(decimal amount) => amount.ToString("0.00", CultureInfo.InvariantCulture);
+    private static string Money(decimal amount) => amount.ToString("C2");
 
     private async Task MarkPaidAsync()
     {

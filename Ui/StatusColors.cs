@@ -1,4 +1,5 @@
 using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Production;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
 using MudBlazor;
@@ -63,6 +64,15 @@ public static class StatusColors
     {
         PriceVersionStatus.Effective => Color.Success,
         PriceVersionStatus.Scheduled => Color.Warning,
+        _ => Color.Default,
+    };
+
+    // Preserves StudioNamingPage's existing mapping exactly: Composed falls through the same
+    // catch-all as any future member, matching the local switch it replaces.
+    public static Color For(ProductionCodeStatus codeStatus) => codeStatus switch
+    {
+        ProductionCodeStatus.Provisional => Color.Warning,
+        ProductionCodeStatus.Released => Color.Success,
         _ => Color.Default,
     };
 

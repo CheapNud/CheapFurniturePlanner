@@ -68,19 +68,22 @@
                             <MudSpacer />
                             <MudSwitch T="bool" Value="_showAllRegions" ValueChanged="OnShowAllRegionsChanged" Label="All regions" Color="Color.Primary" />
                         </MudStack>
-                        @foreach (var candidate in _assignable)
-                        {
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
-                                <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(candidate.State)">@candidate.State</MudChip>
-                                <MudText>@candidate.UnitCode — @candidate.Order?.Consumer?.Name</MudText>
-                                <MudText Typo="Typo.caption">@candidate.Order?.DeliveryAddress?.Region?.Code</MudText>
-                                <MudSpacer />
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => AssignAsync(candidate.Id))">Load</MudButton>
-                            </MudStack>
-                        }
                         @if (_assignable.Count == 0)
                         {
-                            <MudText Typo="Typo.body2">No unassigned arrived units.</MudText>
+                            <EmptyState Text="Nothing plannable right now" />
+                        }
+                        else
+                        {
+                            @foreach (var candidate in _assignable)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+                                    <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(candidate.State)">@candidate.State</MudChip>
+                                    <MudText>@candidate.UnitCode — @candidate.Order?.Consumer?.Name</MudText>
+                                    <MudText Typo="Typo.caption">@candidate.Order?.DeliveryAddress?.Region?.Code</MudText>
+                                    <MudSpacer />
+                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => AssignAsync(candidate.Id))">Load</MudButton>
+                                </MudStack>
+                            }
                         }
                     </MudPaper>
                 }
@@ -89,66 +92,73 @@
             <MudItem xs="12" md="7">
                 <MudPaper Class="pa-4">
                     <MudText Typo="Typo.h6" Class="mb-2">Load list</MudText>
-                    <MudTable T="ProductionUnit" Items="_trip.Units" Dense="true">
-                        <HeaderContent>
-                            <MudTh>Position</MudTh>
-                            <MudTh>Unit</MudTh>
-                            <MudTh>Order</MudTh>
-                            <MudTh>Consumer</MudTh>
-                            <MudTh>Promise</MudTh>
-                            <MudTh></MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Position">
-                                <MudNumericField T="int?" Value="@context.LoadPosition" ValueChanged="@((int? position) => SetPositionAsync(context.Id, position))" Disabled="@(!IsPlanning)" Margin="Margin.Dense" />
-                            </MudTd>
-                            <MudTd DataLabel="Unit">
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                    <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip>
-                                    <MudText>@context.UnitCode</MudText>
-                                </MudStack>
-                            </MudTd>
-                            <MudTd DataLabel="Order">@context.Order?.OrderNumber</MudTd>
-                            <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
-                            <MudTd DataLabel="Promise">
-                                @if (context.Order?.PromisedDeliveryDate is DateTime promised)
-                                {
-                                    if (ProductionUnitService.PromiseMissed(promised, _trip.DepartureDate))
+                    @if (_trip.Units.Count == 0)
+                    {
+                        <EmptyState Text="No units loaded yet" />
+                    }
+                    else
+                    {
+                        <MudTable T="ProductionUnit" Items="_trip.Units" Dense="true">
+                            <HeaderContent>
+                                <MudTh>Position</MudTh>
+                                <MudTh>Unit</MudTh>
+                                <MudTh>Order</MudTh>
+                                <MudTh>Consumer</MudTh>
+                                <MudTh>Promise</MudTh>
+                                <MudTh></MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Position">
+                                    <MudNumericField T="int?" Value="@context.LoadPosition" ValueChanged="@((int? position) => SetPositionAsync(context.Id, position))" Disabled="@(!IsPlanning)" Margin="Margin.Dense" />
+                                </MudTd>
+                                <MudTd DataLabel="Unit">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip>
+                                        <MudText>@context.UnitCode</MudText>
+                                    </MudStack>
+                                </MudTd>
+                                <MudTd DataLabel="Order">@context.Order?.OrderNumber</MudTd>
+                                <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
+                                <MudTd DataLabel="Promise">
+                                    @if (context.Order?.PromisedDeliveryDate is DateTime promised)
                                     {
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">@promised.ToString("yyyy-MM-dd")</MudChip>
+                                        if (ProductionUnitService.PromiseMissed(promised, _trip.DepartureDate))
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">@promised.ToString("yyyy-MM-dd")</MudChip>
+                                        }
+                                        else
+                                        {
+                                            @promised.ToString("yyyy-MM-dd")
+                                        }
                                     }
-                                    else
+                                </MudTd>
+                                <MudTd>
+                                    @if (IsPlanning)
                                     {
-                                        @promised.ToString("yyyy-MM-dd")
+                                        <MudButton Size="Size.Small" OnClick="@(() => ReleaseAsync(context.Id))">Release</MudButton>
                                     }
-                                }
-                            </MudTd>
-                            <MudTd>
-                                @if (IsPlanning)
-                                {
-                                    <MudButton Size="Size.Small" OnClick="@(() => ReleaseAsync(context.Id))">Release</MudButton>
-                                }
-                                else if (IsDeparted && context.State == ProductionUnitState.Arrived)
-                                {
-                                    @if (_failingUnitId == context.Id)
+                                    else if (IsDeparted && context.State == ProductionUnitState.Arrived)
                                     {
-                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                            <MudTextField T="string" @bind-Value="_failReason" Label="Reason" Immediate="true" Margin="Margin.Dense" />
-                                            <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => ConfirmFailedAsync(context.Id))">Confirm</MudButton>
-                                            <MudButton Size="Size.Small" OnClick="CancelFail">Cancel</MudButton>
-                                        </MudStack>
+                                        @if (_failingUnitId == context.Id)
+                                        {
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                <MudTextField T="string" @bind-Value="_failReason" Label="Reason" Immediate="true" Margin="Margin.Dense" />
+                                                <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => ConfirmFailedAsync(context.Id))">Confirm</MudButton>
+                                                <MudButton Size="Size.Small" OnClick="CancelFail">Cancel</MudButton>
+                                            </MudStack>
+                                        }
+                                        else
+                                        {
+                                            <MudStack Row="true" Spacing="1">
+                                                <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" OnClick="@(() => ConfirmDeliveredAsync(context.Id))">Delivered</MudButton>
+                                                <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined" OnClick="@(() => StartFail(context.Id))">Failed</MudButton>
+                                            </MudStack>
+                                        }
                                     }
-                                    else
-                                    {
-                                        <MudStack Row="true" Spacing="1">
-                                            <MudButton Size="Size.Small" Color="Color.Success" Variant="Variant.Filled" OnClick="@(() => ConfirmDeliveredAsync(context.Id))">Delivered</MudButton>
-                                            <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined" OnClick="@(() => StartFail(context.Id))">Failed</MudButton>
-                                        </MudStack>
-                                    }
-                                }
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
                 </MudPaper>
             </MudItem>
         </MudGrid>
@@ -175,8 +185,15 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _regions = await Parties.RegionsAsync();
-        await ReloadAsync();
+        try
+        {
+            _regions = await Parties.RegionsAsync();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task ReloadAsync()

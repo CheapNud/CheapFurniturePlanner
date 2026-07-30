@@ -16,12 +16,15 @@
     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
         <MudText Typo="Typo.h4">Catalog Studio</MudText>
         <MudSpacer />
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="@(() => OpenNewModelDialogAsync())">
-            New model
-        </MudButton>
+        @if (_models is { Count: > 0 })
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@(() => OpenNewModelDialogAsync())">
+                New model
+            </MudButton>
+        }
     </MudStack>
     <MudAlert Severity="Severity.Info" Class="mb-4">Only released (Active) models appear in the catalogue and planner.</MudAlert>
 

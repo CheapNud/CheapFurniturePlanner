@@ -67,7 +67,7 @@ else
                                           Disabled="@(_state != TradeItemState.Draft)" />
                         </MudTd>
                         <MudTd DataLabel="Status">
-                            <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.VariantCode)">@StatusFor(context.VariantCode)</MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(StatusFor(context.VariantCode))">@StatusFor(context.VariantCode)</MudChip>
                         </MudTd>
                     </RowTemplate>
                 </MudTable>
@@ -133,13 +133,6 @@ else
 
     private ProductionCodeStatus StatusFor(string variantCode) =>
         ProductionIdentityResolver.StatusFor(_names.ContainsKey(variantCode), _state);
-
-    private Color StatusColor(string variantCode) => StatusFor(variantCode) switch
-    {
-        ProductionCodeStatus.Provisional => Color.Warning,
-        ProductionCodeStatus.Released => Color.Success,
-        _ => Color.Default
-    };
 
     // Renders a variant's BOM-significant selections as a readable "DEF: choice" trail. Element.Options
     // (ChoiceOption/ProductOptionValue) carry no separate display Name beyond their codes, so the option

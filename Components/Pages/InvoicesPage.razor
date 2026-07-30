@@ -19,35 +19,42 @@
         <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Code" OnClick="ExportNewAsync">Export new</MudButton>
     </MudStack>
 
-    <MudTable T="Invoice" Items="_invoices" Hover="true" Dense="true" Class="mb-6"
-              OnRowClick="@((TableRowClickEventArgs<Invoice> args) => Navigation.NavigateTo($"/invoices/{args.Item!.Id}"))">
-        <HeaderContent>
-            <MudTh>Invoice</MudTh>
-            <MudTh>Order</MudTh>
-            <MudTh>Consumer</MudTh>
-            <MudTh>Issued</MudTh>
-            <MudTh>Gross</MudTh>
-            <MudTh>Status</MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Invoice">@context.InvoiceNumber</MudTd>
-            <MudTd DataLabel="Order">@context.Order?.OrderNumber</MudTd>
-            <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
-            <MudTd DataLabel="Issued">@context.IssuedAt.ToString("yyyy-MM-dd")</MudTd>
-            <MudTd DataLabel="Gross">@context.GrossTotal.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</MudTd>
-            <MudTd DataLabel="Status">
-                <MudChip T="string" Size="Size.Small" Color="@(context.IsPaid ? Color.Success : Color.Warning)">@(context.IsPaid ? "Paid" : "Open")</MudChip>
-                @if (context.CreditNotes.Count > 0)
-                {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">Credited</MudChip>
-                }
-                @if (context.ExportedAt is not null)
-                {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Exported</MudChip>
-                }
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
+    @if (_invoices.Count == 0)
+    {
+        <EmptyState Text="No invoices yet" />
+    }
+    else
+    {
+        <MudTable T="Invoice" Items="_invoices" Hover="true" Dense="true" Class="mb-4"
+                  OnRowClick="@((TableRowClickEventArgs<Invoice> args) => Navigation.NavigateTo($"/invoices/{args.Item!.Id}"))">
+            <HeaderContent>
+                <MudTh>Invoice</MudTh>
+                <MudTh>Order</MudTh>
+                <MudTh>Consumer</MudTh>
+                <MudTh>Issued</MudTh>
+                <MudTh>Gross</MudTh>
+                <MudTh>Status</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Invoice">@context.InvoiceNumber</MudTd>
+                <MudTd DataLabel="Order">@context.Order?.OrderNumber</MudTd>
+                <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
+                <MudTd DataLabel="Issued">@context.IssuedAt.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd DataLabel="Gross">@context.GrossTotal.ToString("C2")</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForPaid(context.IsPaid)">@(context.IsPaid ? "Paid" : "Open")</MudChip>
+                    @if (context.CreditNotes.Count > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary">Credited</MudChip>
+                    }
+                    @if (context.ExportedAt is not null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Exported</MudChip>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
 
     <MudPaper Class="pa-4">
         <MudText Typo="Typo.h6" Class="mb-2">VAT rates</MudText>
@@ -77,7 +84,17 @@
     private string _newMarketCode = "";
     private decimal _newRatePercent = 21m;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task LoadAsync()
     {

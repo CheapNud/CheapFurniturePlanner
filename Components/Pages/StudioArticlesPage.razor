@@ -23,9 +23,12 @@
         <MudStack Spacing="3">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.h6">Standalone articles</MudText>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
-                    Add article
-                </MudButton>
+                @if (_standalone.Count > 0)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
+                        Add article
+                    </MudButton>
+                }
             </MudStack>
             @if (_standalone.Count == 0)
             {

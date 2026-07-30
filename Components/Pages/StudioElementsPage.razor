@@ -19,7 +19,7 @@
         <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to models" Href="/studio" />
         <MudText Typo="Typo.h4">Elements — @ModelCode</MudText>
         <MudSpacer />
-        @if (_model is not null && _state == TradeItemState.Draft)
+        @if (_model is { Elements.Count: > 0 } && _state == TradeItemState.Draft)
         {
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"

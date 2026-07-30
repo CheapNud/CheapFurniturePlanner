@@ -19,225 +19,225 @@
 <PageTitle>@(_roomPlan?.Name ?? "Room Planner")</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-@if (_roomPlan != null)
-{
-    <!-- Header with room plan info and actions -->
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
-                       OnClick="@(() => Navigation.NavigateTo("/room-plans"))"
-                       Title="Back to Room Plans" />
+    @if (_roomPlan != null)
+    {
+        <!-- Header with room plan info and actions -->
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                           OnClick="@(() => Navigation.NavigateTo("/room-plans"))"
+                           Title="Back to Room Plans" />
 
-        <MudStack Spacing="0">
-            <MudText Typo="Typo.h5">@_roomPlan.Name</MudText>
-            @if (!string.IsNullOrEmpty(_roomPlan.Description))
-            {
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    @_roomPlan.Description
-                </MudText>
-            }
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                @_roomPlan.Width � @_roomPlan.Height @_roomPlan.Unit
-                � @_selectedFurniture.Count furniture items
-                @if (_lastSaved.HasValue)
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h5">@_roomPlan.Name</MudText>
+                @if (!string.IsNullOrEmpty(_roomPlan.Description))
                 {
-                    <span> � Last saved: @_lastSaved.Value.ToString("yyyy-MM-dd HH:mm")</span>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        @_roomPlan.Description
+                    </MudText>
                 }
-            </MudText>
-        </MudStack>
-
-        <!-- Auto-save indicator -->
-        @if (_hasUnsavedChanges)
-        {
-            <MudChip T="string" Icon="@Icons.Material.Filled.Schedule"
-                     Color="Color.Warning"
-                     Size="Size.Small">
-                Unsaved Changes
-            </MudChip>
-        }
-        else if (_lastSaved.HasValue)
-        {
-            <MudChip T="string" Icon="@Icons.Material.Filled.Check"
-                     Color="Color.Success"
-                     Size="Size.Small">
-                Saved
-            </MudChip>
-        }
-
-        <MudSpacer />
-
-        <!-- Actions -->
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Secondary"
-                   StartIcon="@Icons.Material.Filled.Save"
-                   OnClick="SaveRoomPlan"
-                   Disabled="@(!_hasUnsavedChanges)">
-            Save
-        </MudButton>
-
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Info"
-                   StartIcon="@Icons.Material.Filled.GetApp"
-                   OnClick="ExportRoomPlan">
-            Export
-        </MudButton>
-
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Secondary"
-                   StartIcon="@Icons.Material.Filled.Settings"
-                   OnClick="OpenRoomSettings">
-            Settings
-        </MudButton>
-
-        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Primary">
-            <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy"
-                         OnClick="DuplicateRoomPlan">
-                Duplicate Plan
-            </MudMenuItem>
-            <MudMenuItem Icon="@Icons.Material.Filled.Print"
-                         OnClick="PrintRoomPlan">
-                Print
-            </MudMenuItem>
-            <MudDivider />
-            <MudMenuItem Icon="@Icons.Material.Filled.Delete"
-                         OnClick="DeleteRoomPlan"
-                         Style="color: var(--mud-palette-error);">
-                Delete Plan
-            </MudMenuItem>
-        </MudMenu>
-    </MudStack>
-
-    <!-- Main Planner Component + Configuration Panel -->
-    <MudGrid>
-        <MudItem xs="12" md="8">
-            <FurniturePlannerContainer RoomPlan="@_roomPlan"
-                              SelectedFurniture="@_selectedFurniture"
-                              AvailableFurniture="@_availableFurniture"
-                              AvailableElements="@_availableElements"
-                              SelectedFurnitureChanged="OnSelectedFurnitureChanged"
-                              OnFurnitureAdded="OnFurnitureAdded"
-                              OnFurnitureRemoved="OnFurnitureRemoved"
-                              OnFurnitureModified="OnFurnitureModified"
-                              SelectedItemChanged="HandleSelectionChanged" />
-        </MudItem>
-        <MudItem xs="12" md="4">
-            @if (_selectedItem is not null)
-            {
-                <FurnitureConfigPanel Placement="_selectedItem" OnConfigured="HandleConfigured" />
-            }
-            else
-            {
-                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="config-panel">
-                    Select an element to configure it.
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @_roomPlan.Width � @_roomPlan.Height @_roomPlan.Unit
+                    � @_selectedFurniture.Count furniture items
+                    @if (_lastSaved.HasValue)
+                    {
+                        <span> � Last saved: @_lastSaved.Value.ToString("yyyy-MM-dd HH:mm")</span>
+                    }
                 </MudText>
-            }
-        </MudItem>
-    </MudGrid>
-
-    <!-- Room Settings Dialog -->
-    <MudDialog @bind-Visible="_roomSettingsOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium })">
-        <DialogContent>
-            <MudText Typo="Typo.h6" Class="mb-4">Room Plan Settings</MudText>
-
-            <MudStack Spacing="3">
-                <MudTextField @bind-Value="_editingRoomPlan.Name"
-                              Label="Room Name"
-                              Required="true"
-                              Immediate="true" />
-
-                <MudTextField @bind-Value="_editingRoomPlan.Description"
-                              Label="Description"
-                              Lines="3"
-                              Immediate="true" />
-
-                <MudGrid>
-                    <MudItem xs="6">
-                        <MudNumericField @bind-Value="_editingRoomPlan.Width"
-                                         Label="Width"
-                                         Suffix="@_editingRoomPlan.Unit"
-                                         Min="100"
-                                         Max="2000"
-                                         Step="10" />
-                    </MudItem>
-                    <MudItem xs="6">
-                        <MudNumericField @bind-Value="_editingRoomPlan.Height"
-                                         Label="Height"
-                                         Suffix="@_editingRoomPlan.Unit"
-                                         Min="100"
-                                         Max="2000"
-                                         Step="10" />
-                    </MudItem>
-                </MudGrid>
-
-                <MudSelect @bind-Value="_editingRoomPlan.Unit" T="string" Label="Unit">
-                    <MudSelectItem T="string" Value="@("cm")">Centimeters (cm)</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("mm")">Millimeters (mm)</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("in")">Inches (in)</MudSelectItem>
-                    <MudSelectItem T="string" Value="@("ft")">Feet (ft)</MudSelectItem>
-                </MudSelect>
-
-                <MudNumericField @bind-Value="_editingRoomPlan.GridSize"
-                                 Label="Grid Size"
-                                 Suffix="@_editingRoomPlan.Unit"
-                                 Min="5"
-                                 Max="50"
-                                 Step="5" />
-
-                <MudDivider />
-
-                <MudText Typo="Typo.subtitle2">Default Behavior</MudText>
-
-                <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.ShowGrid"
-                           Label="Show Grid"
-                           Color="Color.Primary" />
-
-                <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.PreventOverlap"
-                           Label="Prevent Furniture Overlap"
-                           Color="Color.Primary" />
-
-                <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.EnableSnapping"
-                           Label="Enable Grid Snapping"
-                           Color="Color.Primary" />
             </MudStack>
-        </DialogContent>
-        <DialogActions>
-            <MudButton OnClick="CancelRoomSettings">Cancel</MudButton>
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       OnClick="SaveRoomSettings">
-                Save Settings
+
+            <!-- Auto-save indicator -->
+            @if (_hasUnsavedChanges)
+            {
+                <MudChip T="string" Icon="@Icons.Material.Filled.Schedule"
+                         Color="Color.Warning"
+                         Size="Size.Small">
+                    Unsaved Changes
+                </MudChip>
+            }
+            else if (_lastSaved.HasValue)
+            {
+                <MudChip T="string" Icon="@Icons.Material.Filled.Check"
+                         Color="Color.Success"
+                         Size="Size.Small">
+                    Saved
+                </MudChip>
+            }
+
+            <MudSpacer />
+
+            <!-- Actions -->
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Secondary"
+                       StartIcon="@Icons.Material.Filled.Save"
+                       OnClick="SaveRoomPlan"
+                       Disabled="@(!_hasUnsavedChanges)">
+                Save
             </MudButton>
-        </DialogActions>
-    </MudDialog>
-}
-else if (_loading)
-{
-    <!-- Loading State -->
-    <MudContainer MaxWidth="MaxWidth.Medium" Class="pa-8 text-center">
-        <MudStack Spacing="4" AlignItems="AlignItems.Center">
-            <MudProgressCircular Size="Size.Large" Indeterminate="true" />
-            <MudText Typo="Typo.h6">Loading room plan...</MudText>
-        </MudStack>
-    </MudContainer>
-}
-else
-{
-    <!-- Error State -->
-    <MudContainer MaxWidth="MaxWidth.Medium" Class="pa-8 text-center">
-        <MudStack Spacing="4" AlignItems="AlignItems.Center">
-            <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Large" Color="Color.Error" />
-            <MudText Typo="Typo.h5">Room Plan Not Found</MudText>
-            <MudText Typo="Typo.body1">
-                The room plan you're looking for doesn't exist or has been deleted.
-            </MudText>
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.ArrowBack"
-                       OnClick="@(() => Navigation.NavigateTo("/room-plans"))">
-                Back to Room Plans
+
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Info"
+                       StartIcon="@Icons.Material.Filled.GetApp"
+                       OnClick="ExportRoomPlan">
+                Export
             </MudButton>
+
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Secondary"
+                       StartIcon="@Icons.Material.Filled.Settings"
+                       OnClick="OpenRoomSettings">
+                Settings
+            </MudButton>
+
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Primary">
+                <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy"
+                             OnClick="DuplicateRoomPlan">
+                    Duplicate Plan
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Filled.Print"
+                             OnClick="PrintRoomPlan">
+                    Print
+                </MudMenuItem>
+                <MudDivider />
+                <MudMenuItem Icon="@Icons.Material.Filled.Delete"
+                             OnClick="DeleteRoomPlan"
+                             Style="color: var(--mud-palette-error);">
+                    Delete Plan
+                </MudMenuItem>
+            </MudMenu>
         </MudStack>
-    </MudContainer>
-}
+
+        <!-- Main Planner Component + Configuration Panel -->
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <FurniturePlannerContainer RoomPlan="@_roomPlan"
+                                  SelectedFurniture="@_selectedFurniture"
+                                  AvailableFurniture="@_availableFurniture"
+                                  AvailableElements="@_availableElements"
+                                  SelectedFurnitureChanged="OnSelectedFurnitureChanged"
+                                  OnFurnitureAdded="OnFurnitureAdded"
+                                  OnFurnitureRemoved="OnFurnitureRemoved"
+                                  OnFurnitureModified="OnFurnitureModified"
+                                  SelectedItemChanged="HandleSelectionChanged" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                @if (_selectedItem is not null)
+                {
+                    <FurnitureConfigPanel Placement="_selectedItem" OnConfigured="HandleConfigured" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="config-panel">
+                        Select an element to configure it.
+                    </MudText>
+                }
+            </MudItem>
+        </MudGrid>
+
+        <!-- Room Settings Dialog -->
+        <MudDialog @bind-Visible="_roomSettingsOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium })">
+            <DialogContent>
+                <MudText Typo="Typo.h6" Class="mb-4">Room Plan Settings</MudText>
+
+                <MudStack Spacing="3">
+                    <MudTextField @bind-Value="_editingRoomPlan.Name"
+                                  Label="Room Name"
+                                  Required="true"
+                                  Immediate="true" />
+
+                    <MudTextField @bind-Value="_editingRoomPlan.Description"
+                                  Label="Description"
+                                  Lines="3"
+                                  Immediate="true" />
+
+                    <MudGrid>
+                        <MudItem xs="6">
+                            <MudNumericField @bind-Value="_editingRoomPlan.Width"
+                                             Label="Width"
+                                             Suffix="@_editingRoomPlan.Unit"
+                                             Min="100"
+                                             Max="2000"
+                                             Step="10" />
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudNumericField @bind-Value="_editingRoomPlan.Height"
+                                             Label="Height"
+                                             Suffix="@_editingRoomPlan.Unit"
+                                             Min="100"
+                                             Max="2000"
+                                             Step="10" />
+                        </MudItem>
+                    </MudGrid>
+
+                    <MudSelect @bind-Value="_editingRoomPlan.Unit" T="string" Label="Unit">
+                        <MudSelectItem T="string" Value="@("cm")">Centimeters (cm)</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("mm")">Millimeters (mm)</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("in")">Inches (in)</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("ft")">Feet (ft)</MudSelectItem>
+                    </MudSelect>
+
+                    <MudNumericField @bind-Value="_editingRoomPlan.GridSize"
+                                     Label="Grid Size"
+                                     Suffix="@_editingRoomPlan.Unit"
+                                     Min="5"
+                                     Max="50"
+                                     Step="5" />
+
+                    <MudDivider />
+
+                    <MudText Typo="Typo.subtitle2">Default Behavior</MudText>
+
+                    <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.ShowGrid"
+                               Label="Show Grid"
+                               Color="Color.Primary" />
+
+                    <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.PreventOverlap"
+                               Label="Prevent Furniture Overlap"
+                               Color="Color.Primary" />
+
+                    <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.EnableSnapping"
+                               Label="Enable Grid Snapping"
+                               Color="Color.Primary" />
+                </MudStack>
+            </DialogContent>
+            <DialogActions>
+                <MudButton OnClick="CancelRoomSettings">Cancel</MudButton>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="SaveRoomSettings">
+                    Save Settings
+                </MudButton>
+            </DialogActions>
+        </MudDialog>
+    }
+    else if (_loading)
+    {
+        <!-- Loading State -->
+        <MudContainer MaxWidth="MaxWidth.Medium" Class="pa-8 text-center">
+            <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                <MudProgressCircular Size="Size.Large" Indeterminate="true" />
+                <MudText Typo="Typo.h6">Loading room plan...</MudText>
+            </MudStack>
+        </MudContainer>
+    }
+    else
+    {
+        <!-- Error State -->
+        <MudContainer MaxWidth="MaxWidth.Medium" Class="pa-8 text-center">
+            <MudStack Spacing="4" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Large" Color="Color.Error" />
+                <MudText Typo="Typo.h5">Room Plan Not Found</MudText>
+                <MudText Typo="Typo.body1">
+                    The room plan you're looking for doesn't exist or has been deleted.
+                </MudText>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.ArrowBack"
+                           OnClick="@(() => Navigation.NavigateTo("/room-plans"))">
+                    Back to Room Plans
+                </MudButton>
+            </MudStack>
+        </MudContainer>
+    }
 </MudContainer>
 
 @code {

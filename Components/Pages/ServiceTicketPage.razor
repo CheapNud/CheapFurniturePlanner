@@ -25,7 +25,7 @@
             <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to service" OnClick="@(() => Navigation.NavigateTo("/service"))" />
             <MudText Typo="Typo.h4">@_ticket.TicketNumber</MudText>
             <MudChip T="string" Size="Size.Small">@_ticket.Flow</MudChip>
-            <MudChip T="string" Size="Size.Small" Color="@StateColor(_ticket.State)">@_ticket.State</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(_ticket.State)">@_ticket.State</MudChip>
         </MudStack>
 
         <MudGrid>
@@ -136,8 +136,15 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _canManage = await CurrentUser.IsInRoleAsync(Roles.Admin) || await CurrentUser.IsInRoleAsync(Roles.Office);
-        await ReloadAsync();
+        try
+        {
+            _canManage = await CurrentUser.IsInRoleAsync(Roles.Admin) || await CurrentUser.IsInRoleAsync(Roles.Office);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task ReloadAsync()
@@ -197,12 +204,4 @@
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
         catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
-
-    private static Color StateColor(ServiceTicketState ticketState) => ticketState switch
-    {
-        ServiceTicketState.New => Color.Info,
-        ServiceTicketState.InProgress => Color.Warning,
-        ServiceTicketState.Resolved => Color.Success,
-        _ => Color.Default,
-    };
 }
