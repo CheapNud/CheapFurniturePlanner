@@ -7,26 +7,34 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<PageTitle>Discounts - Cheap Furniture Planner</PageTitle>
+<PageTitle>Discounts</PageTitle>
 
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
 @if (_seller is null)
 {
     <MudAlert Severity="Severity.Error">Seller not found.</MudAlert>
 }
 else
 {
-    <MudStack Spacing="4">
-        <MudPaper Elevation="2" Class="pa-4">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                <MudText Typo="Typo.h6">Discounts — @_seller.Name</MudText>
-                <MudButton Variant="Variant.Outlined" Href="/parties">Back</MudButton>
-            </MudStack>
-        </MudPaper>
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to parties" Href="/parties" />
+        <MudText Typo="Typo.h4">Discounts — @_seller.Name</MudText>
+        <MudSpacer />
+        @if (_rules.Count > 0)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
+                Add discount rule
+            </MudButton>
+        }
+    </MudStack>
 
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
-            Add discount rule
-        </MudButton>
-        <MudTable Items="@_rules" Hover="true" Striped="true" Dense="true" Elevation="2" T="DiscountRule">
+    @if (_rules.Count == 0)
+    {
+        <EmptyState Text="No discount rules yet." ActionText="Add discount rule" OnAction="@(() => AddAsync())" />
+    }
+    else
+    {
+        <MudTable Items="@_rules" Hover="true" Dense="true" T="DiscountRule">
             <HeaderContent>
                 <MudTh>Scope</MudTh>
                 <MudTh>Collection</MudTh>
@@ -47,8 +55,9 @@ else
                 </MudTd>
             </RowTemplate>
         </MudTable>
-    </MudStack>
+    }
 }
+</MudContainer>
 
 @code {
     [Parameter]
@@ -57,7 +66,17 @@ else
     private Seller? _seller;
     private List<DiscountRule> _rules = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync()
     {

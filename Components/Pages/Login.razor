@@ -2,6 +2,8 @@
 @using Microsoft.AspNetCore.WebUtilities
 @inject NavigationManager Nav
 
+<PageTitle>Sign in</PageTitle>
+
 @* Plain HTML form POST to the CheapHelpers AccountController's SignIn action - no
    SignInManager inside this circuit. Smallest thing that signs in; CheapHelpers' own
    Login.razor assumes localization + a JS submit helper this desktop app doesn't wire up,

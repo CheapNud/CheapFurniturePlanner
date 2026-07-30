@@ -107,9 +107,16 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _consumers = await Parties.ConsumersAsync();
-        _allOrders = await Orders.ListOrdersAsync();
-        _suppliers = await Parties.SuppliersAsync();
+        try
+        {
+            _consumers = await Parties.ConsumersAsync();
+            _allOrders = await Orders.ListOrdersAsync();
+            _suppliers = await Parties.SuppliersAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OnConsumerChanged(int? consumerId)

@@ -10,11 +10,11 @@
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 
-<PageTitle>Home - Cheap Furniture Planner</PageTitle>
+<PageTitle>Home</PageTitle>
 
-<!-- Hero Section -->
-<MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
-    <MudPaper Elevation="0" Class="pa-8 text-center mud-theme-primary">
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <!-- Hero Section -->
+    <MudPaper Elevation="0" Class="pa-8 text-center mud-theme-primary mb-4">
         <MudStack Spacing="4" AlignItems="AlignItems.Center">
             <MudIcon Icon="@Icons.Material.Filled.Chair" Size="Size.Large" Color="Color.Surface" />
             <MudText Typo="Typo.h3" Class="font-weight-bold" Color="Color.Surface">
@@ -33,11 +33,9 @@
             </MudButton>
         </MudStack>
     </MudPaper>
-</MudContainer>
 
-<!-- Quick Stats -->
-<MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
-    <MudGrid>
+    <!-- Quick Stats -->
+    <MudGrid Class="mb-4">
         <MudItem xs="12" sm="6" md="3">
             <MudCard Elevation="2" Class="pa-4 text-center">
                 <MudStack Spacing="2" AlignItems="AlignItems.Center">
@@ -94,11 +92,9 @@
             </MudCard>
         </MudItem>
     </MudGrid>
-</MudContainer>
 
-<!-- Recent Room Plans -->
-<MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
-    <MudPaper Elevation="2" Class="pa-6">
+    <!-- Recent Room Plans -->
+    <MudPaper Elevation="2" Class="pa-6 mb-4">
         <MudStack Spacing="4">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.h5">Recent Room Plans</MudText>
@@ -137,7 +133,7 @@
                                             </MudText>
                                         </MudStack>
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            Last updated: @(roomPlan.UpdatedAt?.ToString("MMM dd, yyyy") ?? roomPlan.CreatedAt.ToString("MMM dd, yyyy"))
+                                            Last updated: @(roomPlan.UpdatedAt?.ToString("yyyy-MM-dd") ?? roomPlan.CreatedAt.ToString("yyyy-MM-dd"))
                                         </MudText>
                                     </MudStack>
                                 </MudCardContent>
@@ -168,11 +164,9 @@
             }
         </MudStack>
     </MudPaper>
-</MudContainer>
 
-<!-- Popular Furniture -->
-<MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
-    <MudPaper Elevation="2" Class="pa-6">
+    <!-- Popular Furniture -->
+    <MudPaper Elevation="2" Class="pa-6 mb-4">
         <MudStack Spacing="4">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                 <MudText Typo="Typo.h5">Popular Furniture</MudText>
@@ -214,10 +208,10 @@
                                             @if (furniture.Price.HasValue)
                                             {
                                                 <MudText Typo="Typo.subtitle2" Color="Color.Primary">
-                                                    @furniture.Price.Value.ToString("C")
+                                                    @furniture.Price.Value.ToString("C2")
                                                 </MudText>
                                             }
-                                            <MudChip T=bool Size="Size.Small" Color="Color.Success">
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success">
                                                 Used @usageCount times
                                             </MudChip>
                                         </MudStack>
@@ -236,10 +230,8 @@
             }
         </MudStack>
     </MudPaper>
-</MudContainer>
 
-<!-- Quick Actions -->
-<MudContainer MaxWidth="MaxWidth.Large" Class="mb-8">
+    <!-- Quick Actions -->
     <MudPaper Elevation="2" Class="pa-6">
         <MudStack Spacing="4">
             <MudText Typo="Typo.h5">Quick Actions</MudText>

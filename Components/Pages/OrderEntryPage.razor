@@ -3,6 +3,7 @@
 @using CheapFurniturePlanner.Components.Orders
 @using CheapFurniturePlanner.Domain.Catalog
 @using CheapFurniturePlanner.Domain.Serialization
+@using CheapFurniturePlanner.Ui
 @inject OrderEntryService OrderEntryService
 @inject PartyService Parties
 @inject ProductionUnitService Units
@@ -10,26 +11,41 @@
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 
-<PageTitle>Order - Cheap Furniture Planner</PageTitle>
+<PageTitle>Order</PageTitle>
 
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
 @if (_order is null)
 {
     <MudAlert Severity="Severity.Error">Order not found.</MudAlert>
 }
 else
 {
-    <MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to orders" OnClick="@(() => Navigation.NavigateTo("/orders"))" />
+        <MudText Typo="Typo.h4">@_order.OrderNumber</MudText>
+        <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(_order.State)">@_order.State</MudChip>
+        @if (_phase is ProductionPhase orderPhase)
+        {
+            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(orderPhase)">@PhaseLabel(orderPhase)</MudChip>
+        }
+        <MudSpacer />
+        @if (_order.State == OrderState.Draft)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="PlaceAsync">Place order</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="CancelAsync">Cancel order</MudButton>
+        }
+        @if (_order.State == OrderState.Placed && _invoice is null)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="CreateInvoiceAsync">Create invoice</MudButton>
+        }
+        else if (_invoice is not null)
+        {
+            <MudLink Href="@($"/invoices/{_invoice.Id}")">@_invoice.InvoiceNumber</MudLink>
+        }
+    </MudStack>
+
+    <MudPaper Class="pa-4 mb-4">
         <MudStack Spacing="2">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                <MudText Typo="Typo.h5">@_order.OrderNumber</MudText>
-                <MudStack Row="true" Spacing="2">
-                    <MudChip T="string" Color="@StateColor(_order.State)">@_order.State</MudChip>
-                    @if (_phase is ProductionPhase orderPhase)
-                    {
-                        <MudChip T="string" Color="@PhaseColor(orderPhase)">@PhaseLabel(orderPhase)</MudChip>
-                    }
-                </MudStack>
-            </MudStack>
             <MudText Typo="Typo.body2">Seller: @_order.Seller?.Name — Consumer: @_order.Consumer?.Name — Market: @_order.MarketCode</MudText>
             <MudSelect T="int?" Label="Delivery address" Value="@SelectedDeliveryAddressBookEntryId" ValueChanged="SetDeliveryAddressAsync"
                        Disabled="@(_order.State != OrderState.Draft)" Clearable="true">
@@ -57,21 +73,6 @@ else
                     <MudText Typo="Typo.body2">Order discount: @_order.OrderDiscountPercent.ToString("0.##")%</MudText>
                 }
             </MudStack>
-            @if (_order.State == OrderState.Draft)
-            {
-                <MudStack Row="true" Spacing="2">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="PlaceAsync">Place order</MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="CancelAsync">Cancel order</MudButton>
-                </MudStack>
-            }
-            @if (_order.State == OrderState.Placed && _invoice is null)
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="CreateInvoiceAsync">Create invoice</MudButton>
-            }
-            else if (_invoice is not null)
-            {
-                <MudLink Href="@($"/invoices/{_invoice.Id}")">@_invoice.InvoiceNumber</MudLink>
-            }
         </MudStack>
     </MudPaper>
 
@@ -87,7 +88,13 @@ else
         </MudTabs>
     }
 
-    <MudTable Items="@_order.Lines" Hover="true" Striped="true" Dense="true" Elevation="2" T="OrderLine">
+    @if (_order.Lines.Count == 0)
+    {
+        <EmptyState Text="No lines yet - add one below" />
+    }
+    else
+    {
+    <MudTable Items="@_order.Lines" Hover="true" Dense="true" T="OrderLine">
         <HeaderContent>
             <MudTh>Code</MudTh>
             <MudTh>Kind</MudTh>
@@ -158,7 +165,7 @@ else
                 {
                     @foreach (var unit in _units.Where(u => u.OrderLineId == context.Id))
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@UnitColor(unit.State)">@unit.SequenceNumber: @unit.State</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(unit.State)">@unit.SequenceNumber: @unit.State</MudChip>
                     }
                 }
             </MudTd>
@@ -176,7 +183,9 @@ else
             </MudTd>
         </RowTemplate>
     </MudTable>
+    }
 }
+</MudContainer>
 
 @code {
     [Parameter]
@@ -195,7 +204,17 @@ else
     private int? SelectedDeliveryAddressBookEntryId =>
         _deliveryAddresses.FirstOrDefault(d => d.AddressId == _order!.DeliveryAddressId)?.Id;
 
-    protected override async Task OnParametersSetAsync() => await ReloadAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync()
     {
@@ -242,34 +261,11 @@ else
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
 
-    private static Color StateColor(OrderState state) => state switch
-    {
-        OrderState.Draft => Color.Default,
-        OrderState.Placed => Color.Success,
-        OrderState.Cancelled => Color.Error,
-        _ => Color.Default,
-    };
-
     private static string PhaseLabel(ProductionPhase orderPhase) => orderPhase switch
     {
         ProductionPhase.InProduction => "In production",
         ProductionPhase.Ready => "Ready",
         _ => "Delivered",
-    };
-
-    private static Color PhaseColor(ProductionPhase orderPhase) => orderPhase switch
-    {
-        ProductionPhase.InProduction => Color.Warning,
-        ProductionPhase.Ready => Color.Info,
-        _ => Color.Success,
-    };
-
-    private static Color UnitColor(ProductionUnitState state) => state switch
-    {
-        ProductionUnitState.Expected => Color.Warning,
-        ProductionUnitState.Arrived => Color.Info,
-        ProductionUnitState.Delivered => Color.Success,
-        _ => Color.Default,
     };
 
     private async Task PlaceAsync()

@@ -7,10 +7,19 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
-        Add operation
-    </MudButton>
-    <MudTable Items="@_operations" Hover="true" Striped="true" Dense="true" Elevation="2" T="Operation">
+    @if (_operations.Count > 0)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
+            Add operation
+        </MudButton>
+    }
+    @if (_operations.Count == 0)
+    {
+        <EmptyState Text="No operations yet." ActionText="Add operation" OnAction="@(() => AddAsync())" />
+    }
+    else
+    {
+    <MudTable Items="@_operations" Hover="true" Dense="true" T="Operation">
         <HeaderContent>
             <MudTh>Code</MudTh>
             <MudTh>Name</MudTh>
@@ -29,12 +38,23 @@
             </MudTd>
         </RowTemplate>
     </MudTable>
+    }
 </MudStack>
 
 @code {
     private List<Operation> _operations = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync() => _operations = (await AuthoringCatalogueStore.LoadAsync()).Operations;
 

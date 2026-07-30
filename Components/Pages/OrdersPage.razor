@@ -1,59 +1,81 @@
 @page "/orders"
 @attribute [Authorize(Roles = Roles.AdminOrOffice)]
 @using CheapFurniturePlanner.Components.Orders
+@using CheapFurniturePlanner.Ui
 @inject OrderEntryService OrderEntryService
 @inject ProductionUnitService Units
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 
-<PageTitle>Orders - Cheap Furniture Planner</PageTitle>
+<PageTitle>Orders</PageTitle>
 
-<MudPaper Elevation="2" Class="pa-4 mb-4">
-    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-        <MudText Typo="Typo.h5">Orders</MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => NewOrderAsync())">
-            New order
-        </MudButton>
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Orders</MudText>
+        <MudSpacer />
+        @if (_orders.Count > 0)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => NewOrderAsync())">
+                New order
+            </MudButton>
+        }
     </MudStack>
-</MudPaper>
 
-<MudTable Items="@_orders" Hover="true" Striped="true" Dense="true" Elevation="2" T="Order"
-          OnRowClick="@((TableRowClickEventArgs<Order> args) => Navigation.NavigateTo($"/orders/{args.Item!.Id}"))">
-    <HeaderContent>
-        <MudTh>Order number</MudTh>
-        <MudTh>Seller</MudTh>
-        <MudTh>Consumer</MudTh>
-        <MudTh>State</MudTh>
-        <MudTh>Production</MudTh>
-        <MudTh>Lines</MudTh>
-        <MudTh>Total</MudTh>
-        <MudTh>Pinned version</MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Order number">@context.OrderNumber</MudTd>
-        <MudTd DataLabel="Seller">@context.Seller?.Name</MudTd>
-        <MudTd DataLabel="Consumer">@context.Consumer?.Name</MudTd>
-        <MudTd DataLabel="State">
-            <MudChip T="string" Size="Size.Small" Color="@StateColor(context.State)">@context.State</MudChip>
-        </MudTd>
-        <MudTd DataLabel="Production">
-            @if (_phases.GetValueOrDefault(context.Id) is ProductionPhase orderPhase)
-            {
-                <MudChip T="string" Size="Size.Small" Color="@PhaseColor(orderPhase)">@PhaseLabel(orderPhase)</MudChip>
-            }
-        </MudTd>
-        <MudTd DataLabel="Lines">@context.Lines.Count</MudTd>
-        <MudTd DataLabel="Total">@OrderEntryService.OrderTotal(context).ToString("C2")</MudTd>
-        <MudTd DataLabel="Pinned version">@(context.PinnedCatalogueVersion ?? "—")</MudTd>
-    </RowTemplate>
-</MudTable>
+    @if (_orders.Count == 0)
+    {
+        <EmptyState Text="No orders yet" ActionText="New order" OnAction="@(() => NewOrderAsync())" />
+    }
+    else
+    {
+        <MudTable Items="@_orders" Hover="true" Dense="true" T="Order"
+                  OnRowClick="@((TableRowClickEventArgs<Order> args) => Navigation.NavigateTo($"/orders/{args.Item!.Id}"))">
+            <HeaderContent>
+                <MudTh>Order number</MudTh>
+                <MudTh>Seller</MudTh>
+                <MudTh>Consumer</MudTh>
+                <MudTh>State</MudTh>
+                <MudTh>Production</MudTh>
+                <MudTh>Lines</MudTh>
+                <MudTh>Total</MudTh>
+                <MudTh>Pinned version</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Order number">@context.OrderNumber</MudTd>
+                <MudTd DataLabel="Seller">@context.Seller?.Name</MudTd>
+                <MudTd DataLabel="Consumer">@context.Consumer?.Name</MudTd>
+                <MudTd DataLabel="State">
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Production">
+                    @if (_phases.GetValueOrDefault(context.Id) is ProductionPhase orderPhase)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(orderPhase)">@PhaseLabel(orderPhase)</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Lines">@context.Lines.Count</MudTd>
+                <MudTd DataLabel="Total">@OrderEntryService.OrderTotal(context).ToString("C2")</MudTd>
+                <MudTd DataLabel="Pinned version">@(context.PinnedCatalogueVersion ?? "—")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudContainer>
 
 @code {
     private List<Order> _orders = [];
     private Dictionary<int, ProductionPhase?> _phases = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync()
     {
@@ -61,26 +83,11 @@
         _phases = await Units.PhasesForOrdersAsync(_orders.Select(o => o.Id).ToList());
     }
 
-    private static Color StateColor(OrderState state) => state switch
-    {
-        OrderState.Draft => Color.Default,
-        OrderState.Placed => Color.Success,
-        OrderState.Cancelled => Color.Error,
-        _ => Color.Default,
-    };
-
     private static string PhaseLabel(ProductionPhase orderPhase) => orderPhase switch
     {
         ProductionPhase.InProduction => "In production",
         ProductionPhase.Ready => "Ready",
         _ => "Delivered",
-    };
-
-    private static Color PhaseColor(ProductionPhase orderPhase) => orderPhase switch
-    {
-        ProductionPhase.InProduction => Color.Warning,
-        ProductionPhase.Ready => Color.Info,
-        _ => Color.Success,
     };
 
     private async Task NewOrderAsync()

@@ -7,33 +7,35 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<PageTitle>Price versions - Cheap Furniture Planner</PageTitle>
+<PageTitle>Price versions</PageTitle>
 
-<MudPaper Elevation="2" Class="pa-4 mb-4">
-    <MudStack Spacing="3">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-            <MudText Typo="Typo.h5">Price versions</MudText>
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Publish"
-                       OnClick="@PublishAsync">
-                Publish new version
-            </MudButton>
-        </MudStack>
-        @if (_pending)
-        {
-            <MudAlert Severity="Severity.Warning">Unpublished price changes — publish a new version to apply them.</MudAlert>
-        }
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Price versions</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Publish"
+                   OnClick="@PublishAsync">
+            Publish new version
+        </MudButton>
     </MudStack>
-</MudPaper>
+    @if (_pending)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-4">Unpublished price changes — publish a new version to apply them.</MudAlert>
+    }
 
 @if (_versions is null)
 {
     <MudProgressCircular Indeterminate="true" />
 }
+else if (_versions.Count == 0)
+{
+    <EmptyState Text="No price versions yet." ActionText="Publish new version" OnAction="@PublishAsync" />
+}
 else
 {
-    <MudTable Items="@_versions" Hover="true" Dense="true" Elevation="2">
+    <MudTable Items="@_versions" Hover="true" Dense="true">
         <HeaderContent>
             <MudTh>Version</MudTh>
             <MudTh>Effective</MudTh>
@@ -46,18 +48,29 @@ else
             <MudTd DataLabel="Effective">@context.EffectiveDate.ToString("yyyy-MM-dd")</MudTd>
             <MudTd DataLabel="Published">@context.PublishedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
             <MudTd DataLabel="Status">
-                <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
+                <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.Status)">@context.Status</MudChip>
             </MudTd>
             <MudTd DataLabel="Hash">@ShortHash(context.ContentHash)</MudTd>
         </RowTemplate>
     </MudTable>
 }
+</MudContainer>
 
 @code {
     private IReadOnlyList<PriceVersionInfo>? _versions;
     private bool _pending;
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync()
     {
@@ -66,13 +79,6 @@ else
     }
 
     private static string ShortHash(string hash) => hash.Length > 12 ? hash[..12] : hash;
-
-    private static Color StatusColor(PriceVersionStatus status) => status switch
-    {
-        PriceVersionStatus.Effective => Color.Success,
-        PriceVersionStatus.Scheduled => Color.Warning,
-        _ => Color.Default
-    };
 
     private async Task PublishAsync()
     {

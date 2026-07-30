@@ -7,8 +7,17 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add fixed surcharge</MudButton>
-    <MudTable Items="@_surcharges" Hover="true" Striped="true" Dense="true" Elevation="2" T="FixedSurcharge">
+    @if (_surcharges.Count > 0)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add fixed surcharge</MudButton>
+    }
+    @if (_surcharges.Count == 0)
+    {
+        <EmptyState Text="No fixed surcharges yet." ActionText="Add fixed surcharge" OnAction="@(() => AddAsync())" />
+    }
+    else
+    {
+    <MudTable Items="@_surcharges" Hover="true" Dense="true" T="FixedSurcharge">
         <HeaderContent>
             <MudTh>Name</MudTh>
             <MudTh>Section</MudTh>
@@ -27,12 +36,23 @@
             </MudTd>
         </RowTemplate>
     </MudTable>
+    }
 </MudStack>
 
 @code {
     private List<FixedSurcharge> _surcharges = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync() => _surcharges = (await AuthoringCatalogueStore.LoadAsync()).FixedSurcharges;
 

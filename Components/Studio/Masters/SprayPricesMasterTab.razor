@@ -7,8 +7,17 @@
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="3">
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add spray price</MudButton>
-    <MudTable Items="@_sprayPrices" Hover="true" Striped="true" Dense="true" Elevation="2" T="SprayPrice">
+    @if (_sprayPrices.Count > 0)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">Add spray price</MudButton>
+    }
+    @if (_sprayPrices.Count == 0)
+    {
+        <EmptyState Text="No spray prices yet." ActionText="Add spray price" OnAction="@(() => AddAsync())" />
+    }
+    else
+    {
+    <MudTable Items="@_sprayPrices" Hover="true" Dense="true" T="SprayPrice">
         <HeaderContent>
             <MudTh>Frame body</MudTh>
             <MudTh>Price</MudTh>
@@ -25,13 +34,24 @@
             </MudTd>
         </RowTemplate>
     </MudTable>
+    }
 </MudStack>
 
 @code {
     private List<SprayPrice> _sprayPrices = [];
     private IReadOnlyList<string> _frameBodyCodes = [];
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
 
     private async Task ReloadAsync()
     {
