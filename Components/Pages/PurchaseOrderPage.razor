@@ -45,7 +45,7 @@
             {
                 <MudText><b>Sent:</b> @sentAt.ToString("yyyy-MM-dd")</MudText>
             }
-            @if (_order.State == SupplierOrderState.Sent)
+            @if (_order.State is SupplierOrderState.Sent or SupplierOrderState.Completed)
             {
                 <MudTextField T="string" Label="Their reference" Value="_theirReference" ValueChanged="OnTheirReferenceChangedAsync" Class="mt-2" />
             }

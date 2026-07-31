@@ -122,7 +122,13 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
         await using var db = await factory.CreateDbContextAsync(ct);
         var order = await db.SupplierOrders.FirstOrDefaultAsync(o => o.Id == supplierOrderId, ct)
             ?? throw new InvalidOperationException($"Purchase order {supplierOrderId} not found.");
-        if (order.State != SupplierOrderState.Sent) { throw new InvalidOperationException($"Purchase order {order.PoNumber} has not been sent."); }
+        // Sent or Completed - the class comment promises TheirReference records the supplier's
+        // confirmation ref, and a PO can auto-complete (last unit arrives) before anyone gets
+        // around to typing that ref in, so a fast-completing PO must still accept it.
+        if (order.State is not (SupplierOrderState.Sent or SupplierOrderState.Completed))
+        {
+            throw new InvalidOperationException($"Purchase order {order.PoNumber} has not been sent.");
+        }
         order.TheirReference = string.IsNullOrWhiteSpace(theirReference) ? null : theirReference.Trim();
         await db.SaveChangesAsync(ct);
     }
@@ -173,11 +179,19 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
     public async Task<SupplierDelivery> CreateAnnouncementAsync(int supplierId, string reference, DateTime? expectedDate, CancellationToken ct = default)
     {
         await RequireAdminOrOfficeAsync();
+        var trimmedReference = (reference ?? "").Trim();
+        if (trimmedReference.Length == 0) { throw new InvalidOperationException("A reference is required."); }
         await using var db = await factory.CreateDbContextAsync(ct);
+        // Pre-check the (SupplierId, Reference) unique index so a duplicate reads as a friendly
+        // message through the UI instead of a raw DbUpdateException.
+        if (await db.SupplierDeliveries.AnyAsync(d => d.SupplierId == supplierId && d.Reference == trimmedReference, ct))
+        {
+            throw new InvalidOperationException($"An announcement with reference '{trimmedReference}' already exists for this supplier.");
+        }
         var announcement = new SupplierDelivery
         {
             SupplierId = supplierId,
-            Reference = reference.Trim(),
+            Reference = trimmedReference,
             ExpectedDate = expectedDate,
             CreatedByUserId = await RequireUserIdAsync(),
             CreatedAt = DateTime.UtcNow,

@@ -371,12 +371,12 @@ public class PurchasingServiceTests
     }
 
     [Fact]
-    public async Task SetTheirReference_SentOnly()
+    public async Task SetTheirReference_SentOrCompleted()
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var supplierId = await SeedSupplierAsync(factory, "SUPA");
-        await SeedUnitAsync(factory, "MODELA", lineSupplierId: supplierId);
+        var (unitId, _) = await SeedUnitAsync(factory, "MODELA", lineSupplierId: supplierId);
         var purchasing = new PurchasingService(factory, OfficeUser);
         var sweep = await purchasing.GenerateOrdersAsync();
         var orderId = Assert.Single(sweep.SupplierOrderIds);
@@ -387,6 +387,32 @@ public class PurchasingServiceTests
         await purchasing.SetTheirReferenceAsync(orderId, "  REF-1  ");
         var order = await purchasing.GetOrderAsync(orderId);
         Assert.Equal("REF-1", order!.TheirReference);
+
+        // A fast-completing PO (its one unit arrives) must still accept the supplier's ref - the
+        // class comment promises TheirReference regardless of how quickly the PO closes.
+        var units = new ProductionUnitService(factory, new FakeCurrentUser("wh-1", Roles.Warehouse));
+        await units.ArriveAsync(unitId);
+        var completed = await purchasing.GetOrderAsync(orderId);
+        Assert.Equal(SupplierOrderState.Completed, completed!.State);
+
+        await purchasing.SetTheirReferenceAsync(orderId, "REF-2");
+        var final = await purchasing.GetOrderAsync(orderId);
+        Assert.Equal("REF-2", final!.TheirReference);
+    }
+
+    [Fact]
+    public async Task CreateAnnouncement_BlankReferenceThrows_DuplicateReferenceThrowsFriendly()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var purchasing = new PurchasingService(factory, OfficeUser);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.CreateAnnouncementAsync(supplierId, "   ", null));
+
+        await purchasing.CreateAnnouncementAsync(supplierId, "DN-0001", null);
+        var duplicate = await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.CreateAnnouncementAsync(supplierId, "DN-0001", null));
+        Assert.Contains("DN-0001", duplicate.Message);
     }
 
     [Fact]

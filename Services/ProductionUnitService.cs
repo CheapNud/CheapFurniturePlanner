@@ -175,6 +175,14 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         unit.State = ProductionUnitState.Expected;
         unit.ArrivedAt = null;
         unit.ReviewNote = string.IsNullOrWhiteSpace(reviewNote) ? unit.ReviewNote : reviewNote.Trim();
+        // The one sanctioned Completed exit: undo reverses the completing arrival, so a PO that
+        // auto-completed on this unit's arrival must reopen to Sent (loaded in the same
+        // context/save as the unit's own reversal - see CompleteSupplierOrderIfLinkedAsync above).
+        if (unit.SupplierOrderId is int supplierOrderId)
+        {
+            var order = await db.SupplierOrders.FirstOrDefaultAsync(o => o.Id == supplierOrderId, ct);
+            if (order is not null && order.State == SupplierOrderState.Completed) { order.State = SupplierOrderState.Sent; }
+        }
         await db.SaveChangesAsync(ct);
     }
 

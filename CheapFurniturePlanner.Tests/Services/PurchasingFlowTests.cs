@@ -204,6 +204,41 @@ public class PurchasingFlowTests
         Assert.Equal(SupplierOrderState.Completed, sentPo!.State);
     }
 
+    // Regression: undoing the arrival that completed a Sent PO must reopen the PO to Sent - a
+    // Completed PO with an Expected unit is a lie (attach would be blocked by the Sent-only guard
+    // even though the unit is legitimately expected again).
+    [Fact]
+    public async Task UndoArrive_ReopensCompletedPO_UnitReturnsToExpected_ReattachableToAnnouncement()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var poId = await SeedSupplierOrderAsync(factory, supplierId, "PO-2026-0001", SupplierOrderState.Sent);
+        var (_, unitId) = await SeedUnitAsync(factory, supplierOrderId: poId, state: ProductionUnitState.Expected);
+        var units = new ProductionUnitService(factory, WarehouseUser);
+        var purchasing = new PurchasingService(factory, OfficeUser);
+
+        await units.ArriveAsync(unitId);
+        var completed = await purchasing.GetOrderAsync(poId);
+        Assert.Equal(SupplierOrderState.Completed, completed!.State);
+
+        await units.UndoArriveAsync(unitId);
+
+        var reopened = await purchasing.GetOrderAsync(poId);
+        Assert.Equal(SupplierOrderState.Sent, reopened!.State);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var unit = await db.ProductionUnits.SingleAsync(u => u.Id == unitId);
+            Assert.Equal(ProductionUnitState.Expected, unit.State);
+        }
+
+        var announcement = await purchasing.CreateAnnouncementAsync(supplierId, "DN-0001", null);
+        await purchasing.AttachToAnnouncementAsync(announcement.Id, unitId);
+        var attached = await purchasing.ListAnnouncementsAsync(supplierId);
+        var reloadedAnnouncement = attached.Single(a => a.Id == announcement.Id);
+        Assert.Equal(unitId, Assert.Single(reloadedAnnouncement.Units).Id);
+    }
+
     // -- announcements --
 
     [Fact]
