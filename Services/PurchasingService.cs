@@ -170,6 +170,91 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
         return (bySupplier, unresolvedModelCodes.ToList());
     }
 
+    public async Task<SupplierDelivery> CreateAnnouncementAsync(int supplierId, string reference, DateTime? expectedDate, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var announcement = new SupplierDelivery
+        {
+            SupplierId = supplierId,
+            Reference = reference.Trim(),
+            ExpectedDate = expectedDate,
+            CreatedByUserId = await RequireUserIdAsync(),
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.SupplierDeliveries.Add(announcement);
+        await db.SaveChangesAsync(ct);
+        return announcement;
+    }
+
+    // open = has a unit that hasn't reached Arrived/Delivered yet, or nothing attached yet (a
+    // freshly created announcement still needs to show up so units can be attached to it).
+    public async Task<List<SupplierDelivery>> ListAnnouncementsAsync(int? supplierId = null, bool openOnly = true, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var query = db.SupplierDeliveries.AsNoTracking()
+            .Include(d => d.Supplier)
+            .Include(d => d.Units)
+            .AsQueryable();
+        if (supplierId is int wantedSupplierId) { query = query.Where(d => d.SupplierId == wantedSupplierId); }
+        if (openOnly)
+        {
+            query = query.Where(d => d.Units.Count == 0 || d.Units.Any(u => u.State != ProductionUnitState.Arrived && u.State != ProductionUnitState.Delivered));
+        }
+        return await query.OrderByDescending(d => d.CreatedAt).ToListAsync(ct);
+    }
+
+    // Guards: the unit must be on a Sent PO (so it's an actual placed order, not a draft
+    // candidate), from the same supplier as the announcement, not yet arrived, and not already on
+    // another announcement.
+    public async Task AttachToAnnouncementAsync(int supplierDeliveryId, int unitId, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var announcement = await db.SupplierDeliveries.FirstOrDefaultAsync(d => d.Id == supplierDeliveryId, ct)
+            ?? throw new InvalidOperationException($"Announcement {supplierDeliveryId} not found.");
+        var unit = await db.ProductionUnits.FirstOrDefaultAsync(u => u.Id == unitId, ct)
+            ?? throw new InvalidOperationException($"Unit {unitId} not found.");
+        if (unit.SupplierOrderId is not int supplierOrderId) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not on a purchase order."); }
+        var order = await db.SupplierOrders.FirstAsync(o => o.Id == supplierOrderId, ct);
+        if (order.State != SupplierOrderState.Sent) { throw new InvalidOperationException($"Purchase order {order.PoNumber} has not been sent."); }
+        if (order.SupplierId != announcement.SupplierId) { throw new InvalidOperationException($"Unit {unit.UnitCode} belongs to a different supplier."); }
+        if (unit.State is ProductionUnitState.Arrived or ProductionUnitState.Delivered) { throw new InvalidOperationException($"Unit {unit.UnitCode} has already arrived."); }
+        if (unit.SupplierDeliveryId is not null) { throw new InvalidOperationException($"Unit {unit.UnitCode} is already on an announcement."); }
+        unit.SupplierDeliveryId = supplierDeliveryId;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task DetachFromAnnouncementAsync(int unitId, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var unit = await db.ProductionUnits.FirstOrDefaultAsync(u => u.Id == unitId, ct)
+            ?? throw new InvalidOperationException($"Unit {unitId} not found.");
+        if (unit.SupplierDeliveryId is null) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not on an announcement."); }
+        if (unit.State is ProductionUnitState.Arrived or ProductionUnitState.Delivered) { throw new InvalidOperationException($"Unit {unit.UnitCode} has already arrived."); }
+        unit.SupplierDeliveryId = null;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteAnnouncementAsync(int supplierDeliveryId, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var announcement = await db.SupplierDeliveries.Include(d => d.Units).FirstOrDefaultAsync(d => d.Id == supplierDeliveryId, ct)
+            ?? throw new InvalidOperationException($"Announcement {supplierDeliveryId} not found.");
+        if (announcement.Units.Count > 0) { throw new InvalidOperationException($"Announcement {announcement.Reference} is not empty."); }
+        db.SupplierDeliveries.Remove(announcement);
+        await db.SaveChangesAsync(ct);
+    }
+
+    // An announcement is overdue once its expected date has passed and at least one attached unit
+    // still hasn't reached the dock (Arrived) or beyond (Delivered).
+    public static bool IsOverdue(SupplierDelivery announcement) =>
+        announcement.ExpectedDate is DateTime expected
+        && expected.Date < DateTime.UtcNow.Date
+        && announcement.Units.Any(u => u.State != ProductionUnitState.Arrived && u.State != ProductionUnitState.Delivered);
+
     private async Task<string> RequireUserIdAsync() =>
         await currentUser.UserIdAsync() ?? throw new InvalidOperationException("No signed-in user.");
 
