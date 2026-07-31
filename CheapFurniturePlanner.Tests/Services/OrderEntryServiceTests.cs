@@ -121,9 +121,8 @@ public class OrderEntryServiceTests
         var line = Assert.Single(reloaded.Lines);
         Assert.Equal(79m, line.UnitPrice);
         Assert.Equal(158m, line.LineTotal);
-        // OrderEntryService no longer writes the legacy free-text ref - only SupplierAbsorber reads
-        // it, and only SupplierId is resolved here (null because no Supplier "SUP-X" exists yet).
-        Assert.Null(line.SupplierRef);
+        // SupplierId is resolved from the article's SupplierRef against the Suppliers table -
+        // null here because no Supplier "SUP-X" exists yet.
         Assert.Null(line.SupplierId);
         Assert.Equal("ART-DROP", line.AssignedCode);
         Assert.Equal(OrderLineKind.StandaloneArticle, line.Kind);

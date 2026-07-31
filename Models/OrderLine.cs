@@ -25,8 +25,6 @@ public class OrderLine
     public decimal DiscountPercent { get; set; }
     public string? DiscountSource { get; set; }
     public bool DiscountIsManual { get; set; }
-    // absorb source only - populated data lives on SupplierId; column drops next phase
-    public string? SupplierRef { get; set; }
     public int? SupplierId { get; set; }
     public Supplier? Supplier { get; set; }
 

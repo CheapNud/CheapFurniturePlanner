@@ -21,4 +21,11 @@ public class ProductionUnit
     public int? LoadPosition { get; set; }
     public string? ReviewNote { get; set; }
     public DateTime CreatedAt { get; set; }
+    // Purchasing links - both optional and independent of Trip: a unit is ordered from a supplier,
+    // separately announced as inbound, and separately assigned to a truck. None of the three imply
+    // the others.
+    public int? SupplierOrderId { get; set; }
+    public SupplierOrder? SupplierOrder { get; set; }
+    public int? SupplierDeliveryId { get; set; }
+    public SupplierDelivery? SupplierDelivery { get; set; }
 }
