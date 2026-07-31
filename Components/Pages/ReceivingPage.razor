@@ -5,6 +5,7 @@
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize(Roles = Roles.WarehouseStaff)]
 @inject ProductionUnitService Units
+@inject PurchasingService Purchasing
 @inject ISnackbar Snackbar
 
 <PageTitle>Receiving</PageTitle>
@@ -31,6 +32,12 @@
             <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Arrived)">Arrived</MudSelectItem>
             <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Delivered)">Delivered</MudSelectItem>
             <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Cancelled)">Cancelled</MudSelectItem>
+        </MudSelect>
+        <MudSelect T="int?" Value="_announcementFilter" ValueChanged="OnAnnouncementFilterChanged" Label="Announcement" Clearable="true">
+            @foreach (var announcement in _announcements)
+            {
+                <MudSelectItem T="int?" Value="@((int?)announcement.Id)">@($"{announcement.Supplier?.Name} — {announcement.Reference}")</MudSelectItem>
+            }
         </MudSelect>
     </MudStack>
 
@@ -82,15 +89,18 @@
 
 @code {
     private List<ProductionUnit> _units = [];
+    private List<SupplierDelivery> _announcements = [];
     private readonly List<string> _unknownScans = [];
     private string _scanEntry = "";
     private string _orderFilter = "";
     private ProductionUnitState? _stateFilter;
+    private int? _announcementFilter;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
+            _announcements = await Purchasing.ListAnnouncementsAsync();
             await LoadAsync();
         }
         catch (Exception ex)
@@ -100,7 +110,7 @@
     }
 
     private async Task LoadAsync() =>
-        _units = await Units.ListUnitsAsync(string.IsNullOrWhiteSpace(_orderFilter) ? null : _orderFilter, _stateFilter);
+        _units = await Units.ListUnitsAsync(string.IsNullOrWhiteSpace(_orderFilter) ? null : _orderFilter, _stateFilter, _announcementFilter);
 
     private async Task OnOrderFilterChanged(string filterText)
     {
@@ -111,6 +121,12 @@
     private async Task OnStateFilterChanged(ProductionUnitState? stateFilter)
     {
         _stateFilter = stateFilter;
+        await LoadAsync();
+    }
+
+    private async Task OnAnnouncementFilterChanged(int? announcementFilter)
+    {
+        _announcementFilter = announcementFilter;
         await LoadAsync();
     }
 

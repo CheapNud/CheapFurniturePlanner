@@ -55,11 +55,20 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
             .Where(u => u.OrderId == orderId && (u.State == ProductionUnitState.Expected || u.State == ProductionUnitState.Arrived))
             .ToListAsync(ct);
         var affectedTripIds = openUnits.Where(u => u.TripId is not null).Select(u => u.TripId!.Value).Distinct().ToList();
+        // Units on a Draft PO are released (the PO is still just a candidate list); units on a
+        // Sent PO stay linked - the PO was actually placed with the supplier, so cancelling the
+        // order still leaves a real line on it, just a cancelled one.
+        var linkedSupplierOrderIds = openUnits.Where(u => u.SupplierOrderId is not null).Select(u => u.SupplierOrderId!.Value).Distinct().ToList();
+        var linkedOrderStates = linkedSupplierOrderIds.Count > 0
+            ? await db.SupplierOrders.Where(o => linkedSupplierOrderIds.Contains(o.Id)).ToDictionaryAsync(o => o.Id, o => o.State, ct)
+            : [];
         foreach (var unit in openUnits)
         {
             unit.State = ProductionUnitState.Cancelled;
             unit.TripId = null;
             unit.LoadPosition = null;
+            unit.SupplierDeliveryId = null;
+            if (unit.SupplierOrderId is int poId && linkedOrderStates.GetValueOrDefault(poId) == SupplierOrderState.Draft) { unit.SupplierOrderId = null; }
         }
         await db.SaveChangesAsync(ct);
 
@@ -71,9 +80,19 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
             foreach (var trip in affectedTrips) { TryCompleteTrip(trip); }
             await db.SaveChangesAsync(ct);
         }
+
+        var affectedSentOrderIds = linkedOrderStates.Where(kv => kv.Value == SupplierOrderState.Sent).Select(kv => kv.Key).ToList();
+        if (affectedSentOrderIds.Count > 0)
+        {
+            var affectedSupplierOrders = await db.SupplierOrders.Include(o => o.Units)
+                .Where(o => affectedSentOrderIds.Contains(o.Id))
+                .ToListAsync(ct);
+            foreach (var order in affectedSupplierOrders) { TryCompleteSupplierOrder(order); }
+            await db.SaveChangesAsync(ct);
+        }
     }
 
-    public async Task<List<ProductionUnit>> ListUnitsAsync(string? orderNumberFilter = null, ProductionUnitState? stateFilter = null, CancellationToken ct = default)
+    public async Task<List<ProductionUnit>> ListUnitsAsync(string? orderNumberFilter = null, ProductionUnitState? stateFilter = null, int? supplierDeliveryId = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         var unitsQuery = db.ProductionUnits.AsNoTracking()
@@ -87,6 +106,10 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         if (stateFilter is ProductionUnitState wantedState)
         {
             unitsQuery = unitsQuery.Where(u => u.State == wantedState);
+        }
+        if (supplierDeliveryId is int wantedDeliveryId)
+        {
+            unitsQuery = unitsQuery.Where(u => u.SupplierDeliveryId == wantedDeliveryId);
         }
         return await unitsQuery.OrderBy(u => u.UnitCode).ToListAsync(ct);
     }
@@ -116,6 +139,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         if (unit is null || unit.State is ProductionUnitState.Delivered or ProductionUnitState.Cancelled) { return ScanOutcome.Unknown; }
         if (unit.State == ProductionUnitState.Arrived) { return ScanOutcome.AlreadyArrived; }
         Arrive(unit);
+        await CompleteSupplierOrderIfLinkedAsync(db, unit, ct);
         await db.SaveChangesAsync(ct);
         return ScanOutcome.Arrived;
     }
@@ -127,7 +151,18 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         var unit = await RequireUnitAsync(db, unitId, ct);
         if (unit.State != ProductionUnitState.Expected) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not expected."); }
         Arrive(unit);
+        await CompleteSupplierOrderIfLinkedAsync(db, unit, ct);
         await db.SaveChangesAsync(ct);
+    }
+
+    // Loads the unit's purchase order (with Units) inside the same context/transaction as the
+    // arrival mutation, so the just-arrived unit's state change is visible to the completion check
+    // without a round trip - the tracked unit is the same instance the Units collection resolves to.
+    private static async Task CompleteSupplierOrderIfLinkedAsync(FurniturePlannerContext db, ProductionUnit unit, CancellationToken ct)
+    {
+        if (unit.SupplierOrderId is not int supplierOrderId) { return; }
+        var order = await db.SupplierOrders.Include(o => o.Units).FirstAsync(o => o.Id == supplierOrderId, ct);
+        TryCompleteSupplierOrder(order);
     }
 
     public async Task UndoArriveAsync(int unitId, string? reviewNote = null, CancellationToken ct = default)
@@ -140,6 +175,14 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         unit.State = ProductionUnitState.Expected;
         unit.ArrivedAt = null;
         unit.ReviewNote = string.IsNullOrWhiteSpace(reviewNote) ? unit.ReviewNote : reviewNote.Trim();
+        // The one sanctioned Completed exit: undo reverses the completing arrival, so a PO that
+        // auto-completed on this unit's arrival must reopen to Sent (loaded in the same
+        // context/save as the unit's own reversal - see CompleteSupplierOrderIfLinkedAsync above).
+        if (unit.SupplierOrderId is int supplierOrderId)
+        {
+            var order = await db.SupplierOrders.FirstOrDefaultAsync(o => o.Id == supplierOrderId, ct);
+            if (order is not null && order.State == SupplierOrderState.Completed) { order.State = SupplierOrderState.Sent; }
+        }
         await db.SaveChangesAsync(ct);
     }
 
@@ -305,6 +348,16 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         {
             trip.State = TripState.Completed;
             trip.CompletedAt = DateTime.UtcNow;
+        }
+    }
+
+    // A Sent PO completes once nothing on it is still outstanding - Cancelled units never block it
+    // (a unit can only be Cancelled while its Sent-PO link stays put, see CancelForOrderAsync).
+    private static void TryCompleteSupplierOrder(SupplierOrder order)
+    {
+        if (order.State == SupplierOrderState.Sent && order.Units.All(u => u.State != ProductionUnitState.Expected))
+        {
+            order.State = SupplierOrderState.Completed;
         }
     }
 

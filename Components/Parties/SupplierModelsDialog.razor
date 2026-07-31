@@ -1,0 +1,92 @@
+@using CheapFurniturePlanner.Catalogue
+@using CheapFurniturePlanner.Domain.Pricing
+@inject PartyService PartyService
+@inject ICatalogueSource CatalogueSource
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTable Items="@_maps" Hover="true" Dense="true" Elevation="0" T="SupplierModelMap">
+                <HeaderContent>
+                    <MudTh>Model code</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Model code">@context.ModelCode</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => RemoveAsync(context))">Remove</MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudTextField T="string" Label="Model code" Value="_newCode" ValueChanged="@((string v) => _newCode = v)" Immediate="true" />
+                @if (IsUnknownCode(_newCode))
+                {
+                    <MudTooltip Text="No model in the published catalogue matches this code.">
+                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" />
+                    </MudTooltip>
+                }
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@string.IsNullOrWhiteSpace(_newCode)" OnClick="@AddAsync">Add</MudButton>
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Close())">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public int SupplierId { get; set; }
+
+    private List<SupplierModelMap> _maps = [];
+    private CatalogueSnapshot? _snapshot;
+    private string _newCode = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _snapshot = await CatalogueSource.GetCurrentAsync();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync() => _maps = await PartyService.SupplierModelMapsAsync(SupplierId);
+
+    // Soft warning only - a code with no match in the current published catalogue can still be
+    // mapped (e.g. the model is being authored but not yet published); the save always proceeds.
+    private bool IsUnknownCode(string code) =>
+        !string.IsNullOrWhiteSpace(code)
+        && _snapshot is not null
+        && !_snapshot.Models.Any(m => m.Code == code.Trim());
+
+    private async Task AddAsync()
+    {
+        try
+        {
+            await PartyService.AddSupplierModelMapAsync(SupplierId, _newCode);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        _newCode = string.Empty;
+        await ReloadAsync();
+    }
+
+    private async Task RemoveAsync(SupplierModelMap map)
+    {
+        try
+        {
+            await PartyService.RemoveSupplierModelMapAsync(map.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
+    }
+}

@@ -6,8 +6,6 @@ namespace CheapFurniturePlanner.Models;
 public class SupplierReport
 {
     public int TicketId { get; set; }
-    // absorb source only - populated data lives on SupplierId; column drops next phase
-    public string SupplierRef { get; set; } = "";
     public int? SupplierId { get; set; }
     public Supplier? Supplier { get; set; }
     public DateTime? ReportedAt { get; set; }

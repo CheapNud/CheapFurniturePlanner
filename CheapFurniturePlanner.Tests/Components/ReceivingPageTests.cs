@@ -73,6 +73,7 @@ public class ReceivingPageTests : TestContext
         Services.AddSingleton(factory);
         Services.AddSingleton(who);
         Services.AddSingleton(units);
+        Services.AddSingleton(sp => new PurchasingService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), who));
         JSInterop.Mode = JSRuntimeMode.Loose;
         Render<MudBlazor.MudDialogProvider>();
         Render<MudBlazor.MudPopoverProvider>();
@@ -142,6 +143,95 @@ public class ReceivingPageTests : TestContext
         cut.WaitForAssertion(() => Assert.Single(cut.FindComponents<MudTooltip>()));
         var tooltip = cut.FindComponent<MudTooltip>();
         Assert.Contains("Damaged in transit", tooltip.Instance.Text);
+    }
+
+    // Seeds a Deliver-to-Warehouse unit pinned to a supplier via the line's SupplierId (the
+    // dropship pin PurchasingService.ResolveCandidatesAsync checks first), so GenerateOrdersAsync
+    // sweeps it without needing a SupplierModelMap. Mirrors PurchasingUiTests.SeedUnitAsync.
+    private static async Task<(int OrderId, string UnitCode)> SeedSweepableUnitAsync(
+        IDbContextFactory<FurniturePlannerContext> factory, ProductionUnitService units, int supplierId, string orderNumber)
+    {
+        await using var db = await factory.CreateDbContextAsync();
+        var seller = new Seller { Name = "Shop", Multiplier = 1m };
+        var consumer = new Consumer { Name = "Jansen" };
+        db.Sellers.Add(seller);
+        db.Consumers.Add(consumer);
+        await db.SaveChangesAsync();
+        var order = new Order
+        {
+            OrderNumber = orderNumber,
+            SellerId = seller.Id,
+            ConsumerId = consumer.Id,
+            MarketCode = "BE",
+            State = OrderState.Placed,
+            Lines = [new OrderLine { DisplayIndex = 0, Kind = OrderLineKind.ConfiguredElement, SupplierId = supplierId, DeliverToWarehouse = true, Quantity = 1 }],
+        };
+        db.Orders.Add(order);
+        await db.SaveChangesAsync();
+
+        await units.SpawnForOrderAsync(order.Id);
+        var unitCode = (await units.UnitsForOrderAsync(order.Id)).Single().UnitCode;
+        return (order.Id, unitCode);
+    }
+
+    [Fact]
+    public async Task AnnouncementFilter_SelectsOnlyThatAnnouncementsUnits()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
+        var office = new FakeCurrentUser("office-1", Roles.Office);
+        var units = new ProductionUnitService(factory, dock);
+        var purchasing = new PurchasingService(factory, office);
+
+        await using var setupDb = await factory.CreateDbContextAsync();
+        var supplier = new Supplier { Code = "SUPA", Name = "Supplier A" };
+        setupDb.Suppliers.Add(supplier);
+        await setupDb.SaveChangesAsync();
+
+        var (_, unitCodeOne) = await SeedSweepableUnitAsync(factory, units, supplier.Id, "ORD-2026-0001");
+        var (_, unitCodeTwo) = await SeedSweepableUnitAsync(factory, units, supplier.Id, "ORD-2026-0002");
+
+        var sweep = await purchasing.GenerateOrdersAsync();
+        var poId = Assert.Single(sweep.SupplierOrderIds);
+        await purchasing.SendAsync(poId);
+        var order = await purchasing.GetOrderAsync(poId);
+        var unitOneId = order!.Units.Single(u => u.UnitCode == unitCodeOne).Id;
+        var unitTwoId = order.Units.Single(u => u.UnitCode == unitCodeTwo).Id;
+
+        var announcement = await purchasing.CreateAnnouncementAsync(supplier.Id, "DN-0001", null);
+        await purchasing.AttachToAnnouncementAsync(announcement.Id, unitOneId);
+        var otherAnnouncement = await purchasing.CreateAnnouncementAsync(supplier.Id, "DN-0002", null);
+        await purchasing.AttachToAnnouncementAsync(otherAnnouncement.Id, unitTwoId);
+
+        ConfigureServices(factory, units, dock);
+
+        var cut = Render<ReceivingPage>();
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(unitCodeOne, cut.Markup);
+            Assert.Contains(unitCodeTwo, cut.Markup);
+        });
+
+        // MudSelect only mounts its item popover once opened, so the "Supplier A — DN-0001"
+        // option label never appears in cut.Markup - drive the filter through the component
+        // instance instead (mirrors PurchasingUiTests' unit/announcement selects).
+        var announcementSelect = cut.FindComponent<MudSelect<int?>>();
+        await cut.InvokeAsync(() => announcementSelect.Instance.ValueChanged.InvokeAsync(announcement.Id));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(unitCodeOne, cut.Markup);
+            Assert.DoesNotContain(unitCodeTwo, cut.Markup);
+        });
+
+        // Clearing the filter (back to null) restores the full list.
+        await cut.InvokeAsync(() => announcementSelect.Instance.ValueChanged.InvokeAsync(null));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(unitCodeOne, cut.Markup);
+            Assert.Contains(unitCodeTwo, cut.Markup);
+        });
     }
 
     [Fact]

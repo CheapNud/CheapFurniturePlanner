@@ -27,6 +27,13 @@ public class StatusColorsTests
         Assert.Equal(expected, StatusColors.For(state));
 
     [Theory]
+    [InlineData(SupplierOrderState.Draft, Color.Default)]
+    [InlineData(SupplierOrderState.Sent, Color.Info)]
+    [InlineData(SupplierOrderState.Completed, Color.Success)]
+    public void For_SupplierOrderState_MapsToExpectedColor(SupplierOrderState state, Color expected) =>
+        Assert.Equal(expected, StatusColors.For(state));
+
+    [Theory]
     [InlineData(OrderState.Draft, Color.Default)]
     [InlineData(OrderState.Placed, Color.Info)]
     [InlineData(OrderState.Cancelled, Color.Error)]

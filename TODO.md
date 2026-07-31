@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapFurniturePlanner project work tracker
-  Last updated: 2026-07-29
+  Last updated: 2026-07-31
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -32,7 +32,7 @@ _Nothing blocking._
 
 ## Planned
 
-- [ ] (2026-07-28) supplies phase: drop the retired OrderLines/SupplierReports supplier-ref string columns and delete the startup absorber once every db has migrated through the address release [plan]
+- [x] (2026-07-28 → 2026-07-31) supplies phase: drop the retired OrderLines/SupplierReports supplier-ref string columns and delete the startup absorber once every db has migrated through the address release [plan]
 - [ ] (2026-07-05) variant code: validate option/element codes exclude '-' and ':' separators (Domain/Pricing/VariantCode.cs) [audit]
 - [ ] (2026-07-05) pricing: enforce MaterialKind match between fabric color's price group and price group kind (Domain/Pricing/Engine/ResolveStage.cs) [audit]
 - [ ] (2026-07-05) pricing: add subtotal-stage rounding coverage (no market/test currently enables RoundStage.Subtotal) [audit]
@@ -42,6 +42,7 @@ _Nothing blocking._
 
 ## Future
 
+- [ ] (2026-07-31) purchasing polish: announcement attach does not reject already-cancelled units (inert); supplier models button skips a redundant reload; group release saves per unit (draft-only, retry-safe) [audit]
 - [ ] (2026-07-29) planning polish: multi-laggard depart error untested for the comma join; trip region select double-clear affordance; failed-delivery confirm overwrites any earlier receiving note; pool empty-state text still says arrived-only [audit]
 - [ ] (2026-07-28) addresses: filtered unique index on consumer delivery addresses (one default per consumer) as a db backstop; region delete has no end-to-end ui test; the shared blank-address helper is duplicated across the party dialogs; supplier addresses cannot be cleared back to none through the dialog [audit]
 - [ ] (2026-07-27) ubl export: enable strict validation once parties carry endpoint/tax ids; discounted lines will also need allowance-charge support upstream (unit price x quantity vs discounted line total) before the validator passes [plan]
