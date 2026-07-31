@@ -125,6 +125,7 @@
                         <MudTd DataLabel="Actions">
                             <MudStack Row="true" Spacing="1">
                                 <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSupplierAsync(context))">Edit</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSupplierModelsAsync(context))">Models</MudButton>
                                 <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSupplierAsync(context))">Delete</MudButton>
                             </MudStack>
                         </MudTd>
@@ -359,6 +360,13 @@
             Snackbar.Add(ex.Message, Severity.Error);
         }
         await ReloadAsync();
+    }
+
+    private async Task EditSupplierModelsAsync(Supplier existing)
+    {
+        var parameters = new DialogParameters<SupplierModelsDialog> { { d => d.SupplierId, existing.Id } };
+        var dialogRef = await DialogService.ShowAsync<SupplierModelsDialog>($"{existing.Name} — models", parameters);
+        await dialogRef.Result;
     }
 
     private async Task DeleteSupplierAsync(Supplier existing)
