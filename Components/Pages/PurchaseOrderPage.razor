@@ -1,0 +1,305 @@
+@page "/purchasing/{Id:int}"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Components.Purchasing
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@inject PurchasingService Purchasing
+@inject SupplierOrderPdf Pdf
+@inject SupplierOrderXml Xml
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Purchase order</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    @if (_order is null)
+    {
+        <MudText>Loading…</MudText>
+    }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to purchasing" OnClick="@(() => Navigation.NavigateTo("/purchasing"))" />
+            <MudText Typo="Typo.h4">@_order.PoNumber</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(_order.State)">@_order.State</MudChip>
+            <MudSpacer />
+            @if (_order.State == SupplierOrderState.Draft)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SendAsync">Send</MudButton>
+            }
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</MudButton>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Code" OnClick="ExportXmlAsync">XML</MudButton>
+            @if (_order.State == SupplierOrderState.Draft && _order.Units.Count == 0)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" Title="Delete purchase order" OnClick="DeleteAsync">Delete</MudButton>
+            }
+        </MudStack>
+
+        <MudPaper Class="pa-4 mb-4">
+            <MudText><b>Supplier:</b> @_order.Supplier?.Name</MudText>
+            <MudText><b>Created:</b> @_order.CreatedAt.ToString("yyyy-MM-dd")</MudText>
+            @if (_order.SentAt is DateTime sentAt)
+            {
+                <MudText><b>Sent:</b> @sentAt.ToString("yyyy-MM-dd")</MudText>
+            }
+            @if (_order.State == SupplierOrderState.Sent)
+            {
+                <MudTextField T="string" Label="Their reference" Value="_theirReference" ValueChanged="OnTheirReferenceChangedAsync" Class="mt-2" />
+            }
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Units</MudText>
+            @if (_groups.Count == 0)
+            {
+                <EmptyState Text="No units on this order" />
+            }
+            else
+            {
+                <MudTable T="UnitGroup" Items="_groups" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Identity</MudTh>
+                        <MudTh>Count</MudTh>
+                        <MudTh>Arrived</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Identity">@context.Identity</MudTd>
+                        <MudTd DataLabel="Count">@context.Units.Count</MudTd>
+                        <MudTd DataLabel="Arrived">@context.Units.Count(u => u.State is ProductionUnitState.Arrived or ProductionUnitState.Delivered)</MudTd>
+                        <MudTd>
+                            @if (_order.State == SupplierOrderState.Draft)
+                            {
+                                <MudButton Size="Size.Small" OnClick="@(() => ReleaseGroupAsync(context))">Release</MudButton>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+
+        <MudPaper Class="pa-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.h6">Announcements</MudText>
+                <MudSpacer />
+                <MudButton Variant="Variant.Outlined" OnClick="NewAnnouncementAsync">New announcement</MudButton>
+            </MudStack>
+
+            @if (_announceable.Count > 0 && _announcements.Count > 0)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                    <MudSelect T="int?" Label="Unit" @bind-Value="_attachUnitId">
+                        @foreach (var candidate in _announceable)
+                        {
+                            <MudSelectItem T="int?" Value="@((int?)candidate.Id)">@candidate.UnitCode</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudSelect T="int?" Label="Announcement" @bind-Value="_attachAnnouncementId">
+                        @foreach (var announcement in _announcements)
+                        {
+                            <MudSelectItem T="int?" Value="@((int?)announcement.Id)">@announcement.Reference</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton Variant="Variant.Outlined" OnClick="AttachAsync">Attach</MudButton>
+                </MudStack>
+            }
+
+            @if (_announcements.Count == 0)
+            {
+                <EmptyState Text="No announcements yet" />
+            }
+            else
+            {
+                @foreach (var announcement in _announcements)
+                {
+                    var arrivedCount = announcement.Units.Count(u => u.State is ProductionUnitState.Arrived or ProductionUnitState.Delivered);
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
+                        <MudText>@announcement.Reference</MudText>
+                        @if (announcement.ExpectedDate is DateTime expected)
+                        {
+                            <MudText Typo="Typo.body2">@expected.ToString("yyyy-MM-dd")</MudText>
+                        }
+                        <MudText Typo="Typo.body2">@arrivedCount arrived / @(announcement.Units.Count - arrivedCount) outstanding</MudText>
+                        @if (PurchasingService.IsOverdue(announcement))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Overdue</MudChip>
+                        }
+                        <MudSpacer />
+                        @if (announcement.Units.Count == 0)
+                        {
+                            <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAnnouncementAsync(announcement.Id))">Delete</MudButton>
+                        }
+                    </MudStack>
+                    @foreach (var unit in announcement.Units)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1 ml-8">
+                            <MudText Typo="Typo.body2">@unit.UnitCode</MudText>
+                            <MudSpacer />
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Title="Detach" OnClick="@(() => DetachAsync(unit.Id))" />
+                        </MudStack>
+                    }
+                }
+            }
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    // Groups this PO's units by their production identity (same rule SupplierOrderPdf/
+    // SupplierOrderXml use), so the table reads as "what" and "how many" rather than one row per
+    // physical unit.
+    private sealed record UnitGroup(string Identity, List<ProductionUnit> Units);
+
+    private SupplierOrder? _order;
+    private List<UnitGroup> _groups = [];
+    private List<ProductionUnit> _announceable = [];
+    private List<SupplierDelivery> _announcements = [];
+    private string? _theirReference;
+    private int? _attachUnitId;
+    private int? _attachAnnouncementId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _order = await Purchasing.GetOrderAsync(Id);
+        if (_order is not null)
+        {
+            _theirReference = _order.TheirReference;
+            _groups = _order.Units
+                .GroupBy(u => Identity(u.Order!.Lines.First(l => l.Id == u.OrderLineId)))
+                .OrderBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => new UnitGroup(g.Key, g.ToList()))
+                .ToList();
+            // Announceable = this PO's units still Expected and not already parked on another
+            // announcement - the same guard AttachToAnnouncementAsync enforces, minus the
+            // same-supplier/Sent-PO checks which are already guaranteed by being on this page.
+            _announceable = _order.Units.Where(u => u.SupplierDeliveryId is null && u.State == ProductionUnitState.Expected).ToList();
+            _announcements = await Purchasing.ListAnnouncementsAsync(_order.SupplierId);
+            _attachUnitId = null;
+            _attachAnnouncementId = null;
+        }
+        StateHasChanged();
+    }
+
+    // Same identity rule as SupplierOrderPdf/SupplierOrderXml's private helper of the same name -
+    // see those files' comments. Small duplication between the three rather than a shared utility,
+    // matching that pair's own precedent.
+    private static string Identity(OrderLine line)
+    {
+        var basePart = line.Kind == OrderLineKind.ConfiguredElement
+            ? string.Join("/", new[] { line.ModelCode, line.ElementCode, line.VariantCode }.Where(part => !string.IsNullOrEmpty(part)))
+            : line.AssignedCode ?? "";
+        return string.IsNullOrEmpty(line.FabricColorCode) ? basePart : $"{basePart} / {line.FabricColorCode}";
+    }
+
+    private async Task SendAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Send purchase order", $"Send {_order!.PoNumber} to {_order.Supplier?.Name}?", yesText: "Send", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await Purchasing.SendAsync(Id); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task DeleteAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete purchase order", $"Delete empty draft {_order!.PoNumber}?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await Purchasing.DeleteOrderAsync(Id); Navigation.NavigateTo("/purchasing"); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task GeneratePdfAsync()
+    {
+        try
+        {
+            var filePath = await Pdf.GenerateAsync(Id);
+            Snackbar.Add($"Purchase order written to {filePath}", Severity.Success);
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task ExportXmlAsync()
+    {
+        try
+        {
+            var filePath = await Xml.GenerateAsync(Id);
+            Snackbar.Add($"Exported to {filePath}", Severity.Success);
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task OnTheirReferenceChangedAsync(string? theirReference)
+    {
+        _theirReference = theirReference;
+        try { await Purchasing.SetTheirReferenceAsync(Id, theirReference); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task ReleaseGroupAsync(UnitGroup group)
+    {
+        try
+        {
+            foreach (var unit in group.Units) { await Purchasing.ReleaseUnitAsync(unit.Id); }
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task NewAnnouncementAsync()
+    {
+        var dialogRef = await DialogService.ShowAsync<AnnouncementDialog>("New announcement");
+        var dialogResult = await dialogRef.Result;
+        if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not ValueTuple<string, DateTime?> announcementDraft) { return; }
+        try
+        {
+            await Purchasing.CreateAnnouncementAsync(_order!.SupplierId, announcementDraft.Item1, announcementDraft.Item2);
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task AttachAsync()
+    {
+        if (_attachUnitId is not int unitId || _attachAnnouncementId is not int announcementId) { return; }
+        try
+        {
+            await Purchasing.AttachToAnnouncementAsync(announcementId, unitId);
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task DetachAsync(int unitId)
+    {
+        try { await Purchasing.DetachFromAnnouncementAsync(unitId); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task DeleteAnnouncementAsync(int supplierDeliveryId)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Delete announcement", "Delete this announcement?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await Purchasing.DeleteAnnouncementAsync(supplierDeliveryId); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}

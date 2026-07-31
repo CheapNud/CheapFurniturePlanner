@@ -1,0 +1,25 @@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Reference" @bind-Value="_reference" Required="true" />
+            <MudDatePicker Label="Expected date" @bind-Date="_expectedDate" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Create</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private string _reference = string.Empty;
+    private DateTime? _expectedDate;
+
+    // Returns a plain (Reference, ExpectedDate) tuple rather than a SupplierDelivery - that model
+    // requires CreatedByUserId/SupplierId the dialog doesn't know, so a real entity would need
+    // dummy values just to carry two form fields back to the caller.
+    private void Submit() => MudDialog.Close(DialogResult.Ok((_reference.Trim(), _expectedDate)));
+}

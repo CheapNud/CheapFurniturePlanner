@@ -26,6 +26,13 @@ public static class StatusColors
         _ => Color.Success,
     };
 
+    public static Color For(SupplierOrderState orderState) => orderState switch
+    {
+        SupplierOrderState.Draft => Color.Default,
+        SupplierOrderState.Sent => Color.Info,
+        _ => Color.Success,
+    };
+
     public static Color For(OrderState orderState) => orderState switch
     {
         OrderState.Draft => Color.Default,

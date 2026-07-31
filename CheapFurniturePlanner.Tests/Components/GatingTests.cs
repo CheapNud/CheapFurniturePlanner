@@ -40,6 +40,8 @@ public class GatingTests : TestContext
         Assert.Contains("href=\"/studio/masters\"", cut.Markup);
         Assert.Contains("href=\"/studio/articles\"", cut.Markup);
         Assert.Contains("href=\"/orders\"", cut.Markup);
+        Assert.Contains("href=\"/invoices\"", cut.Markup);
+        Assert.Contains("href=\"/purchasing\"", cut.Markup);
         Assert.Contains("href=\"/parties\"", cut.Markup);
         Assert.Contains("href=\"/\"", cut.Markup);
         Assert.Contains("href=\"/room-plans\"", cut.Markup);
@@ -169,6 +171,8 @@ public class GatingTests : TestContext
         typeof(SellerDiscountsPage),
         typeof(InvoicesPage),
         typeof(InvoicePage),
+        typeof(PurchasingPage),
+        typeof(PurchaseOrderPage),
     };
 
     [Theory]

@@ -1,0 +1,91 @@
+@page "/purchasing"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@inject PurchasingService Purchasing
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Purchasing</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Purchasing</MudText>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Sync" OnClick="GenerateOrdersAsync">Generate orders</MudButton>
+    </MudStack>
+
+    @if (_unresolvedModelCodes.Count > 0)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-4">Unresolved: @string.Join(", ", _unresolvedModelCodes)</MudAlert>
+    }
+
+    @if (_orders.Count == 0)
+    {
+        @* Canon deviation: EmptyState normally carries the page's own "Add" CTA, but a purchase
+           order is never hand-added - the sweep button above IS the action, for an empty list same
+           as a full one, so it stays visible and this EmptyState has no ActionText of its own. *@
+        <EmptyState Text="No purchase orders yet" />
+    }
+    else
+    {
+        <MudTable T="SupplierOrder" Items="_orders" Hover="true" Dense="true"
+                  OnRowClick="@((TableRowClickEventArgs<SupplierOrder> args) => Navigation.NavigateTo($"/purchasing/{args.Item!.Id}"))">
+            <HeaderContent>
+                <MudTh>PO number</MudTh>
+                <MudTh>Supplier</MudTh>
+                <MudTh>State</MudTh>
+                <MudTh>Units (outstanding / total)</MudTh>
+                <MudTh>Created</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="PO number">@context.PoNumber</MudTd>
+                <MudTd DataLabel="Supplier">@context.Supplier?.Name</MudTd>
+                <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip></MudTd>
+                <MudTd DataLabel="Units (outstanding / total)">@Outstanding(context) / @context.Units.Count</MudTd>
+                <MudTd DataLabel="Created">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    private List<SupplierOrder> _orders = [];
+    private List<string> _unresolvedModelCodes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _orders = await Purchasing.ListOrdersAsync();
+        _unresolvedModelCodes = await Purchasing.UnresolvedModelCodesAsync();
+    }
+
+    private static int Outstanding(SupplierOrder order) =>
+        order.Units.Count(u => u.State is not (ProductionUnitState.Arrived or ProductionUnitState.Delivered or ProductionUnitState.Cancelled));
+
+    private async Task GenerateOrdersAsync()
+    {
+        try
+        {
+            var sweep = await Purchasing.GenerateOrdersAsync();
+            var message = $"Created/updated {sweep.SupplierOrderIds.Count} purchase order(s).";
+            if (sweep.UnresolvedModelCodes.Count > 0) { message += $" Unresolved: {string.Join(", ", sweep.UnresolvedModelCodes)}"; }
+            Snackbar.Add(message, sweep.UnresolvedModelCodes.Count > 0 ? Severity.Warning : Severity.Success);
+            await LoadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}
