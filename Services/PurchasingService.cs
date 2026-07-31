@@ -189,6 +189,9 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
 
     // open = has a unit that hasn't reached Arrived/Delivered yet, or nothing attached yet (a
     // freshly created announcement still needs to show up so units can be attached to it).
+    // Cancelled units count as resolved too - a cancelled unit can never arrive, so it can't be
+    // what's holding the announcement open (defense in depth: CancelForOrderAsync also clears the
+    // link outright, but this keeps any pre-existing dangling data from reading as open).
     public async Task<List<SupplierDelivery>> ListAnnouncementsAsync(int? supplierId = null, bool openOnly = true, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
@@ -199,7 +202,8 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
         if (supplierId is int wantedSupplierId) { query = query.Where(d => d.SupplierId == wantedSupplierId); }
         if (openOnly)
         {
-            query = query.Where(d => d.Units.Count == 0 || d.Units.Any(u => u.State != ProductionUnitState.Arrived && u.State != ProductionUnitState.Delivered));
+            query = query.Where(d => d.Units.Count == 0 || d.Units.Any(u =>
+                u.State != ProductionUnitState.Arrived && u.State != ProductionUnitState.Delivered && u.State != ProductionUnitState.Cancelled));
         }
         return await query.OrderByDescending(d => d.CreatedAt).ToListAsync(ct);
     }
@@ -249,11 +253,12 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
     }
 
     // An announcement is overdue once its expected date has passed and at least one attached unit
-    // still hasn't reached the dock (Arrived) or beyond (Delivered).
+    // still hasn't reached the dock (Arrived) or beyond (Delivered). Cancelled units can never
+    // arrive either, so they don't hold an announcement open/overdue - see ListAnnouncementsAsync.
     public static bool IsOverdue(SupplierDelivery announcement) =>
         announcement.ExpectedDate is DateTime expected
         && expected.Date < DateTime.UtcNow.Date
-        && announcement.Units.Any(u => u.State != ProductionUnitState.Arrived && u.State != ProductionUnitState.Delivered);
+        && announcement.Units.Any(u => u.State != ProductionUnitState.Arrived && u.State != ProductionUnitState.Delivered && u.State != ProductionUnitState.Cancelled);
 
     private async Task<string> RequireUserIdAsync() =>
         await currentUser.UserIdAsync() ?? throw new InvalidOperationException("No signed-in user.");

@@ -306,6 +306,55 @@ public class PurchasingFlowTests
         }));
     }
 
+    // Regression: cancelling a unit's order while it's still parked on an announcement used to
+    // leave SupplierDeliveryId dangling - the announcement would then look perpetually open/overdue
+    // for a unit that can never arrive.
+    [Fact]
+    public async Task CancelForOrder_ClearsAnnouncementLink()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var sentPoId = await SeedSupplierOrderAsync(factory, supplierId, "PO-2026-0001", SupplierOrderState.Sent);
+        var (orderId, unitId) = await SeedUnitAsync(factory, supplierOrderId: sentPoId, state: ProductionUnitState.Expected);
+        var purchasing = new PurchasingService(factory, OfficeUser);
+        var units = new ProductionUnitService(factory, WarehouseUser);
+        var announcement = await purchasing.CreateAnnouncementAsync(supplierId, "DN-0001", null);
+        await purchasing.AttachToAnnouncementAsync(announcement.Id, unitId);
+
+        await units.CancelForOrderAsync(orderId);
+
+        await using var db = await factory.CreateDbContextAsync();
+        var unit = await db.ProductionUnits.SingleAsync(u => u.Id == unitId);
+        Assert.Equal(ProductionUnitState.Cancelled, unit.State);
+        Assert.Null(unit.SupplierDeliveryId);
+    }
+
+    // Regression: an announcement whose only remaining attached unit is Cancelled (e.g. pre-fix
+    // data, or a state EF could still theoretically reach) must not read as open/overdue -
+    // Cancelled units can never arrive, so they can't be what's holding the announcement open.
+    [Fact]
+    public async Task CancelledUnit_DoesNotKeepAnnouncementOpenOrOverdue()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var sentPoId = await SeedSupplierOrderAsync(factory, supplierId, "PO-2026-0001", SupplierOrderState.Sent);
+        var purchasing = new PurchasingService(factory, OfficeUser);
+        var pastDate = DateTime.UtcNow.Date.AddDays(-1);
+        var announcement = await purchasing.CreateAnnouncementAsync(supplierId, "DN-0001", pastDate);
+        // Seeded directly via EF (not through AttachToAnnouncementAsync, which would reject a
+        // Cancelled unit) to simulate a unit left dangling on the announcement pre-fix.
+        await SeedUnitAsync(factory, supplierOrderId: sentPoId, state: ProductionUnitState.Cancelled, supplierDeliveryId: announcement.Id);
+
+        var reloaded = await purchasing.ListAnnouncementsAsync(supplierId, openOnly: false);
+        var announcementWithUnits = reloaded.Single(a => a.Id == announcement.Id);
+        Assert.False(PurchasingService.IsOverdue(announcementWithUnits));
+
+        var openAnnouncements = await purchasing.ListAnnouncementsAsync(supplierId, openOnly: true);
+        Assert.DoesNotContain(openAnnouncements, a => a.Id == announcement.Id);
+    }
+
     [Fact]
     public async Task ListUnitsAsync_AnnouncementFilter_ReturnsOnlyAttachedUnits()
     {

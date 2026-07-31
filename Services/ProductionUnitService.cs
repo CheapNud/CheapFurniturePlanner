@@ -67,6 +67,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
             unit.State = ProductionUnitState.Cancelled;
             unit.TripId = null;
             unit.LoadPosition = null;
+            unit.SupplierDeliveryId = null;
             if (unit.SupplierOrderId is int poId && linkedOrderStates.GetValueOrDefault(poId) == SupplierOrderState.Draft) { unit.SupplierOrderId = null; }
         }
         await db.SaveChangesAsync(ct);
