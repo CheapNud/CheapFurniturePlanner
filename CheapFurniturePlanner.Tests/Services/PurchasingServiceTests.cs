@@ -189,6 +189,67 @@ public class PurchasingServiceTests
         return order.Id;
     }
 
+    // Seeds a Seller/Consumer/placed Order with one StandaloneArticle line whose SupplierRef
+    // matched no Supplier (SupplierId null) and its ProductionUnit. Standalone lines have
+    // ModelCode null by construction (Services/OrderEntryService.cs AddStandaloneLineAsync) - the
+    // regression this covers: such a unit must still surface via the unresolved list, not vanish.
+    private static async Task<(int UnitId, string AssignedCode)> SeedUnresolvedStandaloneUnitAsync(
+        IDbContextFactory<FurniturePlannerContext> factory, string assignedCode)
+    {
+        await using var db = await factory.CreateDbContextAsync();
+        var seller = new Seller { Name = "Shop", Multiplier = 1m };
+        var consumer = new Consumer { Name = "Jansen" };
+        db.Sellers.Add(seller);
+        db.Consumers.Add(consumer);
+        await db.SaveChangesAsync();
+        var order = new Order
+        {
+            OrderNumber = $"ORD-2026-{await db.Orders.CountAsync() + 1:D4}",
+            SellerId = seller.Id,
+            ConsumerId = consumer.Id,
+            MarketCode = "BE",
+            State = OrderState.Placed,
+        };
+        order.Lines.Add(new OrderLine
+        {
+            DisplayIndex = 0,
+            Kind = OrderLineKind.StandaloneArticle,
+            AssignedCode = assignedCode,
+            Quantity = 1,
+            DeliverToWarehouse = true,
+        });
+        db.Orders.Add(order);
+        await db.SaveChangesAsync();
+        var line = order.Lines[0];
+        var unit = new ProductionUnit
+        {
+            OrderId = order.Id,
+            OrderLineId = line.Id,
+            SequenceNumber = 1,
+            UnitCode = $"{order.OrderNumber}-1-1",
+            State = ProductionUnitState.Expected,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.ProductionUnits.Add(unit);
+        await db.SaveChangesAsync();
+        return (unit.Id, assignedCode);
+    }
+
+    [Fact]
+    public async Task Sweep_UnresolvedStandaloneArticle_SurfacesAssignedCode()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var (_, assignedCode) = await SeedUnresolvedStandaloneUnitAsync(factory, "ART-9001");
+        var purchasing = new PurchasingService(factory, OfficeUser);
+
+        var result = await purchasing.GenerateOrdersAsync();
+
+        Assert.Empty(result.SupplierOrderIds);
+        Assert.Equal([assignedCode], result.UnresolvedModelCodes);
+        Assert.Equal([assignedCode], await purchasing.UnresolvedModelCodesAsync());
+    }
+
     [Fact]
     public async Task Sweep_UnresolvedModelCodes_Distinct()
     {
@@ -371,10 +432,17 @@ public class PurchasingServiceTests
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var supplierId = await SeedSupplierAsync(factory, "SUPA");
-        await SeedUnitAsync(factory, "MODELA", lineSupplierId: supplierId);
+        var (unitId, _) = await SeedUnitAsync(factory, "MODELA", lineSupplierId: supplierId);
         var officePurchasing = new PurchasingService(factory, OfficeUser);
         var sweep = await officePurchasing.GenerateOrdersAsync();
-        var orderId = Assert.Single(sweep.SupplierOrderIds);
+        // Draft PO holding unitId - an Office call would SUCCEED here (ReleaseUnitAsync needs a
+        // Draft-owned unit, SendAsync needs a Draft with >=1 unit), so the throw below can only be
+        // the role guard, not a domain check with the same exception type.
+        var draftOrderId = Assert.Single(sweep.SupplierOrderIds);
+        // Empty Draft - an Office call to DeleteOrderAsync would SUCCEED here.
+        var emptyDraftOrderId = await SeedSupplierOrderAsync(factory, supplierId, "PO-2026-8001");
+        // Sent - an Office call to SetTheirReferenceAsync would SUCCEED here.
+        var sentOrderId = await SeedSupplierOrderAsync(factory, supplierId, "PO-2026-8002", SupplierOrderState.Sent);
 
         foreach (var role in new[] { Roles.Mechanic, Roles.Warehouse })
         {
@@ -382,10 +450,10 @@ public class PurchasingServiceTests
             var purchasing = new PurchasingService(factory, intruder);
             var party = new PartyService(factory, intruder);
             await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.GenerateOrdersAsync());
-            await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.ReleaseUnitAsync(0));
-            await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.DeleteOrderAsync(orderId));
-            await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.SendAsync(orderId));
-            await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.SetTheirReferenceAsync(orderId, "x"));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.ReleaseUnitAsync(unitId));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.DeleteOrderAsync(emptyDraftOrderId));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.SendAsync(draftOrderId));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.SetTheirReferenceAsync(sentOrderId, "x"));
             await Assert.ThrowsAsync<InvalidOperationException>(() => party.AddSupplierModelMapAsync(supplierId, "X"));
             await Assert.ThrowsAsync<InvalidOperationException>(() => party.RemoveSupplierModelMapAsync(0));
         }

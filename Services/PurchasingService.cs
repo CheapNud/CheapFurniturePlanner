@@ -5,6 +5,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CheapFurniturePlanner.Services;
 
+// UnresolvedModelCodes carries unresolved *identities*, not strictly model codes: a
+// StandaloneArticle line has no ModelCode by construction, so an unresolvable standalone unit is
+// identified by its article's AssignedCode (or, failing that, the unit's own UnitCode) instead.
 public sealed record SweepResult(List<int> SupplierOrderIds, List<string> UnresolvedModelCodes);
 
 // Sweeps placed, warehouse-bound production units into supplier purchase orders. A unit's
@@ -124,6 +127,8 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
         await db.SaveChangesAsync(ct);
     }
 
+    // Same identity rule as SweepResult.UnresolvedModelCodes above: model codes OR article codes
+    // (unresolved identities), never a silently-dropped unit.
     public async Task<List<string>> UnresolvedModelCodesAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
@@ -142,7 +147,7 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
         var candidates = await db.ProductionUnits
             .Where(u => u.State == ProductionUnitState.Expected && u.SupplierOrderId == null)
             .Join(db.OrderLines.Where(l => l.DeliverToWarehouse), u => u.OrderLineId, l => l.Id,
-                (u, l) => new { Unit = u, l.SupplierId, l.ModelCode })
+                (u, l) => new { Unit = u, l.SupplierId, l.ModelCode, l.AssignedCode })
             .ToListAsync(ct);
 
         var bySupplier = new Dictionary<int, List<ProductionUnit>>();
@@ -153,7 +158,10 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
                 ?? (candidate.ModelCode is not null && modelCodeToSupplierId.TryGetValue(candidate.ModelCode, out var mappedSupplierId) ? mappedSupplierId : null);
             if (supplierId is null)
             {
-                if (candidate.ModelCode is not null) { unresolvedModelCodes.Add(candidate.ModelCode); }
+                // A StandaloneArticle line has no ModelCode - fall back to its AssignedCode, then
+                // the unit's own UnitCode, so an unresolvable unit always surfaces an identity
+                // instead of vanishing from both the sweep and the warning feed.
+                unresolvedModelCodes.Add(candidate.ModelCode ?? candidate.AssignedCode ?? candidate.Unit.UnitCode);
                 continue;
             }
             if (!bySupplier.TryGetValue(supplierId.Value, out var units)) { bySupplier[supplierId.Value] = units = []; }
