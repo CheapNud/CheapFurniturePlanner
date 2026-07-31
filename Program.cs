@@ -188,6 +188,7 @@ class Program
         builder.Services.AddScoped<InvoicingService>();
         builder.Services.AddScoped<OrderEntryService>();
         builder.Services.AddScoped<ServiceTicketService>();
+        builder.Services.AddScoped<PurchasingService>();
 
         builder.Services.AddSingleton<IPdfTemplateService, PdfTemplateService>();
         builder.Services.AddSingleton<IPdfExportService, PdfExportService>();

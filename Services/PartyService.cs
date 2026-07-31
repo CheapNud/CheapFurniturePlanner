@@ -202,12 +202,44 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
         var supplier = await db.Suppliers.FirstOrDefaultAsync(s => s.Id == supplierId, ct)
             ?? throw new InvalidOperationException($"Supplier {supplierId} not found.");
         if (await db.OrderLines.AnyAsync(l => l.SupplierId == supplierId, ct)
-            || await db.SupplierReports.AnyAsync(r => r.SupplierId == supplierId, ct))
+            || await db.SupplierReports.AnyAsync(r => r.SupplierId == supplierId, ct)
+            || await db.SupplierModelMaps.AnyAsync(m => m.SupplierId == supplierId, ct)
+            || await db.SupplierOrders.AnyAsync(o => o.SupplierId == supplierId, ct))
         {
-            throw new InvalidOperationException($"Supplier '{supplier.Code}' is referenced by orders or service reports.");
+            throw new InvalidOperationException($"Supplier '{supplier.Code}' is referenced by orders, service reports, model maps or purchase orders.");
         }
         db.Suppliers.Remove(supplier);
         await db.SaveChangesAsync(ct);
+    }
+
+    // --- Supplier model maps: which supplier produces a given catalogue model ---
+
+    public async Task<List<SupplierModelMap>> SupplierModelMapsAsync(int supplierId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.SupplierModelMaps.AsNoTracking()
+            .Where(m => m.SupplierId == supplierId)
+            .OrderBy(m => m.ModelCode).ToListAsync(ct);
+    }
+
+    public async Task AddSupplierModelMapAsync(int supplierId, string modelCode, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        var code = RequireTrimmed(modelCode, "Model code");
+        await using var db = await factory.CreateDbContextAsync(ct);
+        if (await db.SupplierModelMaps.AnyAsync(m => m.ModelCode == code, ct))
+        {
+            throw new InvalidOperationException($"Model code '{code}' is already mapped to a supplier.");
+        }
+        db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = supplierId, ModelCode = code });
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task RemoveSupplierModelMapAsync(int mapId, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        await db.SupplierModelMaps.Where(m => m.Id == mapId).ExecuteDeleteAsync(ct);
     }
 
     // --- Addresses: seller / supplier / consumer-primary upsert in place ---
