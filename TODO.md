@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapFurniturePlanner project work tracker
-  Last updated: 2026-08-01
+  Last updated: 2026-08-08
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -42,6 +42,7 @@ _Nothing blocking._
 
 ## Future
 
+- [ ] (2026-08-08) forge: re-enter the ANTHROPIC_API_KEY actions secret on the forge repo so the pr-review workflow can run (actions secrets are write-only and cannot be copied between repos) [user]
 - [ ] (2026-07-31) purchasing polish: announcement attach does not reject already-cancelled units (inert); supplier models button skips a redundant reload; group release saves per unit (draft-only, retry-safe) [audit]
 - [ ] (2026-07-29) planning polish: multi-laggard depart error untested for the comma join; trip region select double-clear affordance; failed-delivery confirm overwrites any earlier receiving note; pool empty-state text still says arrived-only [audit]
 - [ ] (2026-07-28) addresses: filtered unique index on consumer delivery addresses (one default per consumer) as a db backstop; region delete has no end-to-end ui test; the shared blank-address helper is duplicated across the party dialogs; supplier addresses cannot be cleared back to none through the dialog [audit]
