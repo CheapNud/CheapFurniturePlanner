@@ -154,7 +154,7 @@ public class InvoicePdfTests
                 Name = "Alpine Living",
                 VatNumber = "BE0999999999",
                 Iban = "BE68539007547034",
-                Bic = "BBRUBEBB",
+                Bic = "MAPLBEBB",
                 IsDefault = true,
                 Address = new Address { Street = "Maple Row", Number = "12", PostalCode = "9990", City = "Fairbrook" },
             };

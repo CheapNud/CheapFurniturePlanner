@@ -146,7 +146,7 @@ public sealed class FirmService(IDbContextFactory<FurniturePlannerContext> facto
         firm.Email = Trimmed(firmValues.Email);
         firm.Phone = Trimmed(firmValues.Phone);
         firm.PeppolEndpointId = Trimmed(firmValues.PeppolEndpointId);
-        if (firmValues.Address is not null)
+        if (firmValues.Address is not null && (!string.IsNullOrWhiteSpace(firmValues.Address.Street) || !string.IsNullOrWhiteSpace(firmValues.Address.City)))
         {
             firm.Address ??= new Address { Street = "", Number = "", PostalCode = "", City = "" };
             firm.Address.Street = firmValues.Address.Street;

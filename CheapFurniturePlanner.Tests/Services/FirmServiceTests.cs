@@ -93,7 +93,7 @@ public class FirmServiceTests
             Name = "Alpine Living Renamed",
             VatNumber = "BE0999999999",
             Iban = "BE68539007547034",
-            Bic = "GKCCBEBB",
+            Bic = "MAPLBEBB",
             Address = new Address { Street = "Maple Row", Number = "12", PostalCode = "9990", City = "Fairbrook" },
         };
         await service.UpdateFirmAsync(firm.Id, updateValues);
@@ -103,7 +103,7 @@ public class FirmServiceTests
         Assert.Equal("Alpine Living Renamed", updated.Name);
         Assert.Equal("BE0999999999", updated.VatNumber);
         Assert.Equal("BE68539007547034", updated.Iban);
-        Assert.Equal("GKCCBEBB", updated.Bic);
+        Assert.Equal("MAPLBEBB", updated.Bic);
         Assert.NotNull(updated.Address);
         Assert.Equal("Fairbrook", updated.Address!.City);
     }
@@ -157,6 +157,45 @@ public class FirmServiceTests
         await service.DeleteCollectionAsync(alpha.Id);
         await service.DeleteCollectionAsync((await service.AllCollectionsAsync()).Single().Id);
         Assert.Empty(await service.AllCollectionsAsync());
+    }
+
+    [Fact]
+    public async Task AddFirm_BlankAddressStaysNull()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var service = new FirmService(factory, new FakeCurrentUser("admin-1", Roles.Admin));
+
+        var firmValues = NewFirm("ALP", "Alpine Living");
+        firmValues.Address = new Address { Street = "", Number = "", PostalCode = "", City = "" };
+        var added = await service.AddFirmAsync(firmValues);
+
+        var firms = await service.FirmsAsync();
+        var reloaded = Assert.Single(firms, f => f.Id == added.Id);
+        Assert.Null(reloaded.Address);
+        Assert.Null(reloaded.AddressId);
+    }
+
+    [Fact]
+    public async Task UpdateFirm_BlankAddressStaysNull()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var service = new FirmService(factory, new FakeCurrentUser("admin-1", Roles.Admin));
+        var firm = await service.AddFirmAsync(NewFirm("ALP", "Alpine Living"));
+
+        var updateValues = new Firm
+        {
+            Code = "ALP",
+            Name = "Alpine Living",
+            Address = new Address { Street = "", Number = "", PostalCode = "", City = "" },
+        };
+        await service.UpdateFirmAsync(firm.Id, updateValues);
+
+        var firms = await service.FirmsAsync();
+        var updated = Assert.Single(firms);
+        Assert.Null(updated.Address);
+        Assert.Null(updated.AddressId);
     }
 
     [Fact]

@@ -151,7 +151,7 @@ public class SupplierOrderDocumentTests
             Name = "Alpine Living",
             VatNumber = "BE0999999999",
             Iban = "BE68539007547034",
-            Bic = "BBRUBEBB",
+            Bic = "MAPLBEBB",
             Address = new Address { Street = "Maple Row", Number = "12", PostalCode = "9990", City = "Fairbrook" },
             IsDefault = true,
         });
