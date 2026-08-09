@@ -758,4 +758,119 @@ public class OrderEntryServiceTests
         Assert.Equal(supplier.Id, lines[0].SupplierId);
         Assert.Null(lines[1].SupplierId);
     }
+
+    // -- Task 2 (FI-1): firm routing --
+
+    [Fact]
+    public async Task AddConfiguredLine_FillsFirmFromModelCollection()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        int firmB;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var firmA = new Firm { Code = "FIRM-A", Name = "Firm A", IsDefault = true };
+            var firmBEntity = new Firm { Code = "FIRM-B", Name = "Firm B" };
+            db.Firms.AddRange(firmA, firmBEntity);
+            await db.SaveChangesAsync();
+            // FJORD (the model AddConfiguredLine tests exercise) carries CollectionCode "SCANDI" in the
+            // seed catalogue - see AddConfiguredLine_CollectionSpecificBeatsWildcard, which only passes
+            // because that's true.
+            db.Collections.Add(new Collection { Code = "SCANDI", Name = "Scandi", FirmId = firmBEntity.Id });
+            await db.SaveChangesAsync();
+            firmB = firmBEntity.Id;
+        }
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+
+        var reloaded = await harness.Orders.GetOrderAsync(order.Id);
+        Assert.Equal(firmB, reloaded!.FirmId);
+    }
+
+    [Fact]
+    public async Task AddConfiguredLine_FallsBackToDefaultFirm_WhenCodeUnmapped()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        int firmA;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var firmAEntity = new Firm { Code = "FIRM-A", Name = "Firm A", IsDefault = true };
+            db.Firms.AddRange(firmAEntity, new Firm { Code = "FIRM-B", Name = "Firm B" });
+            await db.SaveChangesAsync();
+            firmA = firmAEntity.Id;
+        }
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+
+        var reloaded = await harness.Orders.GetOrderAsync(order.Id);
+        Assert.Equal(firmA, reloaded!.FirmId);
+    }
+
+    [Fact]
+    public async Task AddConfiguredLine_NeverOverwritesExplicitFirm()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        int firmA, firmB;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var firmAEntity = new Firm { Code = "FIRM-A", Name = "Firm A", IsDefault = true };
+            var firmBEntity = new Firm { Code = "FIRM-B", Name = "Firm B" };
+            db.Firms.AddRange(firmAEntity, firmBEntity);
+            await db.SaveChangesAsync();
+            db.Collections.Add(new Collection { Code = "SCANDI", Name = "Scandi", FirmId = firmBEntity.Id });
+            await db.SaveChangesAsync();
+            firmA = firmAEntity.Id;
+            firmB = firmBEntity.Id;
+        }
+        var (_, selections, fabricColorCode) = Fj2Default(SeedCatalogue.Load());
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUW");
+        await harness.Orders.SetFirmAsync(order.Id, firmA);
+
+        await harness.Orders.AddConfiguredLineAsync(order.Id, "FJORD", "FJ2", selections, fabricColorCode, 1);
+
+        var reloaded = await harness.Orders.GetOrderAsync(order.Id);
+        Assert.Equal(firmA, reloaded!.FirmId);
+        Assert.NotEqual(firmB, reloaded.FirmId);
+    }
+
+    [Fact]
+    public async Task SetFirm_DraftOnly_ValidatesAndClears()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var article = await StandaloneArticleAsync(harness);
+        int firmA;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var firmAEntity = new Firm { Code = "FIRM-A", Name = "Firm A", IsDefault = true };
+            db.Firms.Add(firmAEntity);
+            await db.SaveChangesAsync();
+            firmA = firmAEntity.Id;
+        }
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+        await harness.Orders.AddStandaloneLineAsync(order.Id, article.Id, 1);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Orders.SetFirmAsync(order.Id, 999));
+
+        await harness.Orders.SetFirmAsync(order.Id, firmA);
+        var withFirm = await harness.Orders.GetOrderAsync(order.Id);
+        Assert.Equal(firmA, withFirm!.FirmId);
+
+        await harness.Orders.SetFirmAsync(order.Id, null);
+        var cleared = await harness.Orders.GetOrderAsync(order.Id);
+        Assert.Null(cleared!.FirmId);
+
+        await harness.Orders.PlaceAsync(order.Id);
+        await Assert.ThrowsAsync<OrderPlacedException>(() => harness.Orders.SetFirmAsync(order.Id, firmA));
+    }
 }

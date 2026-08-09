@@ -77,6 +77,19 @@ public sealed class OrderEntryService(
         await db.SaveChangesAsync(ct);
     }
 
+    // Draft-only: routes the order to a firm explicitly (or clears the auto-fill from AddConfiguredLineAsync).
+    public async Task SetFirmAsync(int orderId, int? firmId, CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var order = await RequireDraftAsync(db, orderId, ct);
+        if (firmId is int chosenFirmId && !await db.Firms.AnyAsync(f => f.Id == chosenFirmId, ct))
+        {
+            throw new InvalidOperationException($"Firm {chosenFirmId} not found.");
+        }
+        order.FirmId = firmId;
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task<List<Order>> ListOrdersAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
@@ -169,6 +182,7 @@ public sealed class OrderEntryService(
         Apply(line, suggestion);
         line.LineTotal = ComputeLineTotal(line);
         order.Lines.Add(line);
+        await FillFirmAsync(db, order, snapshot, modelCode, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -375,6 +389,24 @@ public sealed class OrderEntryService(
         var element = model?.Elements.FirstOrDefault(e => e.Code == elementCode);
         var priceGroupCode = element is null ? null : ConfigurationResolver.ResolvedPriceGroupCode(element, snapshot, fabricColorCode);
         return DiscountResolver.Suggest(rules, model?.CollectionCode, modelCode, model?.ModelType, elementCode, priceGroupCode, materialTypeCode);
+    }
+
+    // Routes the order to a firm the first time a configured line lands: the line model's
+    // catalogue CollectionCode looked up in the Collections registry, else the default firm.
+    // Only fills when FirmId is null - an explicit user choice is never overwritten.
+    private static async Task FillFirmAsync(FurniturePlannerContext db, Order order,
+        CatalogueSnapshot snapshot, string modelCode, CancellationToken ct)
+    {
+        if (order.FirmId is not null) { return; }
+        var collectionCode = snapshot.Models.FirstOrDefault(m => m.Code == modelCode)?.CollectionCode;
+        int? firmId = null;
+        if (!string.IsNullOrEmpty(collectionCode))
+        {
+            firmId = await db.Collections.Where(c => c.Code == collectionCode)
+                .Select(c => (int?)c.FirmId).FirstOrDefaultAsync(ct);
+        }
+        firmId ??= await db.Firms.Where(f => f.IsDefault).Select(f => (int?)f.Id).FirstOrDefaultAsync(ct);
+        order.FirmId = firmId;
     }
 
     // Applies a suggestion outcome to the line: a fixed price replaces the unit price outright (percent
