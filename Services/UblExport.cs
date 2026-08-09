@@ -29,8 +29,9 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
             ?? throw new InvalidOperationException($"Invoice {invoiceId} not found.");
 
         var buyerAddress = await BuyerAddressAsync(db, invoice.Order?.Consumer, ct);
+        var firm = await IssuingFirmAsync(db, invoice.Order?.FirmId, ct);
         var filePath = Path.Combine(outputRoot, $"{invoice.InvoiceNumber}.xml");
-        await _ublService.CreateInvoiceAsync(MapInvoice(invoice, buyerAddress), filePath);
+        await _ublService.CreateInvoiceAsync(MapInvoice(invoice, buyerAddress, firm), filePath);
         invoice.ExportedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return filePath;
@@ -49,8 +50,9 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
             .FirstAsync(i => i.Id == creditNote.InvoiceId, ct);
 
         var buyerAddress = await BuyerAddressAsync(db, invoice.Order?.Consumer, ct);
+        var firm = await IssuingFirmAsync(db, invoice.Order?.FirmId, ct);
         var filePath = Path.Combine(outputRoot, $"{creditNote.CreditNoteNumber}.xml");
-        await _ublService.CreateCreditNoteAsync(MapCreditNote(creditNote, invoice, buyerAddress), filePath);
+        await _ublService.CreateCreditNoteAsync(MapCreditNote(creditNote, invoice, buyerAddress, firm), filePath);
         creditNote.ExportedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         return filePath;
@@ -78,7 +80,7 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
         return writtenPaths;
     }
 
-    private static UblInvoice MapInvoice(Invoice invoice, Address? buyerAddress)
+    private static UblInvoice MapInvoice(Invoice invoice, Address? buyerAddress, Firm? firm)
     {
         // Per-line nets are rounded independently, but the header net (invoice.NetTotal) rounds
         // the sum once - on multi-line invoices those two roundings can land a cent apart. The
@@ -99,7 +101,10 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
             Id = invoice.InvoiceNumber,
             IssueDate = invoice.IssuedAt,
             DueDate = invoice.DueDate,
-            Seller = new UblParty { Name = invoice.Order?.Seller?.Name ?? "", Address = PartyAddress(invoice.Order?.Seller?.Address) },
+            Seller = firm is not null
+                ? FirmParty(firm)
+                : new UblParty { Name = invoice.Order?.Seller?.Name ?? "", Address = PartyAddress(invoice.Order?.Seller?.Address) },
+            PaymentMeans = FirmPaymentMeans(firm),
             Buyer = new UblParty { Name = invoice.Order?.Consumer?.Name ?? "", TaxId = invoice.Order?.Consumer?.VatNumber, Address = PartyAddress(buyerAddress) },
             TaxTotal = new UblTaxTotal
             {
@@ -127,14 +132,17 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
         };
     }
 
-    private static UblCreditNote MapCreditNote(CreditNote creditNote, Invoice invoice, Address? buyerAddress) => new()
+    private static UblCreditNote MapCreditNote(CreditNote creditNote, Invoice invoice, Address? buyerAddress, Firm? firm) => new()
     {
         Id = creditNote.CreditNoteNumber,
         IssueDate = creditNote.IssuedAt,
         Note = creditNote.Note,
         CreditReason = creditNote.Reason.ToString(),
         BillingReferences = [invoice.InvoiceNumber],
-        Seller = new UblParty { Name = invoice.Order?.Seller?.Name ?? "", Address = PartyAddress(invoice.Order?.Seller?.Address) },
+        Seller = firm is not null
+            ? FirmParty(firm)
+            : new UblParty { Name = invoice.Order?.Seller?.Name ?? "", Address = PartyAddress(invoice.Order?.Seller?.Address) },
+        PaymentMeans = FirmPaymentMeans(firm),
         Buyer = new UblParty { Name = invoice.Order?.Consumer?.Name ?? "", TaxId = invoice.Order?.Consumer?.VatNumber, Address = PartyAddress(buyerAddress) },
         TaxTotal = new UblTaxTotal
         {
@@ -175,6 +183,37 @@ public sealed class UblExport(IDbContextFactory<FurniturePlannerContext> factory
         PostalZone = address.PostalCode,
         CountryCode = address.CountryCode,
         CountrySubentity = address.Region?.Name,
+    };
+
+    // The issuing firm: the order's routed firm, else the default firm, else null - null keeps
+    // the pre-firm behavior (the shop as seller party) so an unconfigured install is unchanged.
+    private static async Task<Firm?> IssuingFirmAsync(FurniturePlannerContext db, int? orderFirmId, CancellationToken ct)
+    {
+        var firm = orderFirmId is int firmId
+            ? await db.Firms.AsNoTracking().Include(f => f.Address)!.ThenInclude(a => a!.Region)
+                .FirstOrDefaultAsync(f => f.Id == firmId, ct)
+            : null;
+        return firm ?? await db.Firms.AsNoTracking().Include(f => f.Address)!.ThenInclude(a => a!.Region)
+            .FirstOrDefaultAsync(f => f.IsDefault, ct);
+    }
+
+    private static UblParty FirmParty(Firm firm) => new()
+    {
+        Name = firm.Name,
+        TaxId = firm.VatNumber,
+        EndpointId = firm.PeppolEndpointId,
+        Address = PartyAddress(firm.Address),
+    };
+
+    private static UblPaymentMeans? FirmPaymentMeans(Firm? firm) => firm?.Iban is null ? null : new UblPaymentMeans
+    {
+        PaymentMeansCode = "30",
+        PayeeFinancialAccount = new UblFinancialAccount
+        {
+            Id = firm.Iban,
+            Name = firm.Name,
+            FinancialInstitutionBranch = firm.Bic,
+        },
     };
 
     // Buyer address = consumer's own address, falling back to their default delivery-book entry -

@@ -134,4 +134,46 @@ public class InvoicePdfTests
         Assert.Contains("Goodwill", pageText);
         Assert.Contains(creditNote.GrossAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), pageText);
     }
+
+    [Fact]
+    public async Task InvoicePdf_ShowsFirmIdentityBlock()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MarketVatRates.Add(new MarketVatRate { MarketCode = "BE", RatePercent = 21m });
+            await db.SaveChangesAsync();
+        }
+        var orderId = await SeedPlacedOrderAsync(factory);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var firm = new Firm
+            {
+                Code = "ALP",
+                Name = "Alpine Living",
+                VatNumber = "BE0999999999",
+                Iban = "BE68539007547034",
+                Bic = "BBRUBEBB",
+                IsDefault = true,
+                Address = new Address { Street = "Maple Row", Number = "12", PostalCode = "9990", City = "Fairbrook" },
+            };
+            db.Firms.Add(firm);
+            await db.SaveChangesAsync();
+            var order = await db.Orders.FirstAsync(o => o.Id == orderId);
+            order.FirmId = firm.Id;
+            await db.SaveChangesAsync();
+        }
+        var invoicing = new InvoicingService(factory, OfficeUser);
+        var invoice = await invoicing.CreateInvoiceAsync(orderId);
+
+        var pdf = new InvoicePdf(factory, new PdfExportService(new PdfTemplateService()), NewOutputRoot());
+        var filePath = await pdf.GenerateInvoiceAsync(invoice.Id);
+
+        using var readerDoc = new PdfDocument(new PdfReader(filePath));
+        var pageText = PdfTextExtractor.GetTextFromPage(readerDoc.GetFirstPage());
+        Assert.Contains("Alpine Living", pageText);
+        Assert.Contains("BE0999999999", pageText);
+        Assert.Contains("BE68539007547034", pageText);
+    }
 }
