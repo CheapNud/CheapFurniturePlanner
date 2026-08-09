@@ -63,6 +63,8 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<Region> Regions => Set<Region>();
     public DbSet<Address> Addresses => Set<Address>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<Firm> Firms => Set<Firm>();
+    public DbSet<Collection> Collections => Set<Collection>();
     public DbSet<ConsumerDeliveryAddress> ConsumerDeliveryAddresses => Set<ConsumerDeliveryAddress>();
     public DbSet<SupplierModelMap> SupplierModelMaps => Set<SupplierModelMap>();
     public DbSet<SupplierOrder> SupplierOrders => Set<SupplierOrder>();
@@ -239,6 +241,17 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasIndex(s => s.Code).IsUnique();
             entity.HasOne(s => s.Address).WithMany().HasForeignKey(s => s.AddressId).OnDelete(DeleteBehavior.Restrict);
         });
+        modelBuilder.Entity<Firm>(entity =>
+        {
+            entity.HasIndex(f => f.Code).IsUnique();
+            entity.HasOne(f => f.Address).WithMany().HasForeignKey(f => f.AddressId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<Collection>(entity =>
+        {
+            entity.HasIndex(c => c.Code).IsUnique();
+            entity.HasOne(c => c.Firm).WithMany().HasForeignKey(c => c.FirmId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<Order>().HasOne(o => o.Firm).WithMany().HasForeignKey(o => o.FirmId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ConsumerDeliveryAddress>(entity =>
         {
             entity.HasIndex(d => d.ConsumerId);

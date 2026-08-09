@@ -182,6 +182,7 @@ class Program
         builder.Services.AddScoped<ProductionIdentityService>();
         builder.Services.AddScoped<AuthoringCatalogueStore>();
         builder.Services.AddScoped<PartyService>();
+        builder.Services.AddScoped<FirmService>();
         builder.Services.AddScoped<DiscountService>();
         builder.Services.AddScoped<PinnedCatalogueProvider>();
         builder.Services.AddScoped<ProductionUnitService>();
