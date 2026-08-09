@@ -25,10 +25,17 @@ public sealed class SupplierOrderPdf(IDbContextFactory<FurniturePlannerContext> 
         var lineIds = order.Units.Select(u => u.OrderLineId).Distinct().ToList();
         var lines = await db.OrderLines.AsNoTracking().Where(l => lineIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, ct);
 
-        List<DocumentRow> rows =
-        [
-            new("Supplier", order.Supplier?.Name ?? ""),
-        ];
+        var firm = await db.Firms.AsNoTracking()
+            .Include(f => f.Address)!.ThenInclude(a => a!.Region)
+            .FirstOrDefaultAsync(f => f.IsDefault, ct);
+
+        List<DocumentRow> rows = [];
+        if (firm is not null)
+        {
+            rows.Add(new("Ordered by", string.IsNullOrWhiteSpace(firm.VatNumber) ? firm.Name : $"{firm.Name} — VAT {firm.VatNumber}"));
+            if (firm.Address is not null) { rows.Add(new("Our address", firm.Address.ToOneLine())); }
+        }
+        rows.Add(new("Supplier", order.Supplier?.Name ?? ""));
         if (order.Supplier?.Address is not null) { rows.Add(new("Supplier address", order.Supplier.Address.ToOneLine())); }
         rows.Add(new("PO number", order.PoNumber));
         rows.Add(new("Created", order.CreatedAt.ToString("yyyy-MM-dd")));
