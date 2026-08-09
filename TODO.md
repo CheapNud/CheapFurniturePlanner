@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapFurniturePlanner project work tracker
-  Last updated: 2026-08-08
+  Last updated: 2026-08-09
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -46,7 +46,7 @@ _Nothing blocking._
 - [ ] (2026-07-31) purchasing polish: announcement attach does not reject already-cancelled units (inert); supplier models button skips a redundant reload; group release saves per unit (draft-only, retry-safe) [audit]
 - [ ] (2026-07-29) planning polish: multi-laggard depart error untested for the comma join; trip region select double-clear affordance; failed-delivery confirm overwrites any earlier receiving note; pool empty-state text still says arrived-only [audit]
 - [ ] (2026-07-28) addresses: filtered unique index on consumer delivery addresses (one default per consumer) as a db backstop; region delete has no end-to-end ui test; the shared blank-address helper is duplicated across the party dialogs; supplier addresses cannot be cleared back to none through the dialog [audit]
-- [ ] (2026-07-27) ubl export: enable strict validation once parties carry endpoint/tax ids; discounted lines will also need allowance-charge support upstream (unit price x quantity vs discounted line total) before the validator passes [plan]
+- [ ] (2026-07-27) ubl export: enable strict validation (firms now carry endpoint/tax ids after the firms release; consumer-side buyer ids still missing); discounted lines will also need allowance-charge support upstream (unit price x quantity vs discounted line total) before the validator passes [plan]
 - [ ] (2026-07-26) upstream CheapAvaloniaBlazor: the embedded host serves 404 for /cheap-blazor-interop.js (seen in desktop run logs); whatever interop rides that script silently degrades — static asset wiring belongs in the library, not here [bug]
 - [ ] (2026-07-22) upstream CheapHelpers: make CheapAccountController.SignIn virtual (or add a failure-feedback redirect option) so consumers don't need a parallel sign-in action for login feedback [bug]
 - [ ] (2026-07-22) upstream CheapAvaloniaBlazor: the embedded host pipeline runs antiforgery before the consumer pipeline hook (where authentication lands), deviating from the recommended middleware order; harmless today, but an authorized antiforgery-validated form would hit odd 400s — fix belongs in CheapAvaloniaBlazor, not here [audit]
