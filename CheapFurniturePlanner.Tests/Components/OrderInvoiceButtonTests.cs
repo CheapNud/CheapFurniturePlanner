@@ -93,6 +93,7 @@ public class OrderInvoiceButtonTests : TestContext
             sp.GetRequiredService<PinnedCatalogueProvider>(),
             sp.GetRequiredService<ProductionUnitService>()));
         Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
+        Services.AddSingleton(sp => new FirmService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
         Services.AddSingleton(sp => new DiscountService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(invoicing);
         JSInterop.Mode = JSRuntimeMode.Loose;

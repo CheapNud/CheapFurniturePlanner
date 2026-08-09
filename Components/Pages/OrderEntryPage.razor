@@ -6,6 +6,7 @@
 @using CheapFurniturePlanner.Ui
 @inject OrderEntryService OrderEntryService
 @inject PartyService Parties
+@inject FirmService Firms
 @inject ProductionUnitService Units
 @inject InvoicingService Invoicing
 @inject NavigationManager Navigation
@@ -52,6 +53,13 @@ else
                 @foreach (var entry in _deliveryAddresses)
                 {
                     <MudSelectItem T="int?" Value="@((int?)entry.Id)">@($"{entry.Label} — {entry.Address!.ToOneLine()}")</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="int?" Label="Firm" Value="@_order.FirmId" ValueChanged="SetFirmAsync"
+                       Disabled="@(_order.State != OrderState.Draft)" Clearable="true">
+                @foreach (var firmChoice in _firmChoices)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)firmChoice.Id)">@firmChoice.Name</MudSelectItem>
                 }
             </MudSelect>
             @* Unlike its Draft-only neighbors above, this stays enabled once Placed too: the office
@@ -196,6 +204,7 @@ else
     private List<ProductionUnit> _units = [];
     private Invoice? _invoice;
     private List<ConsumerDeliveryAddress> _deliveryAddresses = [];
+    private List<Firm> _firmChoices = [];
     private MudTabs? _tabs;
     private ElementEntryTab? _elementTab;
 
@@ -223,6 +232,20 @@ else
         _units = await Units.UnitsForOrderAsync(OrderId);
         _invoice = await Invoicing.InvoiceForOrderAsync(OrderId);
         _deliveryAddresses = _order is null ? [] : await Parties.DeliveryAddressesAsync(_order.ConsumerId);
+        _firmChoices = await Firms.FirmsAsync();
+    }
+
+    private async Task SetFirmAsync(int? firmId)
+    {
+        try
+        {
+            await OrderEntryService.SetFirmAsync(OrderId, firmId);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OrderPlacedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        await ReloadAsync();
     }
 
     private async Task SetDeliveryAddressAsync(int? bookEntryId)
