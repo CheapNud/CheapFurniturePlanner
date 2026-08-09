@@ -17,6 +17,11 @@ public class Order
     public required string MarketCode { get; set; }
     public int? DeliveryAddressId { get; set; }
     public Address? DeliveryAddress { get; set; }
+    // The issuing ledger for this order's documents. Auto-filled from the first configured
+    // line's collection (see AddConfiguredLineAsync), user-changeable while Draft; null falls
+    // back to the default firm at document time.
+    public int? FirmId { get; set; }
+    public Firm? Firm { get; set; }
     public string? PinnedCatalogueVersion { get; set; }
     public string? PinnedContentHash { get; set; }
     public OrderState State { get; set; } = OrderState.Draft;

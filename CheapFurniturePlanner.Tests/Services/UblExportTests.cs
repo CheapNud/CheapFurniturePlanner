@@ -245,4 +245,101 @@ public class UblExportTests
         Assert.Equal(1.01m, lineNetSum);
         Assert.Equal(headerNet, lineNetSum);
     }
+
+    private static async Task<int> SeedFirmAsync(IDbContextFactory<FurniturePlannerContext> factory)
+    {
+        await using var db = await factory.CreateDbContextAsync();
+        var firm = new Firm
+        {
+            Code = "ALP",
+            Name = "Alpine Living",
+            VatNumber = "BE0999999999",
+            Iban = "BE68539007547034",
+            Bic = "MAPLBEBB",
+            IsDefault = true,
+            Address = new Address { Street = "Maple Row", Number = "12", PostalCode = "9990", City = "Fairbrook" },
+        };
+        db.Firms.Add(firm);
+        await db.SaveChangesAsync();
+        return firm.Id;
+    }
+
+    [Fact]
+    public async Task InvoiceXml_CarriesFirmAsSellerParty()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await SeedVatAsync(factory, "BE", 21m);
+        var firmId = await SeedFirmAsync(factory);
+        var orderId = await SeedPlacedOrderAsync(factory, 0m, "BE", (100m, 1, 100m, 0m));
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var order = await db.Orders.FirstAsync(o => o.Id == orderId);
+            order.FirmId = firmId;
+            await db.SaveChangesAsync();
+        }
+        var invoicing = new InvoicingService(factory, OfficeUser);
+        var invoice = await invoicing.CreateInvoiceAsync(orderId);
+
+        var export = new UblExport(factory, OfficeUser, NewOutputRoot());
+        var filePath = await export.ExportInvoiceAsync(invoice.Id);
+
+        var document = XDocument.Load(filePath);
+        var supplierParty = document.Descendants().First(e => e.Name.LocalName == "AccountingSupplierParty");
+        Assert.Contains("Alpine Living", supplierParty.ToString());
+        Assert.DoesNotContain("Shop", supplierParty.ToString());
+        var text = document.ToString();
+        Assert.Contains("BE0999999999", text);
+        Assert.Contains("BE68539007547034", text);
+    }
+
+    [Fact]
+    public async Task InvoiceXml_UsesDefaultFirm_WhenOrderHasNone()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await SeedVatAsync(factory, "BE", 21m);
+        await SeedFirmAsync(factory);
+        var orderId = await SeedPlacedOrderAsync(factory, 0m, "BE", (100m, 1, 100m, 0m));
+        var invoicing = new InvoicingService(factory, OfficeUser);
+        var invoice = await invoicing.CreateInvoiceAsync(orderId);
+
+        var export = new UblExport(factory, OfficeUser, NewOutputRoot());
+        var filePath = await export.ExportInvoiceAsync(invoice.Id);
+
+        var document = XDocument.Load(filePath);
+        var supplierParty = document.Descendants().First(e => e.Name.LocalName == "AccountingSupplierParty");
+        Assert.Contains("Alpine Living", supplierParty.ToString());
+        Assert.DoesNotContain("Shop", supplierParty.ToString());
+        var text = document.ToString();
+        Assert.Contains("BE0999999999", text);
+        Assert.Contains("BE68539007547034", text);
+    }
+
+    [Fact]
+    public async Task CreditNoteXml_CarriesFirmAsSellerParty()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await SeedVatAsync(factory, "BE", 21m);
+        var firmId = await SeedFirmAsync(factory);
+        var orderId = await SeedPlacedOrderAsync(factory, 0m, "BE", (100m, 1, 100m, 0m));
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var order = await db.Orders.FirstAsync(o => o.Id == orderId);
+            order.FirmId = firmId;
+            await db.SaveChangesAsync();
+        }
+        var invoicing = new InvoicingService(factory, OfficeUser);
+        var invoice = await invoicing.CreateInvoiceAsync(orderId);
+        var creditNote = await invoicing.CreateCreditNoteAsync(invoice.Id, CreditReason.Goodwill);
+
+        var export = new UblExport(factory, OfficeUser, NewOutputRoot());
+        var filePath = await export.ExportCreditNoteAsync(creditNote.Id);
+
+        var document = XDocument.Load(filePath);
+        var text = document.ToString();
+        Assert.Contains("Alpine Living", text);
+        Assert.Contains("BE0999999999", text);
+    }
 }

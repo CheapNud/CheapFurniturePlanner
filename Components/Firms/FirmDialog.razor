@@ -1,0 +1,79 @@
+@using CheapFurniturePlanner.Components.Parties
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" />
+            <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" />
+            <MudTextField T="string" Label="VAT number" @bind-Value="_vatNumber" />
+            <MudStack Row="true" Spacing="2">
+                <MudTextField T="string" Label="IBAN" @bind-Value="_iban" />
+                <MudTextField T="string" Label="BIC" @bind-Value="_bic" />
+            </MudStack>
+            <MudStack Row="true" Spacing="2">
+                <MudTextField T="string" Label="Email" @bind-Value="_email" />
+                <MudTextField T="string" Label="Phone" @bind-Value="_phone" />
+            </MudStack>
+            <MudTextField T="string" Label="Peppol endpoint id" @bind-Value="_peppolEndpointId" />
+            <AddressEditor Value="_address" ValueChanged="@(a => _address = a)" Regions="Regions" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">@SubmitLabel</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public Firm? Firm { get; set; }
+
+    [Parameter]
+    public List<Region> Regions { get; set; } = [];
+
+    [Parameter]
+    public string SubmitLabel { get; set; } = "Save";
+
+    private string _code = string.Empty;
+    private string _name = string.Empty;
+    private string? _vatNumber;
+    private string? _iban;
+    private string? _bic;
+    private string? _email;
+    private string? _phone;
+    private string? _peppolEndpointId;
+    private Address _address = NewBlankAddress();
+
+    protected override void OnInitialized()
+    {
+        if (Firm is not null)
+        {
+            _code = Firm.Code;
+            _name = Firm.Name;
+            _vatNumber = Firm.VatNumber;
+            _iban = Firm.Iban;
+            _bic = Firm.Bic;
+            _email = Firm.Email;
+            _phone = Firm.Phone;
+            _peppolEndpointId = Firm.PeppolEndpointId;
+            _address = Firm.Address ?? NewBlankAddress();
+        }
+    }
+
+    private static Address NewBlankAddress() => new() { Street = "", Number = "", PostalCode = "", City = "" };
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok(new Firm
+    {
+        Code = _code.Trim(),
+        Name = _name.Trim(),
+        VatNumber = _vatNumber,
+        Iban = _iban,
+        Bic = _bic,
+        Email = _email,
+        Phone = _phone,
+        PeppolEndpointId = _peppolEndpointId,
+        Address = _address,
+    }));
+}

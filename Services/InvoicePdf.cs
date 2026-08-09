@@ -25,8 +25,22 @@ public sealed class InvoicePdf(IDbContextFactory<FurniturePlannerContext> factor
             .FirstOrDefaultAsync(i => i.Id == invoiceId, ct)
             ?? throw new InvalidOperationException($"Invoice {invoiceId} not found.");
 
+        var firm = await IssuingFirmAsync(db, invoice.Order?.FirmId, ct);
+        List<DocumentRow> issuerRows = [];
+        if (firm is not null)
+        {
+            issuerRows.Add(new("Invoiced by", firm.Name, "", "", ""));
+            if (!string.IsNullOrWhiteSpace(firm.VatNumber)) { issuerRows.Add(new("VAT", firm.VatNumber, "", "", "")); }
+            if (firm.Address is not null) { issuerRows.Add(new("Firm address", firm.Address.ToOneLine(), "", "", "")); }
+            if (!string.IsNullOrWhiteSpace(firm.Iban))
+            {
+                issuerRows.Add(new("IBAN", string.IsNullOrWhiteSpace(firm.Bic) ? firm.Iban : $"{firm.Iban} ({firm.Bic})", "", "", ""));
+            }
+        }
+
         List<DocumentRow> rows =
         [
+            .. issuerRows,
             new("Order", invoice.Order!.OrderNumber, "", "", ""),
             new("Seller", invoice.Order.Seller?.Name ?? "", "", "", ""),
             new("Consumer", invoice.Order.Consumer?.Name ?? "", "", "", ""),
@@ -121,5 +135,17 @@ public sealed class InvoicePdf(IDbContextFactory<FurniturePlannerContext> factor
             .Include(d => d.Address)!.ThenInclude(a => a!.Region)
             .FirstOrDefaultAsync(d => d.ConsumerId == consumer.Id && d.IsDefault, ct);
         return defaultBookEntry?.Address;
+    }
+
+    // Same resolution rule as UblExport's helper of the same name - small duplication between the
+    // two adapters rather than a shared utility, matching the UblExport/InvoicePdf precedent.
+    private static async Task<Firm?> IssuingFirmAsync(FurniturePlannerContext db, int? orderFirmId, CancellationToken ct)
+    {
+        var firm = orderFirmId is int firmId
+            ? await db.Firms.AsNoTracking().Include(f => f.Address)!.ThenInclude(a => a!.Region)
+                .FirstOrDefaultAsync(f => f.Id == firmId, ct)
+            : null;
+        return firm ?? await db.Firms.AsNoTracking().Include(f => f.Address)!.ThenInclude(a => a!.Region)
+            .FirstOrDefaultAsync(f => f.IsDefault, ct);
     }
 }

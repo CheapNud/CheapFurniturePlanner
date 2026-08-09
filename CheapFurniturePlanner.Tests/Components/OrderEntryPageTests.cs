@@ -95,6 +95,7 @@ public class OrderEntryPageTests : TestContext
             sp.GetRequiredService<PinnedCatalogueProvider>(),
             sp.GetRequiredService<ProductionUnitService>()));
         Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
+        Services.AddSingleton(sp => new FirmService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
         Services.AddSingleton(sp => new DiscountService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new InvoicingService(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
@@ -259,5 +260,29 @@ public class OrderEntryPageTests : TestContext
 
         cut.WaitForAssertion(() =>
             Assert.Contains(cut.FindComponents<MudBlazor.MudChip<string>>(), c => c.Markup.Contains("manual")));
+    }
+
+    // -- Task 6: firm select --
+
+    [Fact]
+    public async Task FirmSelect_RendersFirms_AndShowsRoutedFirm()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await SeedAsync(factory);
+        var firms = new FirmService(factory, new FakeCurrentUser("admin-1", Roles.Admin));
+        await firms.AddFirmAsync(new Firm { Code = "FRM-A", Name = "Anker Trading" });
+        var routedFirm = await firms.AddFirmAsync(new Firm { Code = "FRM-B", Name = "Bellwood Furnishings" });
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "EUN");
+        await harness.Orders.SetFirmAsync(order.Id, routedFirm.Id);
+        ConfigureServices(factory);
+
+        var cut = Render<OrderEntryPage>(parameters => parameters.Add(p => p.OrderId, order.Id));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotEmpty(cut.FindComponents<MudBlazor.MudSelect<int?>>().Where(s => s.Instance.Label == "Firm"));
+            Assert.Contains(routedFirm.Name, cut.Markup);
+        });
     }
 }

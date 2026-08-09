@@ -26,6 +26,10 @@ public sealed class SupplierOrderXml(IDbContextFactory<FurniturePlannerContext> 
         var lineIds = order.Units.Select(u => u.OrderLineId).Distinct().ToList();
         var lines = await db.OrderLines.AsNoTracking().Where(l => lineIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, ct);
 
+        var firm = await db.Firms.AsNoTracking()
+            .Include(f => f.Address)!.ThenInclude(a => a!.Region)
+            .FirstOrDefaultAsync(f => f.IsDefault, ct);
+
         var groups = order.Units
             .GroupBy(unit => Identity(lines[unit.OrderLineId]))
             .OrderBy(group => group.Key, StringComparer.Ordinal)
@@ -35,9 +39,12 @@ public sealed class SupplierOrderXml(IDbContextFactory<FurniturePlannerContext> 
         {
             Id = order.PoNumber,
             IssueDate = order.SentAt ?? order.CreatedAt,
-            // Buyer = us. Our own business identity isn't modeled yet - a neutral constant stands
-            // in until that lands (the same pending-seller-identity gap AX-1 left on the invoice side).
-            Buyer = new UblParty { Name = "CheapFurniturePlanner" },
+            // Buyer = us: the default firm when one is configured (per-firm PO routing is a
+            // deliberate deferral - POs span orders across collections). The neutral constant
+            // remains only as the unconfigured-install fallback.
+            Buyer = firm is null
+                ? new UblParty { Name = "CheapFurniturePlanner" }
+                : new UblParty { Name = firm.Name, TaxId = firm.VatNumber, EndpointId = firm.PeppolEndpointId, Address = PartyAddress(firm.Address) },
             Seller = new UblParty { Name = order.Supplier?.Name ?? "", Address = PartyAddress(order.Supplier?.Address) },
             Lines = groups.Select((group, index) => new UblOrderLine
             {

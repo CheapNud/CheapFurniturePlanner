@@ -141,4 +141,55 @@ public class SupplierOrderDocumentTests
         var lineElements = document.Descendants().Where(e => e.Name.LocalName == "OrderLine").ToList();
         Assert.Single(lineElements);
     }
+
+    private static async Task SeedDefaultFirmAsync(IDbContextFactory<FurniturePlannerContext> factory)
+    {
+        await using var db = await factory.CreateDbContextAsync();
+        db.Firms.Add(new Firm
+        {
+            Code = "ALP",
+            Name = "Alpine Living",
+            VatNumber = "BE0999999999",
+            Iban = "BE68539007547034",
+            Bic = "MAPLBEBB",
+            Address = new Address { Street = "Maple Row", Number = "12", PostalCode = "9990", City = "Fairbrook" },
+            IsDefault = true,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task PurchaseOrderXml_BuyerIsDefaultFirm()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await SeedDefaultFirmAsync(factory);
+        var supplierOrderId = await SeedSentPurchaseOrderAsync(factory);
+
+        var xml = new SupplierOrderXml(factory, NewXmlOutputRoot());
+        var filePath = await xml.GenerateAsync(supplierOrderId);
+
+        var document = XDocument.Load(filePath);
+        var text = document.ToString();
+        Assert.Contains("Alpine Living", text);
+        Assert.Contains("BE0999999999", text);
+        Assert.DoesNotContain("CheapFurniturePlanner", text);
+    }
+
+    [Fact]
+    public async Task PurchaseOrderPdf_ShowsFirmBlock()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await SeedDefaultFirmAsync(factory);
+        var supplierOrderId = await SeedSentPurchaseOrderAsync(factory);
+
+        var pdf = new SupplierOrderPdf(factory, new PdfExportService(new PdfTemplateService()), NewPdfOutputRoot());
+        var filePath = await pdf.GenerateAsync(supplierOrderId);
+
+        using var readerDoc = new PdfDocument(new PdfReader(filePath));
+        var pageText = PdfTextExtractor.GetTextFromPage(readerDoc.GetFirstPage());
+        Assert.Contains("Alpine Living", pageText);
+        Assert.Contains("BE0999999999", pageText);
+    }
 }
