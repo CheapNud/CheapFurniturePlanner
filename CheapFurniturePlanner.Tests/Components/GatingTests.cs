@@ -35,6 +35,7 @@ public class GatingTests : TestContext
         var cut = Render<NavMenu>();
 
         Assert.Contains("href=\"/users\"", cut.Markup);
+        Assert.Contains("href=\"/firms\"", cut.Markup);
         Assert.Contains("href=\"/studio\"", cut.Markup);
         Assert.Contains("href=\"/studio/prices\"", cut.Markup);
         Assert.Contains("href=\"/studio/masters\"", cut.Markup);
@@ -61,6 +62,7 @@ public class GatingTests : TestContext
         Assert.Contains("href=\"/orders\"", cut.Markup);
         Assert.Contains("href=\"/\"", cut.Markup);
         Assert.DoesNotContain("href=\"/users\"", cut.Markup);
+        Assert.DoesNotContain("href=\"/firms\"", cut.Markup);
     }
 
     [Fact]
@@ -77,6 +79,7 @@ public class GatingTests : TestContext
         Assert.DoesNotContain("href=\"/studio\"", cut.Markup);
         Assert.DoesNotContain("href=\"/orders\"", cut.Markup);
         Assert.DoesNotContain("href=\"/users\"", cut.Markup);
+        Assert.DoesNotContain("href=\"/firms\"", cut.Markup);
     }
 
     [Fact]
@@ -104,6 +107,7 @@ public class GatingTests : TestContext
         Assert.Contains("href=\"/trips\"", cut.Markup);
         Assert.DoesNotContain("href=\"/orders\"", cut.Markup);
         Assert.DoesNotContain("href=\"/users\"", cut.Markup);
+        Assert.DoesNotContain("href=\"/firms\"", cut.Markup);
     }
 
     [Fact]
@@ -147,6 +151,7 @@ public class GatingTests : TestContext
         Assert.DoesNotContain("href=\"/furniture/catalog\"", cut.Markup);
         Assert.DoesNotContain("href=\"/studio\"", cut.Markup);
         Assert.DoesNotContain("href=\"/users\"", cut.Markup);
+        Assert.DoesNotContain("href=\"/firms\"", cut.Markup);
 
         // Help/About are unattributed pages (anonymous-accessible), so the nav still shows them.
         Assert.Contains("href=\"/help\"", cut.Markup);
@@ -189,6 +194,15 @@ public class GatingTests : TestContext
     public void UsersPage_RequiresAdmin()
     {
         var attribute = typeof(UsersPage).GetCustomAttribute<AuthorizeAttribute>();
+
+        Assert.NotNull(attribute);
+        Assert.Equal(Roles.Admin, attribute!.Roles);
+    }
+
+    [Fact]
+    public void FirmsPage_RequiresAdmin()
+    {
+        var attribute = typeof(FirmsPage).GetCustomAttribute<AuthorizeAttribute>();
 
         Assert.NotNull(attribute);
         Assert.Equal(Roles.Admin, attribute!.Roles);
