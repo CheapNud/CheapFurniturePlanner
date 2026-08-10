@@ -72,7 +72,7 @@ public class PriceVersionsPageTests : TestContext
     // bUnit renders each Render<T>() call as its own root in the render tree, so the
     // PublishVersionDialog opened via DialogService.ShowAsync shows up as a descendant of the
     // MudDialogProvider root, NOT of the page under test - mirrors StudioPageTests.
-    private IRenderedComponent<MudDialogProvider> ConfigureServices(IDbContextFactory<FurniturePlannerContext> factory)
+    private IRenderedComponent<MudDialogProvider> ConfigureServices(IDbContextFactory<FurniturePlannerContext> factory, string outputRoot)
     {
         Services.AddMudServices();
         Services.AddSingleton(factory);
@@ -81,6 +81,7 @@ public class PriceVersionsPageTests : TestContext
         Services.AddSingleton(sp => new CataloguePublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<ICatalogueSource>()));
         Services.AddSingleton(sp => new ModelPublishService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<CataloguePublishService>(), sp.GetRequiredService<ICatalogueSource>(), sp.GetRequiredService<AuthoringCatalogueStore>()));
         Services.AddSingleton(sp => new PriceVersionService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), sp.GetRequiredService<ModelPublishService>()));
+        Services.AddSingleton(sp => new CatalogueExport(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), outputRoot));
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         var dialogProvider = Render<MudDialogProvider>();
@@ -88,13 +89,15 @@ public class PriceVersionsPageTests : TestContext
         return dialogProvider;
     }
 
+    private static string NewOutputRoot() => Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+
     [Fact]
     public async Task Render_AfterSeedAndPublish_ListsVersionRow_WithEffectiveChip()
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedAndPublishAsync(factory);
-        ConfigureServices(factory);
+        ConfigureServices(factory, NewOutputRoot());
 
         var cut = Render<PriceVersionsPage>();
 
@@ -113,7 +116,7 @@ public class PriceVersionsPageTests : TestContext
         var (factory, conn) = NewFactory();
         using var _ = conn;
         await SeedAndPublishAsync(factory);
-        ConfigureServices(factory);
+        ConfigureServices(factory, NewOutputRoot());
 
         var cut = Render<PriceVersionsPage>();
 
@@ -129,7 +132,7 @@ public class PriceVersionsPageTests : TestContext
         var masters = await store.LoadAsync();
         masters.Materials[0] = masters.Materials[0] with { UnitCost = masters.Materials[0].UnitCost + 1m };
         await store.SaveMastersAsync(masters);
-        ConfigureServices(factory);
+        ConfigureServices(factory, NewOutputRoot());
 
         var cut = Render<PriceVersionsPage>();
 
@@ -145,7 +148,7 @@ public class PriceVersionsPageTests : TestContext
         var masters = await store.LoadAsync();
         masters.Materials[0] = masters.Materials[0] with { UnitCost = masters.Materials[0].UnitCost + 1m };
         await store.SaveMastersAsync(masters);
-        var dialogProvider = ConfigureServices(factory);
+        var dialogProvider = ConfigureServices(factory, NewOutputRoot());
 
         var cut = Render<PriceVersionsPage>();
         cut.WaitForAssertion(() => Assert.Contains("Unpublished price changes", cut.Markup));
@@ -167,5 +170,55 @@ public class PriceVersionsPageTests : TestContext
         var priceVersions = NewPriceVersionService(factory, store);
         cut.WaitForAssertion(() => Assert.Equal(2, priceVersions.ListVersionsAsync().GetAwaiter().GetResult().Count));
         cut.WaitForAssertion(() => Assert.DoesNotContain("Unpublished price changes", cut.Markup));
+    }
+
+    [Fact]
+    public async Task PublishedVersion_ShowsExportButtons()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = await SeedAndPublishAsync(factory);
+        // A future-dated publish keeps v1 Effective and lands v2 as Scheduled - the only
+        // non-Effective status this harness can reach (Superseded needs a third, already-passed
+        // version). Every published version is orderable up front - an office exporting an
+        // upcoming Scheduled price list is a core scenario - so export buttons appear on both rows.
+        await NewPriceVersionService(factory, store).PublishNewVersionAsync(DateTime.UtcNow.AddDays(30));
+        ConfigureServices(factory, NewOutputRoot());
+
+        var cut = Render<PriceVersionsPage>();
+
+        cut.WaitForAssertion(() =>
+        {
+            var rows = cut.FindAll("tbody tr");
+            Assert.Equal(2, rows.Count);
+            var effectiveRow = rows.Single(r => r.QuerySelector("td")!.TextContent.Trim() == "1");
+            var scheduledRow = rows.Single(r => r.QuerySelector("td")!.TextContent.Trim() == "2");
+            var effectiveButtons = effectiveRow.QuerySelectorAll("button").Select(b => b.TextContent.Trim()).ToList();
+            Assert.Contains("Export CSV", effectiveButtons);
+            Assert.Contains("Export JSON", effectiveButtons);
+            var scheduledButtons = scheduledRow.QuerySelectorAll("button").Select(b => b.TextContent.Trim()).ToList();
+            Assert.Contains("Export CSV", scheduledButtons);
+            Assert.Contains("Export JSON", scheduledButtons);
+        });
+    }
+
+    [Fact]
+    public async Task ExportCsv_ShowsPathSnackbar()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await SeedAndPublishAsync(factory);
+        var outputRoot = NewOutputRoot();
+        ConfigureServices(factory, outputRoot);
+        var snackbarHost = Render<MudSnackbarProvider>();
+
+        var cut = Render<PriceVersionsPage>();
+        cut.WaitForAssertion(() => Assert.Contains("Export CSV", cut.Markup));
+        var exportButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Export CSV");
+        await cut.InvokeAsync(() => exportButton.Click());
+
+        var expectedFile = Path.Combine(outputRoot, "catalogue-1.csv");
+        snackbarHost.WaitForAssertion(() => Assert.Contains("catalogue-1.csv", snackbarHost.Markup));
+        Assert.True(File.Exists(expectedFile));
     }
 }

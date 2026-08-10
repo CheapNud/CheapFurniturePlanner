@@ -42,6 +42,10 @@ _Nothing blocking._
 
 ## Future
 
+- [ ] (2026-08-10) catalogue export audit: csv hard-rounds to 2 decimals (diverges from the engine if a market ever skips final-stage rounding); price group label can misattribute when one colour code lives in two fabric groups of an element (pre-existing resolution semantics, no publish validation); default-selection walk assumes visibility triggers precede dependents in display order (resolver's fixed-point loop is the upgrade path) [audit]
+- [ ] (2026-08-10) catalogue export: structured industry-XML export deferred until a named consumer states in writing which standard+version they accept (facts to honor then: prices as integers in minor units; omitted price entry = not orderable, 0 = free) [plan]
+- [ ] (2026-08-10) catalogue export: EDI price-catalogue message deferred until a counterparty demands it (flat-SKU explosion is structurally wrong for the configurator; hand-roll the writer then) [plan]
+- [ ] (2026-08-10) catalogue export: per-partner CSV dialects (separator/decimals/column mapping), delta exports and multilingual names deferred until a partner names them [plan]
 - [ ] (2026-08-08) forge: re-enter the ANTHROPIC_API_KEY actions secret on the forge repo so the pr-review workflow can run (actions secrets are write-only and cannot be copied between repos) [user]
 - [ ] (2026-07-31) purchasing polish: announcement attach does not reject already-cancelled units (inert); supplier models button skips a redundant reload; group release saves per unit (draft-only, retry-safe) [audit]
 - [ ] (2026-07-29) planning polish: multi-laggard depart error untested for the comma join; trip region select double-clear affordance; failed-delivery confirm overwrites any earlier receiving note; pool empty-state text still says arrived-only [audit]

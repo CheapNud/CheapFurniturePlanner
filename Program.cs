@@ -209,6 +209,9 @@ class Program
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<ICurrentUser>(),
             Path.Combine(GetAppDataPath(), "exports")));
+        builder.Services.AddScoped(sp => new CatalogueExport(
+            sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
+            Path.Combine(GetAppDataPath(), "exports")));
         builder.Services.AddScoped(sp => new SupplierOrderPdf(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<IPdfExportService>(),
