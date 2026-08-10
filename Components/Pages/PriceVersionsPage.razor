@@ -4,6 +4,7 @@
 @using CheapFurniturePlanner.Services
 
 @inject PriceVersionService PriceVersionService
+@inject CatalogueExport Exporter
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
@@ -42,6 +43,7 @@ else
             <MudTh>Published</MudTh>
             <MudTh>Status</MudTh>
             <MudTh>Hash</MudTh>
+            <MudTh />
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Version">@context.Version</MudTd>
@@ -51,6 +53,15 @@ else
                 <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.Status)">@context.Status</MudChip>
             </MudTd>
             <MudTd DataLabel="Hash">@ShortHash(context.ContentHash)</MudTd>
+            <MudTd>
+                @if (context.Status == PriceVersionStatus.Effective)
+                {
+                    <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                        <MudButton Size="Size.Small" OnClick="@(() => ExportCsvAsync(context.Version))">Export CSV</MudButton>
+                        <MudButton Size="Size.Small" OnClick="@(() => ExportJsonAsync(context.Version))">Export JSON</MudButton>
+                    </MudStack>
+                }
+            </MudTd>
         </RowTemplate>
     </MudTable>
 }
@@ -98,5 +109,31 @@ else
             Snackbar.Add(ex.Message, Severity.Error);
         }
         await ReloadAsync();
+    }
+
+    private async Task ExportCsvAsync(string version)
+    {
+        try
+        {
+            var filePath = await Exporter.GenerateCsvAsync(version);
+            Snackbar.Add($"Exported {filePath}", Severity.Success);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ExportJsonAsync(string version)
+    {
+        try
+        {
+            var filePath = await Exporter.GenerateJsonAsync(version);
+            Snackbar.Add($"Exported {filePath}", Severity.Success);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 }
