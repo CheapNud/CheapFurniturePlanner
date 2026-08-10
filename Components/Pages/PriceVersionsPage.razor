@@ -54,13 +54,10 @@ else
             </MudTd>
             <MudTd DataLabel="Hash">@ShortHash(context.ContentHash)</MudTd>
             <MudTd>
-                @if (context.Status == PriceVersionStatus.Effective)
-                {
-                    <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
-                        <MudButton Size="Size.Small" OnClick="@(() => ExportCsvAsync(context.Version))">Export CSV</MudButton>
-                        <MudButton Size="Size.Small" OnClick="@(() => ExportJsonAsync(context.Version))">Export JSON</MudButton>
-                    </MudStack>
-                }
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                    <MudButton Size="Size.Small" OnClick="@(() => ExportCsvAsync(context.Version))">Export CSV</MudButton>
+                    <MudButton Size="Size.Small" OnClick="@(() => ExportJsonAsync(context.Version))">Export JSON</MudButton>
+                </MudStack>
             </MudTd>
         </RowTemplate>
     </MudTable>

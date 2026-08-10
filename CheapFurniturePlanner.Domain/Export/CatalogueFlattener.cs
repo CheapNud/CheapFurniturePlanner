@@ -7,9 +7,11 @@ namespace CheapFurniturePlanner.Domain.Export;
 // Flattens a published snapshot to one row per element x fabric price group x market - the
 // price-list grain of this trade (the price group IS the pricing axis; never per-colour).
 // Prices come from the SAME engine every order uses, priced at seller multiplier 1 with the
-// element's representative configuration: first value of each visible choice option in
-// DisplayIndex order, plus the first colour of the first fabric group mapping to the price
-// group. An unpriceable combination yields NO row - omitted means not orderable, never zero.
+// element's representative configuration: the authored default (IsDefault, falling back to
+// lowest DisplayIndex) of each visible choice option, walked in DisplayIndex order, plus the
+// first colour of the first fabric group mapping to the price group - the same rule
+// ConfigurationResolver.DefaultSelections uses for the configurator's own defaults.
+// An unpriceable combination yields NO row - omitted means not orderable, never zero.
 public static class CatalogueFlattener
 {
     public static IReadOnlyList<CatalogueRow> Flatten(CatalogueSnapshot snapshot)
@@ -45,8 +47,10 @@ public static class CatalogueFlattener
             .ToList();
     }
 
-    // First value of each VISIBLE choice option, walked in DisplayIndex order so visibility
-    // triggers resolve before their dependents (the VariantEnumerator assumption).
+    // The authored default (IsDefault, falling back to lowest DisplayIndex) of each VISIBLE choice
+    // option, walked in DisplayIndex order so visibility triggers resolve before their dependents
+    // (the VariantEnumerator assumption). Mirrors ConfigurationResolver.DefaultSelections' value rule
+    // (Domain must not reference Configurator/, so the expression is inlined here).
     private static Dictionary<string, string> DefaultSelections(Element element)
     {
         Dictionary<string, string> selections = [];
@@ -54,7 +58,8 @@ public static class CatalogueFlattener
         {
             if (OptionVisibility.IsVisible(option, selections) && option.Values.Count > 0)
             {
-                selections[option.OptionDefinitionCode] = option.Values[0].OptionChoiceCode;
+                var defaultValue = option.Values.FirstOrDefault(v => v.IsDefault) ?? option.Values.OrderBy(v => v.DisplayIndex).First();
+                selections[option.OptionDefinitionCode] = defaultValue.OptionChoiceCode;
             }
         }
         return selections;

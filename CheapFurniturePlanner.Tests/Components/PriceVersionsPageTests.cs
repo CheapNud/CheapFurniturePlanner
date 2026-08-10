@@ -180,7 +180,8 @@ public class PriceVersionsPageTests : TestContext
         var store = await SeedAndPublishAsync(factory);
         // A future-dated publish keeps v1 Effective and lands v2 as Scheduled - the only
         // non-Effective status this harness can reach (Superseded needs a third, already-passed
-        // version). Confirms export buttons are gated to the Effective row only.
+        // version). Every published version is orderable up front - an office exporting an
+        // upcoming Scheduled price list is a core scenario - so export buttons appear on both rows.
         await NewPriceVersionService(factory, store).PublishNewVersionAsync(DateTime.UtcNow.AddDays(30));
         ConfigureServices(factory, NewOutputRoot());
 
@@ -196,8 +197,8 @@ public class PriceVersionsPageTests : TestContext
             Assert.Contains("Export CSV", effectiveButtons);
             Assert.Contains("Export JSON", effectiveButtons);
             var scheduledButtons = scheduledRow.QuerySelectorAll("button").Select(b => b.TextContent.Trim()).ToList();
-            Assert.DoesNotContain("Export CSV", scheduledButtons);
-            Assert.DoesNotContain("Export JSON", scheduledButtons);
+            Assert.Contains("Export CSV", scheduledButtons);
+            Assert.Contains("Export JSON", scheduledButtons);
         });
     }
 
