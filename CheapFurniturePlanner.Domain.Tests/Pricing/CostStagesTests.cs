@@ -18,7 +18,7 @@ public class CostStagesTests
         new(elementCode, 1, choices ?? new Dictionary<string, string>(), null);
 
     private static ResolvedElement CreateResolved(Element element, ElementSelection selection, IReadOnlyList<BomLine> lines, PriceGroup? priceGroup = null) =>
-        new(element, selection, "VARIANT", priceGroup ?? new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m },
+        new(element, selection, "VARIANT", priceGroup ?? new PriceGroup { Code = "", Kind = FabricMaterialKind.Fabric, RatePerMeter = 0m },
             lines.Select(line => new EffectiveLine(SectionKindFor(line), line)).ToList());
 
     private static BomSectionKind SectionKindFor(BomLine line) => line switch
@@ -281,9 +281,9 @@ public class CostStagesTests
         {
             new CutSortBomLine { LineKey = "FB1", Metrage = 4.2m, CutUnits = 1m, SecondaryGroupMetrages = new Dictionary<string, decimal> { ["PG2"] = 0.8m } }
         };
-        var priceGroup = new PriceGroup { Code = "PG1", Kind = MaterialKind.Fabric, RatePerMeter = 21.50m };
+        var priceGroup = new PriceGroup { Code = "PG1", Kind = FabricMaterialKind.Fabric, RatePerMeter = 21.50m };
         var resolved = CreateResolved(element, CreateSelection(), lines, priceGroup);
-        var snapshot = new CatalogueSnapshot { Version = "1", PriceGroups = [priceGroup, new PriceGroup { Code = "PG2", Kind = MaterialKind.Fabric, RatePerMeter = 34.00m }] };
+        var snapshot = new CatalogueSnapshot { Version = "1", PriceGroups = [priceGroup, new PriceGroup { Code = "PG2", Kind = FabricMaterialKind.Fabric, RatePerMeter = 34.00m }] };
 
         // Act
         var (result, errors) = CostStages.Run(resolved, snapshot, Rounding);
@@ -318,7 +318,7 @@ public class CostStagesTests
         {
             new CutSortBomLine { LineKey = "FB1", Metrage = 4.2m, SecondaryGroupMetrages = new Dictionary<string, decimal> { ["MISSING"] = 1.0m } }
         };
-        var priceGroup = new PriceGroup { Code = "PG1", Kind = MaterialKind.Fabric, RatePerMeter = 21.50m };
+        var priceGroup = new PriceGroup { Code = "PG1", Kind = FabricMaterialKind.Fabric, RatePerMeter = 21.50m };
         var resolved = CreateResolved(element, CreateSelection(), lines, priceGroup);
         var snapshot = new CatalogueSnapshot { Version = "1", PriceGroups = [priceGroup] };
 

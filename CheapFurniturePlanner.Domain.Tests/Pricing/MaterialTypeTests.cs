@@ -82,8 +82,8 @@ public class MaterialTypeTests
             ],
             PriceGroups =
             [
-                new PriceGroup { Code = "PGF", Kind = MaterialKind.Fabric, RatePerMeter = 10m, MaterialTypeCode = null },
-                new PriceGroup { Code = "PGL", Kind = MaterialKind.Leather, RatePerMeter = 40m, MaterialTypeCode = "LEATHER-THICK" }
+                new PriceGroup { Code = "PGF", Kind = FabricMaterialKind.Fabric, RatePerMeter = 10m, MaterialTypeCode = null },
+                new PriceGroup { Code = "PGL", Kind = FabricMaterialKind.Leather, RatePerMeter = 40m, MaterialTypeCode = "LEATHER-THICK" }
             ],
             Operations = [new Operation("OP-LEATHER", "Leather operation", 15m)],
             FrameBodies = [new FrameBody("FBX", 50m, 0m, 0m, 0m)],

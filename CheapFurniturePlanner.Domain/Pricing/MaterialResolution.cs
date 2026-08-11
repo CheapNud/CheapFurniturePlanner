@@ -13,12 +13,12 @@ internal static class MaterialResolution
         var fabricOption = element.Options.OfType<FabricOption>().FirstOrDefault();
         if (fabricOption is null || !OptionVisibility.IsVisible(fabricOption, selection.ChoiceSelections))
         {
-            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
+            return new PriceGroup { Code = "", Kind = FabricMaterialKind.Fabric, RatePerMeter = 0m };
         }
         if (selection.FabricColorCode is null)
         {
             errors.Add(new PricingError(PricingErrorKind.IncompleteConfiguration, $"{element.Code}:{fabricOption.OptionDefinitionCode}"));
-            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
+            return new PriceGroup { Code = "", Kind = FabricMaterialKind.Fabric, RatePerMeter = 0m };
         }
         var group = fabricOption.FabricGroupCodes
             .Select(code => snapshot.FabricGroups.FirstOrDefault(g => g.Code == code))
@@ -26,13 +26,13 @@ internal static class MaterialResolution
         if (group is null)
         {
             errors.Add(new PricingError(PricingErrorKind.UnknownFabricColor, $"{element.Code}:{selection.FabricColorCode}"));
-            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
+            return new PriceGroup { Code = "", Kind = FabricMaterialKind.Fabric, RatePerMeter = 0m };
         }
         var priceGroup = snapshot.PriceGroups.FirstOrDefault(pg => pg.Code == group.PriceGroupCode);
         if (priceGroup is null)
         {
             errors.Add(new PricingError(PricingErrorKind.NoPriceGroupForMaterialKind, $"{element.Code}:{group.PriceGroupCode}"));
-            return new PriceGroup { Code = "", Kind = MaterialKind.Fabric, RatePerMeter = 0m };
+            return new PriceGroup { Code = "", Kind = FabricMaterialKind.Fabric, RatePerMeter = 0m };
         }
         return priceGroup;
     }

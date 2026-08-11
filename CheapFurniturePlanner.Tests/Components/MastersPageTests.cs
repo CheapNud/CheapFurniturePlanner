@@ -131,9 +131,9 @@ public class MastersPageTests : TestContext
         var store = await SeedAsync(factory);
         var service = new MasterAuthoringService(store);
 
-        await service.AddPriceGroupAsync(new PriceGroup { Code = "PG-NEW", Kind = MaterialKind.Leather, RatePerMeter = 12m });
+        await service.AddPriceGroupAsync(new PriceGroup { Code = "PG-NEW", Kind = FabricMaterialKind.Leather, RatePerMeter = 12m });
 
-        Assert.Contains((await store.LoadAsync()).PriceGroups, p => p.Code == "PG-NEW" && p.Kind == MaterialKind.Leather);
+        Assert.Contains((await store.LoadAsync()).PriceGroups, p => p.Code == "PG-NEW" && p.Kind == FabricMaterialKind.Leather);
     }
 
     [Fact]
