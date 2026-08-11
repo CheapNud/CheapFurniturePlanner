@@ -12,8 +12,10 @@ public sealed record SweepResult(List<int> SupplierOrderIds, List<string> Unreso
 
 // Sweeps placed, warehouse-bound production units into supplier purchase orders. A unit's
 // supplier is resolved from its order line (dropship SupplierId) first, falling back to the
-// model-code map; unresolved units are left alone and surface via UnresolvedModelCodesAsync for
-// the warning panel. Draft POs are the only mutable state - Sent/Completed are frozen except for
+// model-code map; a null-supplier map row is an explicit in-house marker (PartyService.
+// MarkModelInHouseAsync) - resolved (excluded from the sweep) without being unresolved either.
+// Anything left over is unresolved and surfaces via UnresolvedModelCodesAsync for the warning
+// panel. Draft POs are the only mutable state - Sent/Completed are frozen except for
 // TheirReference. Numbering copies ProductionUnitService.CreateTripAsync's max-suffix pattern
 // (not count-based: Drafts are deletable, so a count would collide with a still-live PO).
 public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext> factory, ICurrentUser currentUser)
@@ -144,7 +146,10 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
 
     // The resolution rule: candidates are Expected, not-yet-ordered units whose line ships to our
     // warehouse; each resolves via its line's own SupplierId (dropship pin) first, else the
-    // model-code map. Anything left over is unresolved - reported distinct, sorted for determinism.
+    // model-code map - three states, not two. A map row with a real SupplierId resolves to that
+    // supplier; a map row with a null SupplierId is an explicit in-house marker and is skipped
+    // entirely (resolved, but neither swept nor unresolved); no map row at all is unresolved -
+    // reported distinct, sorted for determinism.
     private static async Task<(Dictionary<int, List<ProductionUnit>> BySupplier, List<string> UnresolvedModelCodes)> ResolveCandidatesAsync(
         FurniturePlannerContext db, CancellationToken ct)
     {
@@ -160,9 +165,17 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
         var unresolvedModelCodes = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var candidate in candidates)
         {
-            var supplierId = candidate.SupplierId
-                ?? (candidate.ModelCode is not null && modelCodeToSupplierId.TryGetValue(candidate.ModelCode, out var mappedSupplierId) ? mappedSupplierId : null);
-            if (supplierId is null)
+            int? supplierId;
+            if (candidate.SupplierId is int dropshipSupplierId)
+            {
+                supplierId = dropshipSupplierId;
+            }
+            else if (candidate.ModelCode is not null && modelCodeToSupplierId.TryGetValue(candidate.ModelCode, out var mappedSupplierId))
+            {
+                if (mappedSupplierId is null) { continue; } // in-house: resolved, deliberately excluded
+                supplierId = mappedSupplierId;
+            }
+            else
             {
                 // A StandaloneArticle line has no ModelCode - fall back to its AssignedCode, then
                 // the unit's own UnitCode, so an unresolvable unit always surfaces an identity
