@@ -101,6 +101,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         await using var db = await factory.CreateDbContextAsync(ct);
         var unitsQuery = db.ProductionUnits.AsNoTracking()
             .Include(u => u.Order)!.ThenInclude(o => o!.Consumer)
+            .Include(u => u.Order)!.ThenInclude(o => o!.Lines)
             .Include(u => u.Trip)
             .AsQueryable();
         if (!string.IsNullOrWhiteSpace(orderNumberFilter))

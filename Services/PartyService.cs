@@ -271,6 +271,15 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
         await db.SupplierModelMaps.Where(m => m.ModelCode == code && m.SupplierId == null).ExecuteDeleteAsync(ct);
     }
 
+    // The read side of the null-supplier "made here" marker - PurchasingPage's in-house list.
+    public async Task<List<string>> InHouseModelCodesAsync(CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.SupplierModelMaps.AsNoTracking()
+            .Where(m => m.SupplierId == null)
+            .OrderBy(m => m.ModelCode).Select(m => m.ModelCode).ToListAsync(ct);
+    }
+
     // --- Addresses: seller / supplier / consumer-primary upsert in place ---
 
     public async Task SetSellerAddressAsync(int sellerId, Address addressValues, CancellationToken ct = default)

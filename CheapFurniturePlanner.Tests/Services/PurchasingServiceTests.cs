@@ -501,6 +501,26 @@ public class PurchasingServiceTests
         Assert.Equal(["HOME"], await purchasing.UnresolvedModelCodesAsync());
     }
 
+    // Task 7: PurchasingPage's in-house list read - sorted, resolved-supplier map rows excluded,
+    // unmark drops the code back out.
+    [Fact]
+    public async Task InHouseModelCodesAsync_ListsOnlyNullSupplierRows()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var party = new PartyService(factory, OfficeUser);
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        await party.AddSupplierModelMapAsync(supplierId, "MAPPED");
+        await party.MarkModelInHouseAsync("ZEBRA");
+        await party.MarkModelInHouseAsync("HOME");
+
+        Assert.Equal(["HOME", "ZEBRA"], await party.InHouseModelCodesAsync());
+
+        await party.UnmarkModelInHouseAsync("HOME");
+
+        Assert.Equal(["ZEBRA"], await party.InHouseModelCodesAsync());
+    }
+
     [Fact]
     public async Task Mutations_RejectMechanicAndWarehouse()
     {

@@ -104,6 +104,7 @@ public class GatingTests : TestContext
         var cut = Render<NavMenu>();
 
         Assert.Contains("href=\"/receiving\"", cut.Markup);
+        Assert.Contains("href=\"/finishing\"", cut.Markup);
         Assert.Contains("href=\"/trips\"", cut.Markup);
         Assert.DoesNotContain("href=\"/orders\"", cut.Markup);
         Assert.DoesNotContain("href=\"/users\"", cut.Markup);
@@ -120,12 +121,14 @@ public class GatingTests : TestContext
         var cut = Render<NavMenu>();
 
         Assert.DoesNotContain("href=\"/receiving\"", cut.Markup);
+        Assert.DoesNotContain("href=\"/finishing\"", cut.Markup);
     }
 
     [Fact]
     public void DockPages_RequireWarehouseStaff()
     {
         Assert.Equal(Roles.WarehouseStaff, typeof(ReceivingPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Equal(Roles.WarehouseStaff, typeof(FinishingPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
         Assert.Equal(Roles.WarehouseStaff, typeof(TripsPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
         Assert.Equal(Roles.WarehouseStaff, typeof(TripPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
     }
