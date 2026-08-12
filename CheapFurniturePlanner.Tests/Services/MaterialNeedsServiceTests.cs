@@ -301,4 +301,64 @@ public class MaterialNeedsServiceTests
         }
         Assert.Contains(dataLines, l => l.StartsWith("Frame;FBX;;FBX;", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task StockAsync_ReturnsRows_OrderedByKindThenCodeOrdinal()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "FM-Z", Amount = 1m, UpdatedAt = DateTime.UtcNow });
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "FM-A", Amount = 2m, UpdatedAt = DateTime.UtcNow });
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Cotton, Code = "COT-STD", Amount = 3m, UpdatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        }
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var stock = await service.StockAsync();
+
+        // MaterialKind's declaration order is Foam, Frame, Cotton, Fabric, Misc - Foam sorts before
+        // Cotton by that underlying enum value, not alphabetically.
+        Assert.Equal(
+            [(MaterialKind.Foam, "FM-A"), (MaterialKind.Foam, "FM-Z"), (MaterialKind.Cotton, "COT-STD")],
+            stock.Select(s => (s.Kind, s.Code)).ToArray());
+    }
+
+    [Fact]
+    public async Task AdjustStockAsync_InsertsNewRow_ThenUpsertsAbsoluteAmountOnSameRow()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        await service.AdjustStockAsync(MaterialKind.Foam, "FM-STD", "H35", 12m);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "FM-STD" && s.HardnessCode == "H35");
+            Assert.Equal(12m, stock.Amount);
+        }
+
+        // Second call on the same (Kind, Code, HardnessCode) upserts the existing row absolutely -
+        // not additively, and never creates a second row.
+        await service.AdjustStockAsync(MaterialKind.Foam, "FM-STD", "H35", -4m);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "FM-STD" && s.HardnessCode == "H35");
+            Assert.Equal(-4m, stock.Amount);
+            Assert.Equal(1, await db.MaterialStocks.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task AdjustStockAsync_RejectsMechanicAndWarehouse()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        foreach (var role in new[] { Roles.Mechanic, Roles.Warehouse })
+        {
+            var service = new MaterialNeedsService(factory, new FakeCurrentUser("intruder", role), new PinnedCatalogueProvider(factory), NewOutputRoot());
+            await Assert.ThrowsAsync<InvalidOperationException>(() => service.AdjustStockAsync(MaterialKind.Foam, "FM-STD", null, 1m));
+        }
+    }
 }

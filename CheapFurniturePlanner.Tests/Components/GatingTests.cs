@@ -178,6 +178,8 @@ public class GatingTests : TestContext
         typeof(InvoicePage),
         typeof(PurchasingPage),
         typeof(PurchaseOrderPage),
+        typeof(MaterialsPage),
+        typeof(MaterialOrderPage),
     };
 
     [Theory]

@@ -101,6 +101,36 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
         return new MaterialForecast(rows, unresolvedModelCodes.ToList());
     }
 
+    // Read-only, like MaterialOrderService.ListAsync/GetAsync - no role check, the /materials page
+    // itself is already Admin-or-Office gated.
+    public async Task<List<MaterialStock>> StockAsync(CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var stocks = await db.MaterialStocks.AsNoTracking().ToListAsync(ct);
+        return stocks.OrderBy(s => s.Kind).ThenBy(s => s.Code, StringComparer.Ordinal).ToList();
+    }
+
+    // Sets the balance to an absolute value (not a delta) - the StockAdjustDialog idiom is "this is
+    // what's actually on the shelf", a correction, not a receipt. Upserts by (Kind, Code,
+    // HardnessCode), same key ReceiveAsync uses.
+    public async Task AdjustStockAsync(MaterialKind kind, string code, string? hardnessCode, decimal newAmount, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == kind && s.Code == code && s.HardnessCode == hardnessCode, ct);
+        if (stock is null)
+        {
+            stock = new MaterialStock { Kind = kind, Code = code, HardnessCode = hardnessCode, Amount = newAmount, UpdatedAt = DateTime.UtcNow };
+            db.MaterialStocks.Add(stock);
+        }
+        else
+        {
+            stock.Amount = newAmount;
+            stock.UpdatedAt = DateTime.UtcNow;
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task<string> ExportCsvAsync(MaterialForecast forecast, CancellationToken ct = default)
     {
         var csv = new StringBuilder();

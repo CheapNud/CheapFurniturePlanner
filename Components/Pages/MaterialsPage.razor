@@ -1,0 +1,217 @@
+@page "/materials"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Components.Materials
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@inject MaterialNeedsService MaterialNeeds
+@inject MaterialOrderService MaterialOrders
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Materials</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Materials</MudText>
+
+    <MudTabs>
+        <MudTabPanel Text="Forecast">
+            @* Canon deviation (same as PurchasingPage's "Generate orders"): Compute is a recurring
+               sweep action, always available - not a genuine per-record "Add", so it stays visible
+               regardless of whether a forecast has ever run. *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="my-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Sync" OnClick="ComputeAsync">Compute</MudButton>
+                @if (_forecast is not null && _forecastRows.Count > 0)
+                {
+                    <MudButton Variant="Variant.Outlined" OnClick="ExportCsvAsync">Export CSV</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="CreateOrderAsync">Create order</MudButton>
+                }
+            </MudStack>
+
+            @if (_unresolvedModelCodes.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-4">Unresolved: @string.Join(", ", _unresolvedModelCodes)</MudAlert>
+            }
+
+            @if (_forecast is null)
+            {
+                <EmptyState Text="No forecast computed yet" />
+            }
+            else if (_forecastRows.Count == 0)
+            {
+                <EmptyState Text="No material needs right now" />
+            }
+            else
+            {
+                <MudTable T="ForecastRowState" Items="_forecastRows" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh></MudTh>
+                        <MudTh>Kind</MudTh>
+                        <MudTh>Code</MudTh>
+                        <MudTh>Hardness</MudTh>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Gross need</MudTh>
+                        <MudTh>In stock</MudTh>
+                        <MudTh>Stock after</MudTh>
+                        <MudTh>On order</MudTh>
+                        <MudTh>To order</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd><MudCheckBox T="bool" Value="context.Selected" ValueChanged="@((bool v) => context.Selected = v)" /></MudTd>
+                        <MudTd DataLabel="Kind">@context.Row.Kind</MudTd>
+                        <MudTd DataLabel="Code">@context.Row.Code</MudTd>
+                        <MudTd DataLabel="Hardness">@context.Row.HardnessCode</MudTd>
+                        <MudTd DataLabel="Name">@context.Row.DisplayName</MudTd>
+                        <MudTd DataLabel="Gross need">@context.Row.GrossNeed</MudTd>
+                        <MudTd DataLabel="In stock">@context.Row.InStock</MudTd>
+                        <MudTd DataLabel="Stock after">@context.Row.StockAfterNeeds</MudTd>
+                        <MudTd DataLabel="On order">@context.Row.OnOrder</MudTd>
+                        <MudTd DataLabel="To order">
+                            <MudNumericField T="decimal" Value="context.ToOrder" ValueChanged="@((decimal v) => context.ToOrder = v)" Min="0" Dense="true" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Stock">
+            @if (_stock.Count == 0)
+            {
+                <EmptyState Text="No stock recorded yet" />
+            }
+            else
+            {
+                <MudTable T="MaterialStock" Items="_stock" Hover="true" Dense="true" Class="mt-4">
+                    <HeaderContent>
+                        <MudTh>Kind</MudTh>
+                        <MudTh>Code</MudTh>
+                        <MudTh>Hardness</MudTh>
+                        <MudTh>Amount</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Kind">@context.Kind</MudTd>
+                        <MudTd DataLabel="Code">@context.Code</MudTd>
+                        <MudTd DataLabel="Hardness">@context.HardnessCode</MudTd>
+                        <MudTd DataLabel="Amount"><MudText Color="@(context.Amount < 0 ? Color.Error : Color.Default)">@context.Amount</MudText></MudTd>
+                        <MudTd><MudButton Size="Size.Small" OnClick="@(() => AdjustStockAsync(context))">Adjust</MudButton></MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Orders">
+            @if (_orders.Count == 0)
+            {
+                <EmptyState Text="No material orders yet" />
+            }
+            else
+            {
+                <MudTable T="MaterialOrder" Items="_orders" Hover="true" Dense="true" Class="mt-4"
+                          OnRowClick="@((TableRowClickEventArgs<MaterialOrder> args) => Navigation.NavigateTo($"/materials/orders/{args.Item!.Id}"))">
+                    <HeaderContent>
+                        <MudTh>Number</MudTh>
+                        <MudTh>Supplier</MudTh>
+                        <MudTh>State</MudTh>
+                        <MudTh>Created</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Number">@context.Number</MudTd>
+                        <MudTd DataLabel="Supplier">@context.Supplier?.Name</MudTd>
+                        <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip></MudTd>
+                        <MudTd DataLabel="Created">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private sealed class ForecastRowState
+    {
+        public required MaterialForecastRow Row { get; init; }
+        public decimal ToOrder { get; set; }
+        public bool Selected { get; set; }
+    }
+
+    private MaterialForecast? _forecast;
+    private List<ForecastRowState> _forecastRows = [];
+    private List<string> _unresolvedModelCodes = [];
+    private List<MaterialStock> _stock = [];
+    private List<MaterialOrder> _orders = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadStockAndOrdersAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ReloadStockAndOrdersAsync()
+    {
+        _stock = await MaterialNeeds.StockAsync();
+        _orders = await MaterialOrders.ListAsync();
+    }
+
+    private async Task ComputeAsync()
+    {
+        try
+        {
+            _forecast = await MaterialNeeds.ComputeAsync();
+            _forecastRows = _forecast.Rows.Select(r => new ForecastRowState { Row = r, ToOrder = r.SuggestedToOrder }).ToList();
+            _unresolvedModelCodes = _forecast.UnresolvedModelCodes.ToList();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task ExportCsvAsync()
+    {
+        if (_forecast is null) { return; }
+        try
+        {
+            var filePath = await MaterialNeeds.ExportCsvAsync(_forecast);
+            Snackbar.Add($"Exported to {filePath}", Severity.Success);
+        }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task CreateOrderAsync()
+    {
+        var lines = _forecastRows.Where(r => r.Selected && r.ToOrder > 0)
+            .Select(r => new MaterialOrderLine { Kind = r.Row.Kind, Code = r.Row.Code, HardnessCode = r.Row.HardnessCode, DisplayName = r.Row.DisplayName, QuantityOrdered = r.ToOrder })
+            .ToList();
+        if (lines.Count == 0)
+        {
+            Snackbar.Add("Select at least one row with a quantity to order.", Severity.Warning);
+            return;
+        }
+
+        var parameters = new DialogParameters<CreateOrderDialog> { { d => d.Lines, lines } };
+        var dialog = await DialogService.ShowAsync<CreateOrderDialog>("Create material order", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            Snackbar.Add("Material order created.", Severity.Success);
+            _orders = await MaterialOrders.ListAsync();
+        }
+    }
+
+    private async Task AdjustStockAsync(MaterialStock stock)
+    {
+        var parameters = new DialogParameters<StockAdjustDialog> { { d => d.Stock, stock } };
+        var dialog = await DialogService.ShowAsync<StockAdjustDialog>("Adjust stock", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            _stock = await MaterialNeeds.StockAsync();
+        }
+    }
+}

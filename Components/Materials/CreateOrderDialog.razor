@@ -1,0 +1,47 @@
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@inject PartyService Parties
+@inject MaterialOrderService MaterialOrders
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudSelect T="int?" Label="Supplier" @bind-Value="_supplierId">
+                @foreach (var supplier in _suppliers)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)supplier.Id)">@supplier.Name</MudSelectItem>
+                }
+            </MudSelect>
+            <MudText Typo="Typo.body2">@Lines.Count line(s) will be ordered.</MudText>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_supplierId is null)" OnClick="SubmitAsync">Create</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public List<MaterialOrderLine> Lines { get; set; } = [];
+
+    private List<Supplier> _suppliers = [];
+    private int? _supplierId;
+
+    protected override async Task OnInitializedAsync() => _suppliers = await Parties.SuppliersAsync();
+
+    private async Task SubmitAsync()
+    {
+        if (_supplierId is not int supplierId) { return; }
+        try
+        {
+            await MaterialOrders.CreateDraftAsync(supplierId, Lines);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}
