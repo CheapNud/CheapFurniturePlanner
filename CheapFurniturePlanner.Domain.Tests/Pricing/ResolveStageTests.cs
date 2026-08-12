@@ -69,7 +69,7 @@ public class ResolveStageTests
             Version = "1",
             Models = [model],
             FabricGroups = [new FabricGroup { Code = "GRP1", PriceGroupCode = "PG1", Colors = [new FabricColor { Code = "CRIMSON", Name = "Crimson" }] }],
-            PriceGroups = [new PriceGroup { Code = "PG1", Kind = MaterialKind.Fabric, RatePerMeter = 10m }],
+            PriceGroups = [new PriceGroup { Code = "PG1", Kind = FabricMaterialKind.Fabric, RatePerMeter = 10m }],
             Markets = [CreateMarket()]
         };
 
@@ -262,7 +262,7 @@ public class ResolveStageTests
             Version = "1",
             Models = [model],
             FabricGroups = [new FabricGroup { Code = "GRP1", PriceGroupCode = "PG1", Colors = [new FabricColor { Code = "CRIMSON", Name = "Crimson" }] }],
-            PriceGroups = [new PriceGroup { Code = "PG1", Kind = MaterialKind.Fabric, RatePerMeter = 10m }],
+            PriceGroups = [new PriceGroup { Code = "PG1", Kind = FabricMaterialKind.Fabric, RatePerMeter = 10m }],
             Markets = [CreateMarket()]
         };
         var selection = new ElementSelection("SEAT", 1, new Dictionary<string, string>(), null);
@@ -304,7 +304,7 @@ public class ResolveStageTests
             Version = "1",
             Models = [model],
             FabricGroups = [new FabricGroup { Code = "GRP1", PriceGroupCode = "PG1", Colors = [new FabricColor { Code = "CRIMSON", Name = "Crimson" }] }],
-            PriceGroups = [new PriceGroup { Code = "PG1", Kind = MaterialKind.Fabric, RatePerMeter = 10m }],
+            PriceGroups = [new PriceGroup { Code = "PG1", Kind = FabricMaterialKind.Fabric, RatePerMeter = 10m }],
             Markets = [CreateMarket()]
         };
         var selection = new ElementSelection("SEAT", 1, new Dictionary<string, string>(), null);
@@ -337,7 +337,7 @@ public class ResolveStageTests
             Version = "1",
             Models = [model],
             FabricGroups = [new FabricGroup { Code = "GRP1", PriceGroupCode = "PG1", Colors = [new FabricColor { Code = "CRIMSON", Name = "Crimson" }] }],
-            PriceGroups = [new PriceGroup { Code = "PG1", Kind = MaterialKind.Fabric, RatePerMeter = 10m }],
+            PriceGroups = [new PriceGroup { Code = "PG1", Kind = FabricMaterialKind.Fabric, RatePerMeter = 10m }],
             Markets = [CreateMarket()]
         };
         var selection = new ElementSelection("SEAT", 1, new Dictionary<string, string>(), "TEAL");

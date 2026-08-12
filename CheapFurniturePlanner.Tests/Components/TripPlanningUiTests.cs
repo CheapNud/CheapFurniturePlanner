@@ -121,7 +121,8 @@ public class TripPlanningUiTests : TestContext
         Services.AddMudServices();
         Services.AddSingleton(factory);
         Services.AddSingleton(who);
-        Services.AddSingleton(sp => new ProductionUnitService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), who));
+        Services.AddSingleton(sp => new PinnedCatalogueProvider(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
+        Services.AddSingleton(sp => new ProductionUnitService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), who, sp.GetRequiredService<PinnedCatalogueProvider>()));
         Services.AddSingleton(sp => new PartyService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), who));
         Services.AddSingleton(sp => new TripLoadListPdf(factory, new PdfExportService(new PdfTemplateService()), pdfRoot));
         JSInterop.Mode = JSRuntimeMode.Loose;
@@ -135,7 +136,7 @@ public class TripPlanningUiTests : TestContext
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
-        var units = new ProductionUnitService(factory, dock);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
         var northRegionId = await SeedRegionAsync(factory, "NORTH");
         var (northOrderId, _, northUnitCode) = await SeedOrderWithUnitAsync(factory, units, northRegionId);
         var (regionlessOrderId, _, regionlessUnitCode) = await SeedOrderWithUnitAsync(factory, units, regionId: null);
@@ -172,7 +173,7 @@ public class TripPlanningUiTests : TestContext
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
-        var units = new ProductionUnitService(factory, dock);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
         var (_, unitId, unitCode) = await SeedOrderWithUnitAsync(factory, units, regionId: null);
         var trip = await units.CreateTripAsync();
         ConfigureServices(factory, dock);
@@ -205,7 +206,7 @@ public class TripPlanningUiTests : TestContext
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
-        var units = new ProductionUnitService(factory, dock);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
         var (orderId, unitIds) = await SeedPlacedOrderWithUnitsAsync(factory, units, quantity: 2);
         var trip = await units.CreateTripAsync();
         foreach (var unitId in unitIds)

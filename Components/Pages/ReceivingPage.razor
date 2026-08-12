@@ -110,7 +110,7 @@
     }
 
     private async Task LoadAsync() =>
-        _units = await Units.ListUnitsAsync(string.IsNullOrWhiteSpace(_orderFilter) ? null : _orderFilter, _stateFilter, _announcementFilter);
+        _units = await Units.ListUnitsAsync(string.IsNullOrWhiteSpace(_orderFilter) ? null : _orderFilter, _stateFilter, _announcementFilter, inHouseOnly: false);
 
     private async Task OnOrderFilterChanged(string filterText)
     {

@@ -227,9 +227,12 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
         await RequireAdminOrOfficeAsync();
         var code = RequireTrimmed(modelCode, "Model code");
         await using var db = await factory.CreateDbContextAsync(ct);
-        if (await db.SupplierModelMaps.AnyAsync(m => m.ModelCode == code, ct))
+        var existing = await db.SupplierModelMaps.FirstOrDefaultAsync(m => m.ModelCode == code, ct);
+        if (existing is not null)
         {
-            throw new InvalidOperationException($"Model code '{code}' is already mapped to a supplier.");
+            throw new InvalidOperationException(existing.SupplierId is null
+                ? $"Model code '{code}' is already marked in-house."
+                : $"Model code '{code}' is already mapped to supplier '{await SupplierCodeAsync(db, existing.SupplierId.Value, ct)}'.");
         }
         db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = supplierId, ModelCode = code });
         await db.SaveChangesAsync(ct);
@@ -240,6 +243,47 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
         await RequireAdminOrOfficeAsync();
         await using var db = await factory.CreateDbContextAsync(ct);
         await db.SupplierModelMaps.Where(m => m.Id == mapId).ExecuteDeleteAsync(ct);
+    }
+
+    // A null-supplier SupplierModelMap row explicitly marks a model as produced in-house rather
+    // than by any supplier - PurchasingService's sweep and unresolved feed both treat it as
+    // resolved-but-excluded (see PurchasingService.ResolveCandidatesAsync). Idempotent if already
+    // in-house; rejects a code already mapped to a real supplier.
+    public async Task MarkModelInHouseAsync(string modelCode, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        var code = RequireTrimmed(modelCode, "Model code");
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var existing = await db.SupplierModelMaps.FirstOrDefaultAsync(m => m.ModelCode == code, ct);
+        if (existing is { SupplierId: not null })
+        {
+            throw new InvalidOperationException($"Model code '{code}' is already mapped to supplier '{await SupplierCodeAsync(db, existing.SupplierId.Value, ct)}'.");
+        }
+        if (existing is null)
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = code });
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    private static async Task<string> SupplierCodeAsync(FurniturePlannerContext db, int supplierId, CancellationToken ct) =>
+        await db.Suppliers.Where(s => s.Id == supplierId).Select(s => s.Code).FirstOrDefaultAsync(ct) ?? supplierId.ToString();
+
+    public async Task UnmarkModelInHouseAsync(string modelCode, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        var code = RequireTrimmed(modelCode, "Model code");
+        await using var db = await factory.CreateDbContextAsync(ct);
+        await db.SupplierModelMaps.Where(m => m.ModelCode == code && m.SupplierId == null).ExecuteDeleteAsync(ct);
+    }
+
+    // The read side of the null-supplier "made here" marker - PurchasingPage's in-house list.
+    public async Task<List<string>> InHouseModelCodesAsync(CancellationToken ct = default)
+    {
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.SupplierModelMaps.AsNoTracking()
+            .Where(m => m.SupplierId == null)
+            .OrderBy(m => m.ModelCode).Select(m => m.ModelCode).ToListAsync(ct);
     }
 
     // --- Addresses: seller / supplier / consumer-primary upsert in place ---

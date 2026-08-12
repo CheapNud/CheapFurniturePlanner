@@ -12,7 +12,7 @@ public class CanonicalJsonTests
         Version = "1.0.0",
         PriceGroups =
         [
-            new PriceGroup { Id = 1, Code = "PG-1", Kind = MaterialKind.Fabric, RatePerMeter = ratePerMeter }
+            new PriceGroup { Id = 1, Code = "PG-1", Kind = FabricMaterialKind.Fabric, RatePerMeter = ratePerMeter }
         ]
     };
 

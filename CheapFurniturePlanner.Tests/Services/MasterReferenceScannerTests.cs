@@ -57,9 +57,9 @@ public class MasterReferenceScannerTests
             SprayPrices = [new SprayPrice("FRAME-A", 2m)],
             PriceGroups =
             [
-                new PriceGroup { Code = "PG-A", Kind = MaterialKind.Fabric, RatePerMeter = 1m },
-                new PriceGroup { Code = "PG-FREE", Kind = MaterialKind.Fabric, RatePerMeter = 1m },
-                new PriceGroup { Code = "PG-CUT", Kind = MaterialKind.Fabric, RatePerMeter = 1m },
+                new PriceGroup { Code = "PG-A", Kind = FabricMaterialKind.Fabric, RatePerMeter = 1m },
+                new PriceGroup { Code = "PG-FREE", Kind = FabricMaterialKind.Fabric, RatePerMeter = 1m },
+                new PriceGroup { Code = "PG-CUT", Kind = FabricMaterialKind.Fabric, RatePerMeter = 1m },
             ],
             FabricGroups =
             [

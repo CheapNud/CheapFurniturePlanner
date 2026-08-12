@@ -1,0 +1,39 @@
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@inject MaterialNeedsService MaterialNeeds
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText><b>@Stock.Kind</b> @Stock.Code@(string.IsNullOrEmpty(Stock.HardnessCode) ? "" : $" / {Stock.HardnessCode}")</MudText>
+            <MudNumericField T="decimal" Label="Amount" @bind-Value="_amount" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public MaterialStock Stock { get; set; } = default!;
+
+    private decimal _amount;
+
+    protected override void OnInitialized() => _amount = Stock.Amount;
+
+    private async Task SubmitAsync()
+    {
+        try
+        {
+            await MaterialNeeds.AdjustStockAsync(Stock.Kind, Stock.Code, Stock.HardnessCode, _amount);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}

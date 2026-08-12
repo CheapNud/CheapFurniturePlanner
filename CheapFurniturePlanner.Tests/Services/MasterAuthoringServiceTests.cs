@@ -180,7 +180,7 @@ public class MasterAuthoringServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.AddPriceGroupAsync(new PriceGroup
         {
             Code = "PG-BAD",
-            Kind = MaterialKind.Leather,
+            Kind = FabricMaterialKind.Leather,
             RatePerMeter = 10m,
             MaterialTypeCode = "LEATHER:THICK",
         }));
@@ -188,7 +188,7 @@ public class MasterAuthoringServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.UpdatePriceGroupAsync(existingCode, new PriceGroup
         {
             Code = "IGNORED",
-            Kind = MaterialKind.Leather,
+            Kind = FabricMaterialKind.Leather,
             RatePerMeter = 10m,
             MaterialTypeCode = "LEATHER:THICK",
         }));

@@ -75,7 +75,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 1);
         var unitCode = units[0].UnitCode;
 
@@ -93,7 +93,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 1);
         var unitCode = units[0].UnitCode;
         await service.ArriveByCodeAsync(unitCode);
@@ -111,7 +111,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 1);
 
         var bogusOutcome = await service.ArriveByCodeAsync("NOT-A-REAL-CODE");
@@ -128,7 +128,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 1);
         var unitId = units[0].Id;
         await service.ArriveAsync(unitId);
@@ -152,9 +152,9 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var seedService = new ProductionUnitService(factory, DockUser);
+        var seedService = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, seedService, 1);
-        var mechanicService = new ProductionUnitService(factory, MechanicUser);
+        var mechanicService = new ProductionUnitService(factory, MechanicUser, new PinnedCatalogueProvider(factory));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => mechanicService.ArriveAsync(units[0].Id));
     }
@@ -164,7 +164,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 2);
         await service.ArriveAsync(units[0].Id);
         await service.ArriveAsync(units[1].Id);
@@ -210,7 +210,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 2);
         var trip = await service.CreateTripAsync();
 
@@ -229,7 +229,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 1);
         var trip = await service.CreateTripAsync();
 
@@ -254,7 +254,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
 
         var tripA = await service.CreateTripAsync();
         var tripB = await service.CreateTripAsync();
@@ -273,7 +273,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 2);
         var trip = await service.CreateTripAsync();
 
@@ -292,7 +292,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 1);
         var orderId = units[0].OrderId;
         await service.ArriveAsync(units[0].Id);
@@ -315,7 +315,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 1);
         await service.ArriveAsync(units[0].Id);
         var trip = await service.CreateTripAsync();
@@ -344,7 +344,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 2);
         await service.ArriveAsync(units[0].Id);
         await service.ArriveAsync(units[1].Id);
@@ -386,7 +386,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var units = await SeedSpawnedUnitsAsync(factory, service, 1);
         await service.ArriveAsync(units[0].Id);
         var trip = await service.CreateTripAsync();
@@ -395,7 +395,7 @@ public class ProductionDockTests
         // Trip still Planning - not out for delivery yet.
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.ConfirmDeliveredAsync(units[0].Id));
 
-        var mechanicService = new ProductionUnitService(factory, MechanicUser);
+        var mechanicService = new ProductionUnitService(factory, MechanicUser, new PinnedCatalogueProvider(factory));
         await Assert.ThrowsAsync<InvalidOperationException>(() => mechanicService.ConfirmDeliveredAsync(units[0].Id));
     }
 
@@ -404,7 +404,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         var unitsA = await SeedSpawnedUnitsAsync(factory, service, 1);
         var unitsB = await SeedSpawnedUnitsAsync(factory, service, 1);
         var orderIdA = unitsA[0].OrderId;
@@ -454,7 +454,7 @@ public class ProductionDockTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var service = new ProductionUnitService(factory, DockUser);
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
         int regionId;
         await using (var db = await factory.CreateDbContextAsync())
         {

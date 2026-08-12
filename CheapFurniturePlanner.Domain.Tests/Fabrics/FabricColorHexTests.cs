@@ -87,7 +87,7 @@ public class FabricColorHexTests
                 ]
             }
         ],
-        PriceGroups = [new PriceGroup { Code = "PGF", Kind = MaterialKind.Fabric, RatePerMeter = 10m }],
+        PriceGroups = [new PriceGroup { Code = "PGF", Kind = FabricMaterialKind.Fabric, RatePerMeter = 10m }],
         Markets = [CreateMarket()]
     };
 

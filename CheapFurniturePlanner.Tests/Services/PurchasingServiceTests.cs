@@ -390,7 +390,7 @@ public class PurchasingServiceTests
 
         // A fast-completing PO (its one unit arrives) must still accept the supplier's ref - the
         // class comment promises TheirReference regardless of how quickly the PO closes.
-        var units = new ProductionUnitService(factory, new FakeCurrentUser("wh-1", Roles.Warehouse));
+        var units = new ProductionUnitService(factory, new FakeCurrentUser("wh-1", Roles.Warehouse), new PinnedCatalogueProvider(factory));
         await units.ArriveAsync(unitId);
         var completed = await purchasing.GetOrderAsync(orderId);
         Assert.Equal(SupplierOrderState.Completed, completed!.State);
@@ -452,6 +452,75 @@ public class PurchasingServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => party.DeleteSupplierAsync(poSupplierId));
     }
 
+    // Task 2: a model marked in-house (null-supplier SupplierModelMap row) is a third resolution
+    // state alongside mapped and unresolved - its units never join the sweep AND its code never
+    // surfaces on the unresolved feed (it's not missing a resolution, it's deliberately not one).
+    [Fact]
+    public async Task MarkInHouse_ExcludesFromSweepAndUnresolved()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var party = new PartyService(factory, OfficeUser);
+        await party.MarkModelInHouseAsync("HOME");
+        await SeedUnitAsync(factory, "HOME"); // no line supplier, mapped in-house
+
+        var purchasing = new PurchasingService(factory, OfficeUser);
+        var result = await purchasing.GenerateOrdersAsync();
+
+        Assert.Empty(result.SupplierOrderIds);
+        Assert.Empty(result.UnresolvedModelCodes);
+        Assert.Empty(await purchasing.UnresolvedModelCodesAsync());
+    }
+
+    [Fact]
+    public async Task MarkInHouse_RejectsMappedCode()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var party = new PartyService(factory, OfficeUser);
+        await party.AddSupplierModelMapAsync(supplierId, "FJORD");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => party.MarkModelInHouseAsync("FJORD"));
+        Assert.Contains("FJORD", ex.Message);
+    }
+
+    [Fact]
+    public async Task Unmark_RestoresUnresolved()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var party = new PartyService(factory, OfficeUser);
+        await party.MarkModelInHouseAsync("HOME");
+        await SeedUnitAsync(factory, "HOME");
+        var purchasing = new PurchasingService(factory, OfficeUser);
+        Assert.Empty(await purchasing.UnresolvedModelCodesAsync());
+
+        await party.UnmarkModelInHouseAsync("HOME");
+
+        Assert.Equal(["HOME"], await purchasing.UnresolvedModelCodesAsync());
+    }
+
+    // Task 7: PurchasingPage's in-house list read - sorted, resolved-supplier map rows excluded,
+    // unmark drops the code back out.
+    [Fact]
+    public async Task InHouseModelCodesAsync_ListsOnlyNullSupplierRows()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var party = new PartyService(factory, OfficeUser);
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        await party.AddSupplierModelMapAsync(supplierId, "MAPPED");
+        await party.MarkModelInHouseAsync("ZEBRA");
+        await party.MarkModelInHouseAsync("HOME");
+
+        Assert.Equal(["HOME", "ZEBRA"], await party.InHouseModelCodesAsync());
+
+        await party.UnmarkModelInHouseAsync("HOME");
+
+        Assert.Equal(["ZEBRA"], await party.InHouseModelCodesAsync());
+    }
+
     [Fact]
     public async Task Mutations_RejectMechanicAndWarehouse()
     {
@@ -482,6 +551,8 @@ public class PurchasingServiceTests
             await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.SetTheirReferenceAsync(sentOrderId, "x"));
             await Assert.ThrowsAsync<InvalidOperationException>(() => party.AddSupplierModelMapAsync(supplierId, "X"));
             await Assert.ThrowsAsync<InvalidOperationException>(() => party.RemoveSupplierModelMapAsync(0));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => party.MarkModelInHouseAsync("HOME"));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => party.UnmarkModelInHouseAsync("HOME"));
         }
     }
 }

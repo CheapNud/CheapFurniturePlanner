@@ -767,6 +767,113 @@ namespace CheapFurniturePlanner.Migrations
                     b.ToTable("MarketVatRates");
                 });
 
+            modelBuilder.Entity("CheapFurniturePlanner.Models.MaterialOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SupplierId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TheirReference")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Number")
+                        .IsUnique();
+
+                    b.HasIndex("SupplierId");
+
+                    b.ToTable("MaterialOrders");
+                });
+
+            modelBuilder.Entity("CheapFurniturePlanner.Models.MaterialOrderLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HardnessCode")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MaterialOrderId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("QuantityOrdered")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("QuantityReceived")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MaterialOrderId");
+
+                    b.ToTable("MaterialOrderLines");
+                });
+
+            modelBuilder.Entity("CheapFurniturePlanner.Models.MaterialStock", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HardnessCode")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind", "Code", "HardnessCode")
+                        .IsUnique();
+
+                    b.ToTable("MaterialStocks");
+                });
+
             modelBuilder.Entity("CheapFurniturePlanner.Models.ModelStateRecord", b =>
                 {
                     b.Property<int>("Id")
@@ -1443,7 +1550,7 @@ namespace CheapFurniturePlanner.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("SupplierId")
+                    b.Property<int?>("SupplierId")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
@@ -1824,6 +1931,26 @@ namespace CheapFurniturePlanner.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("CheapFurniturePlanner.Models.MaterialOrder", b =>
+                {
+                    b.HasOne("CheapFurniturePlanner.Models.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("CheapFurniturePlanner.Models.MaterialOrderLine", b =>
+                {
+                    b.HasOne("CheapFurniturePlanner.Models.MaterialOrder", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("MaterialOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("CheapFurniturePlanner.Models.Order", b =>
                 {
                     b.HasOne("CheapFurniturePlanner.Models.Consumer", "Consumer")
@@ -2009,8 +2136,7 @@ namespace CheapFurniturePlanner.Migrations
                     b.HasOne("CheapFurniturePlanner.Models.Supplier", null)
                         .WithMany()
                         .HasForeignKey("SupplierId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("CheapFurniturePlanner.Models.SupplierOrder", b =>
@@ -2122,6 +2248,11 @@ namespace CheapFurniturePlanner.Migrations
                 {
                     b.Navigation("CreditNotes");
 
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("CheapFurniturePlanner.Models.MaterialOrder", b =>
+                {
                     b.Navigation("Lines");
                 });
 

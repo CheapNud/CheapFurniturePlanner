@@ -1,0 +1,223 @@
+@page "/materials/orders/{Id:int}"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Domain.Production
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@inject MaterialOrderService MaterialOrders
+@inject MaterialOrderPdf Pdf
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Material order</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    @if (_order is null)
+    {
+        <MudText>Loading…</MudText>
+    }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to materials" OnClick="@(() => Navigation.NavigateTo("/materials"))" />
+            <MudText Typo="Typo.h4">@_order.Number</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(_order.State)">@_order.State</MudChip>
+            <MudSpacer />
+            @if (_order.State == MaterialOrderState.Draft)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SendAsync">Send</MudButton>
+            }
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</MudButton>
+            @if (_order.State == MaterialOrderState.Draft)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Error" Title="Delete material order" OnClick="DeleteAsync">Delete</MudButton>
+            }
+        </MudStack>
+
+        <MudPaper Class="pa-4 mb-4">
+            <MudText><b>Supplier:</b> @_order.Supplier?.Name</MudText>
+            <MudText><b>Created:</b> @_order.CreatedAt.ToString("yyyy-MM-dd")</MudText>
+            @if (_order.SentAt is DateTime sentAt)
+            {
+                <MudText><b>Sent:</b> @sentAt.ToString("yyyy-MM-dd")</MudText>
+            }
+            @if (_order.State is MaterialOrderState.Sent or MaterialOrderState.Completed)
+            {
+                <MudTextField T="string" Label="Their reference" Value="_theirReference" ValueChanged="OnTheirReferenceChangedAsync" Class="mt-2" />
+            }
+        </MudPaper>
+
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Lines</MudText>
+
+            @if (_order.State == MaterialOrderState.Draft)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                    <MudSelect T="MaterialKind" Label="Kind" @bind-Value="_newKind">
+                        @foreach (var kind in Enum.GetValues<MaterialKind>())
+                        {
+                            <MudSelectItem T="MaterialKind" Value="@kind">@kind</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudTextField T="string" Label="Code" @bind-Value="_newCode" />
+                    <MudTextField T="string" Label="Hardness" @bind-Value="_newHardnessCode" />
+                    <MudTextField T="string" Label="Name" @bind-Value="_newDisplayName" />
+                    <MudNumericField T="decimal" Label="Quantity" @bind-Value="_newQuantity" Min="0" />
+                    <MudButton Variant="Variant.Outlined" Disabled="@string.IsNullOrWhiteSpace(_newCode)" OnClick="AddLineAsync">Add</MudButton>
+                </MudStack>
+            }
+
+            @if (_order.Lines.Count == 0)
+            {
+                <EmptyState Text="No lines on this order" />
+            }
+            else
+            {
+                <MudTable T="MaterialOrderLine" Items="_order.Lines" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Kind</MudTh>
+                        <MudTh>Code</MudTh>
+                        <MudTh>Hardness</MudTh>
+                        <MudTh>Name</MudTh>
+                        <MudTh>Ordered</MudTh>
+                        <MudTh>Received</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Kind">@context.Kind</MudTd>
+                        <MudTd DataLabel="Code">@context.Code</MudTd>
+                        <MudTd DataLabel="Hardness">@context.HardnessCode</MudTd>
+                        <MudTd DataLabel="Name">@context.DisplayName</MudTd>
+                        <MudTd DataLabel="Ordered">@context.QuantityOrdered</MudTd>
+                        <MudTd DataLabel="Received">@context.QuantityReceived</MudTd>
+                        <MudTd>
+                            @if (_order.State == MaterialOrderState.Draft)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Title="Remove line" OnClick="@(() => RemoveLineAsync(context))" />
+                            }
+                            else if (_order.State == MaterialOrderState.Sent)
+                            {
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudNumericField T="decimal" Value="_receiveQuantities.GetValueOrDefault(context.Id)"
+                                                      ValueChanged="@((decimal v) => _receiveQuantities[context.Id] = v)" Dense="true" Min="0" />
+                                    <MudButton Size="Size.Small" OnClick="@(() => ReceiveLineAsync(context))">Receive</MudButton>
+                                </MudStack>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private MaterialOrder? _order;
+    private string? _theirReference;
+    private MaterialKind _newKind;
+    private string _newCode = string.Empty;
+    private string? _newHardnessCode;
+    private string? _newDisplayName;
+    private decimal _newQuantity;
+    private Dictionary<int, decimal> _receiveQuantities = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _order = await MaterialOrders.GetAsync(Id);
+        if (_order is not null) { _theirReference = _order.TheirReference; }
+        StateHasChanged();
+    }
+
+    private async Task SendAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Send material order", $"Send {_order!.Number} to {_order.Supplier?.Name}?", yesText: "Send", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MaterialOrders.SendAsync(Id); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task DeleteAsync()
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete material order", $"Delete draft {_order!.Number}?", yesText: "Delete", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MaterialOrders.DeleteDraftAsync(Id); Navigation.NavigateTo("/materials"); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task GeneratePdfAsync()
+    {
+        try
+        {
+            var filePath = await Pdf.GenerateAsync(Id);
+            Snackbar.Add($"Material order written to {filePath}", Severity.Success);
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task OnTheirReferenceChangedAsync(string? theirReference)
+    {
+        _theirReference = theirReference;
+        try { await MaterialOrders.SetTheirReferenceAsync(Id, theirReference); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task AddLineAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newCode)) { return; }
+        try
+        {
+            await MaterialOrders.AddLineAsync(Id, new MaterialOrderLine
+            {
+                Kind = _newKind,
+                Code = _newCode.Trim(),
+                HardnessCode = _newHardnessCode,
+                DisplayName = _newDisplayName,
+                QuantityOrdered = _newQuantity,
+            });
+            _newCode = string.Empty;
+            _newHardnessCode = null;
+            _newDisplayName = null;
+            _newQuantity = 0;
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task RemoveLineAsync(MaterialOrderLine line)
+    {
+        try { await MaterialOrders.RemoveLineAsync(Id, line.Id); await ReloadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task ReceiveLineAsync(MaterialOrderLine line)
+    {
+        var quantity = _receiveQuantities.GetValueOrDefault(line.Id);
+        if (quantity <= 0) { return; }
+        try
+        {
+            await MaterialOrders.ReceiveAsync(Id, line.Id, quantity);
+            _receiveQuantities.Remove(line.Id);
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}

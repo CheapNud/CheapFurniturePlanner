@@ -85,7 +85,7 @@ public class PartiesPageTests : TestContext
         var seller = await parties.AddSellerAsync("Beta", 1m);
         var consumer = await parties.AddConsumerAsync("Gamma", "gamma@example.com");
         var orders = new OrderEntryService(factory, new DbCatalogueSource(factory), new PinnedCatalogueProvider(factory),
-            new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office)));
+            new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office), new PinnedCatalogueProvider(factory)));
         await orders.CreateOrderAsync(seller.Id, consumer.Id, "EUN");
 
         // Deleting through the service throws; the page surfaces this as a Snackbar. Assert the

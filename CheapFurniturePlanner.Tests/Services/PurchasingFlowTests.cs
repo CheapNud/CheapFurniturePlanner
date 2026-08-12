@@ -117,7 +117,7 @@ public class PurchasingFlowTests
         // A cancelled unit on the same PO must not block completion.
         await SeedUnitAsync(factory, supplierOrderId: poId, state: ProductionUnitState.Cancelled);
         var (_, expectedUnitId) = await SeedUnitAsync(factory, supplierOrderId: poId, state: ProductionUnitState.Expected);
-        var units = new ProductionUnitService(factory, WarehouseUser);
+        var units = new ProductionUnitService(factory, WarehouseUser, new PinnedCatalogueProvider(factory));
         var purchasing = new PurchasingService(factory, OfficeUser);
 
         await units.ArriveAsync(expectedUnitId);
@@ -134,7 +134,7 @@ public class PurchasingFlowTests
         var supplierId = await SeedSupplierAsync(factory, "SUPA");
         var poId = await SeedSupplierOrderAsync(factory, supplierId, "PO-2026-0001", SupplierOrderState.Sent);
         var (_, unitId) = await SeedUnitAsync(factory, supplierOrderId: poId, state: ProductionUnitState.Expected);
-        var units = new ProductionUnitService(factory, WarehouseUser);
+        var units = new ProductionUnitService(factory, WarehouseUser, new PinnedCatalogueProvider(factory));
         var purchasing = new PurchasingService(factory, OfficeUser);
         string unitCode;
         await using (var db = await factory.CreateDbContextAsync())
@@ -158,7 +158,7 @@ public class PurchasingFlowTests
         var poId = await SeedSupplierOrderAsync(factory, supplierId, "PO-2026-0001", SupplierOrderState.Sent);
         var (_, unitOneId) = await SeedUnitAsync(factory, supplierOrderId: poId, state: ProductionUnitState.Expected);
         await SeedUnitAsync(factory, supplierOrderId: poId, state: ProductionUnitState.Expected);
-        var units = new ProductionUnitService(factory, WarehouseUser);
+        var units = new ProductionUnitService(factory, WarehouseUser, new PinnedCatalogueProvider(factory));
         var purchasing = new PurchasingService(factory, OfficeUser);
 
         await units.ArriveAsync(unitOneId);
@@ -180,7 +180,7 @@ public class PurchasingFlowTests
         // Second unit on the Sent PO is already past Expected, so cancelling the other order's
         // unit should be the one that tips the PO into Completed.
         await SeedUnitAsync(factory, supplierOrderId: sentPoId, state: ProductionUnitState.Arrived);
-        var units = new ProductionUnitService(factory, WarehouseUser);
+        var units = new ProductionUnitService(factory, WarehouseUser, new PinnedCatalogueProvider(factory));
         var purchasing = new PurchasingService(factory, OfficeUser);
 
         await units.CancelForOrderAsync(draftOrderId);
@@ -215,7 +215,7 @@ public class PurchasingFlowTests
         var supplierId = await SeedSupplierAsync(factory, "SUPA");
         var poId = await SeedSupplierOrderAsync(factory, supplierId, "PO-2026-0001", SupplierOrderState.Sent);
         var (_, unitId) = await SeedUnitAsync(factory, supplierOrderId: poId, state: ProductionUnitState.Expected);
-        var units = new ProductionUnitService(factory, WarehouseUser);
+        var units = new ProductionUnitService(factory, WarehouseUser, new PinnedCatalogueProvider(factory));
         var purchasing = new PurchasingService(factory, OfficeUser);
 
         await units.ArriveAsync(unitId);
@@ -281,7 +281,7 @@ public class PurchasingFlowTests
         var (_, unitId) = await SeedUnitAsync(factory, supplierOrderId: sentPoId);
         var (_, arrivingUnitId) = await SeedUnitAsync(factory, supplierOrderId: sentPoId);
         var purchasing = new PurchasingService(factory, OfficeUser);
-        var units = new ProductionUnitService(factory, WarehouseUser);
+        var units = new ProductionUnitService(factory, WarehouseUser, new PinnedCatalogueProvider(factory));
         var announcement = await purchasing.CreateAnnouncementAsync(supplierId, "DN-0001", null);
         await purchasing.AttachToAnnouncementAsync(announcement.Id, unitId);
         await purchasing.AttachToAnnouncementAsync(announcement.Id, arrivingUnitId);
@@ -353,7 +353,7 @@ public class PurchasingFlowTests
         var sentPoId = await SeedSupplierOrderAsync(factory, supplierId, "PO-2026-0001", SupplierOrderState.Sent);
         var (orderId, unitId) = await SeedUnitAsync(factory, supplierOrderId: sentPoId, state: ProductionUnitState.Expected);
         var purchasing = new PurchasingService(factory, OfficeUser);
-        var units = new ProductionUnitService(factory, WarehouseUser);
+        var units = new ProductionUnitService(factory, WarehouseUser, new PinnedCatalogueProvider(factory));
         var announcement = await purchasing.CreateAnnouncementAsync(supplierId, "DN-0001", null);
         await purchasing.AttachToAnnouncementAsync(announcement.Id, unitId);
 
@@ -402,7 +402,7 @@ public class PurchasingFlowTests
         var purchasing = new PurchasingService(factory, OfficeUser);
         var announcement = await purchasing.CreateAnnouncementAsync(supplierId, "DN-0001", null);
         await purchasing.AttachToAnnouncementAsync(announcement.Id, attachedUnitId);
-        var units = new ProductionUnitService(factory, WarehouseUser);
+        var units = new ProductionUnitService(factory, WarehouseUser, new PinnedCatalogueProvider(factory));
 
         var filtered = await units.ListUnitsAsync(supplierDeliveryId: announcement.Id);
 

@@ -107,6 +107,7 @@ public class PurchasingUiTests : TestContext
         Services.AddSingleton(factory);
         Services.AddSingleton(OfficeUser);
         Services.AddSingleton(purchasing);
+        Services.AddSingleton(sp => new PartyService(factory, OfficeUser));
         Services.AddSingleton(sp => new SupplierOrderPdf(factory, new PdfExportService(new PdfTemplateService()), pdfRoot));
         Services.AddSingleton(sp => new SupplierOrderXml(factory, xmlRoot));
         JSInterop.Mode = JSRuntimeMode.Loose;
@@ -238,5 +239,32 @@ public class PurchasingUiTests : TestContext
             var reloadedOrder = await purchasing.GetOrderAsync(orderId);
             Assert.Equal(announcement.Id, Assert.Single(reloadedOrder!.Units).SupplierDeliveryId);
         });
+    }
+
+    // Task 7: the unresolved panel's per-code "Mark in-house" button moves the code to the
+    // in-house list (via PartyService.MarkModelInHouseAsync) and drops it from the unresolved
+    // warning, mirroring PurchasingServiceTests.MarkInHouse_ExcludesFromSweepAndUnresolved at the
+    // UI layer.
+    [Fact]
+    public async Task Unresolved_MarkInHouse_MovesCodeToInHouseList_AndDropsFromUnresolved()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var purchasing = new PurchasingService(factory, OfficeUser);
+        await SeedUnitAsync(factory, "GHOST"); // no line supplier, no model map - unresolved
+        ConfigureServices(factory, purchasing);
+
+        var cut = Render<PurchasingPage>();
+        cut.WaitForAssertion(() => Assert.Contains("GHOST", cut.Markup));
+
+        var markButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Mark in-house");
+        await cut.InvokeAsync(() => markButton.Click());
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("In-house models", cut.Markup);
+            Assert.DoesNotContain("Unresolved:", cut.Markup);
+        });
+        Assert.Empty(await purchasing.UnresolvedModelCodesAsync());
     }
 }

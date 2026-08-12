@@ -7,7 +7,7 @@ namespace CheapFurniturePlanner.Domain.Tests.Fixtures;
 
 // Loads the embedded "Fjord" demo catalogue used by golden-master/determinism/error-coverage tests.
 // Deserializes with the same converter set CanonicalJson uses (JsonStringEnumConverter) so enum
-// values like RoundStage flags and MaterialKind round-trip identically, then stamps ContentHash.
+// values like RoundStage flags and FabricMaterialKind round-trip identically, then stamps ContentHash.
 public static class DemoWorld
 {
     private static readonly JsonSerializerOptions Options = new()

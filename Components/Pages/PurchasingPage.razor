@@ -5,7 +5,9 @@
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize(Roles = Roles.AdminOrOffice)]
 @inject PurchasingService Purchasing
+@inject PartyService Parties
 @inject NavigationManager Navigation
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <PageTitle>Purchasing</PageTitle>
@@ -19,7 +21,30 @@
 
     @if (_unresolvedModelCodes.Count > 0)
     {
-        <MudAlert Severity="Severity.Warning" Class="mb-4">Unresolved: @string.Join(", ", _unresolvedModelCodes)</MudAlert>
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            <MudText Class="mb-2">Unresolved:</MudText>
+            @foreach (var modelCode in _unresolvedModelCodes)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                    <MudText>@modelCode</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => MarkInHouseAsync(modelCode))">Mark in-house</MudButton>
+                </MudStack>
+            }
+        </MudAlert>
+    }
+
+    @if (_inHouseModelCodes.Count > 0)
+    {
+        <MudPaper Class="pa-4 mb-4">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">In-house models</MudText>
+            @foreach (var modelCode in _inHouseModelCodes)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                    <MudText>@modelCode</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => UnmarkInHouseAsync(modelCode))" />
+                </MudStack>
+            }
+        </MudPaper>
     }
 
     @if (_orders.Count == 0)
@@ -54,6 +79,7 @@
 @code {
     private List<SupplierOrder> _orders = [];
     private List<string> _unresolvedModelCodes = [];
+    private List<string> _inHouseModelCodes = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -71,6 +97,23 @@
     {
         _orders = await Purchasing.ListOrdersAsync();
         _unresolvedModelCodes = await Purchasing.UnresolvedModelCodesAsync();
+        _inHouseModelCodes = await Parties.InHouseModelCodesAsync();
+    }
+
+    private async Task MarkInHouseAsync(string modelCode)
+    {
+        try { await Parties.MarkModelInHouseAsync(modelCode); await LoadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task UnmarkInHouseAsync(string modelCode)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Unmark in-house",
+            $"Unmark '{modelCode}' as produced in-house? It will need a supplier mapping again to resolve.",
+            yesText: "Unmark", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await Parties.UnmarkModelInHouseAsync(modelCode); await LoadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
 
     private static int Outstanding(SupplierOrder order) =>

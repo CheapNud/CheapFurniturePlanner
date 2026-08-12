@@ -1,0 +1,98 @@
+@page "/finishing"
+@using CheapFurniturePlanner.Auth
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = Roles.WarehouseStaff)]
+@inject ProductionUnitService Units
+@inject ISnackbar Snackbar
+
+<PageTitle>Finishing</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Finishing</MudText>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudTextField T="string" @bind-Value="_scanEntry" Label="Scan or type a unit code" Immediate="true"
+                      AutoFocus="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.QrCodeScanner"
+                      OnKeyDown="OnScanKeyAsync" />
+    </MudPaper>
+
+    @if (_units.Count == 0)
+    {
+        <EmptyState Text="Nothing to finish" />
+    }
+    else
+    {
+        <MudTable T="ProductionUnit" Items="_units" Hover="true" Dense="true">
+            <HeaderContent>
+                <MudTh>Unit code</MudTh>
+                <MudTh>Order</MudTh>
+                <MudTh>Model/element</MudTh>
+                <MudTh>Consumer</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Unit code">@context.UnitCode</MudTd>
+                <MudTd DataLabel="Order">@context.Order?.OrderNumber</MudTd>
+                <MudTd DataLabel="Model/element">@ModelElement(context)</MudTd>
+                <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
+                <MudTd>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => FinishAsync(context.Id))">Finish</MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    private List<ProductionUnit> _units = [];
+    private string _scanEntry = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadAsync() =>
+        _units = await Units.ListUnitsAsync(inHouseOnly: true, stateFilter: ProductionUnitState.Expected);
+
+    private static string ModelElement(ProductionUnit unit)
+    {
+        var line = unit.Order?.Lines.FirstOrDefault(l => l.Id == unit.OrderLineId);
+        return line is null ? "" : $"{line.ModelCode}/{line.ElementCode}";
+    }
+
+    private async Task OnScanKeyAsync(KeyboardEventArgs keyArgs)
+    {
+        if (keyArgs.Key != "Enter" || string.IsNullOrWhiteSpace(_scanEntry)) { return; }
+        var scannedCode = _scanEntry.Trim();
+        _scanEntry = "";
+        var match = _units.FirstOrDefault(u => u.UnitCode == scannedCode);
+        if (match is null)
+        {
+            Snackbar.Add($"{scannedCode} is not in the finishing pool.", Severity.Warning);
+            return;
+        }
+        try
+        {
+            await Units.FinishAsync(match.Id);
+            Snackbar.Add($"{scannedCode} finished.", Severity.Success);
+            await LoadAsync();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private async Task FinishAsync(int unitId)
+    {
+        try { await Units.FinishAsync(unitId); await LoadAsync(); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+}

@@ -11,7 +11,7 @@ public class MaterialResolutionTests
     [Fact]
     public void MaterialTypeCode_SentinelPriceGroup_ReturnsNull()
     {
-        var priceGroup = new PriceGroup { Code = "", Kind = MaterialKind.Fabric };
+        var priceGroup = new PriceGroup { Code = "", Kind = FabricMaterialKind.Fabric };
 
         var materialTypeCode = MaterialResolution.MaterialTypeCode(priceGroup);
 
@@ -21,7 +21,7 @@ public class MaterialResolutionTests
     [Fact]
     public void MaterialTypeCode_LeatherWithoutExplicitMaterialTypeCode_FallsBackToKind()
     {
-        var priceGroup = new PriceGroup { Code = "PGL", Kind = MaterialKind.Leather };
+        var priceGroup = new PriceGroup { Code = "PGL", Kind = FabricMaterialKind.Leather };
 
         var materialTypeCode = MaterialResolution.MaterialTypeCode(priceGroup);
 
@@ -31,7 +31,7 @@ public class MaterialResolutionTests
     [Fact]
     public void MaterialTypeCode_ThickLeatherWithExplicitMaterialTypeCode_ReturnsExplicitCode()
     {
-        var priceGroup = new PriceGroup { Code = "PGLT", Kind = MaterialKind.Leather, MaterialTypeCode = "LEATHER-THICK" };
+        var priceGroup = new PriceGroup { Code = "PGLT", Kind = FabricMaterialKind.Leather, MaterialTypeCode = "LEATHER-THICK" };
 
         var materialTypeCode = MaterialResolution.MaterialTypeCode(priceGroup);
 

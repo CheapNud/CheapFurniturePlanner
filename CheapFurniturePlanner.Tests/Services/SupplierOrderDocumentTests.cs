@@ -86,7 +86,7 @@ public class SupplierOrderDocumentTests
         await parties.AddSupplierModelMapAsync(supplier.Id, "FJORD");
 
         var orderId = await SeedOrderAsync(factory);
-        var units = new ProductionUnitService(factory, OfficeUser);
+        var units = new ProductionUnitService(factory, OfficeUser, new PinnedCatalogueProvider(factory));
         await units.SpawnForOrderAsync(orderId);
 
         var purchasing = new PurchasingService(factory, OfficeUser);

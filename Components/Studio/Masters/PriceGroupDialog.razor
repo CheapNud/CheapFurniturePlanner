@@ -4,10 +4,10 @@
     <DialogContent>
         <MudStack Spacing="3">
             <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" Disabled="@(PriceGroup is not null)" />
-            <MudSelect T="MaterialKind" Label="Kind" @bind-Value="_kind">
-                @foreach (var kind in Enum.GetValues<MaterialKind>())
+            <MudSelect T="FabricMaterialKind" Label="Kind" @bind-Value="_kind">
+                @foreach (var kind in Enum.GetValues<FabricMaterialKind>())
                 {
-                    <MudSelectItem T="MaterialKind" Value="@kind">@kind</MudSelectItem>
+                    <MudSelectItem T="FabricMaterialKind" Value="@kind">@kind</MudSelectItem>
                 }
             </MudSelect>
             <MudNumericField T="decimal" Label="Rate per meter" @bind-Value="_ratePerMeter" Min="0" />
@@ -31,7 +31,7 @@
     public string SubmitLabel { get; set; } = "Save";
 
     private string _code = string.Empty;
-    private MaterialKind _kind = MaterialKind.Fabric;
+    private FabricMaterialKind _kind = FabricMaterialKind.Fabric;
     private decimal _ratePerMeter;
     private string _materialTypeCode = string.Empty;
 
