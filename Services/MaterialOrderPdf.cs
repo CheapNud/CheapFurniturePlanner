@@ -42,9 +42,12 @@ public sealed class MaterialOrderPdf(IDbContextFactory<FurniturePlannerContext> 
         if (!string.IsNullOrWhiteSpace(order.TheirReference)) { rows.Add(new("Their reference", order.TheirReference)); }
         rows.Add(new("Lines", order.Lines.Count.ToString()));
 
+        // Foam identity is (code, hardness) everywhere else in the app - the PDF the supplier
+        // actually ships from must carry the hardness too, or the wrong grade goes out the door.
         rows.AddRange(order.Lines
             .OrderBy(line => line.Code, StringComparer.Ordinal)
-            .Select(line => new DocumentRow(line.Code,
+            .Select(line => new DocumentRow(
+                string.IsNullOrWhiteSpace(line.HardnessCode) ? line.Code : $"{line.Code} / {line.HardnessCode}",
                 $"{line.Kind}{(string.IsNullOrWhiteSpace(line.DisplayName) ? "" : $" — {line.DisplayName}")} — ordered {line.QuantityOrdered.ToString(CultureInfo.InvariantCulture)}")));
 
         // Header/footer off: the library header prints literal company placeholders. IsBold off

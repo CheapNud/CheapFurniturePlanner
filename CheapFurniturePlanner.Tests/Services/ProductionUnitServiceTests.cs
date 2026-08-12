@@ -493,6 +493,58 @@ public class ProductionUnitServiceTests
         Assert.Empty(await db.MaterialStocks.ToListAsync());
     }
 
+    // Regression: a scanned in-house unit code must behave exactly like an unknown one - arriving it
+    // through the dock would skip the backflush (ArriveByCodeAsync never applies it) yet still pull
+    // the unit out of both the Expected pool and the finishing pool, and a later UndoArrive would
+    // then mint stock that was never actually consumed.
+    [Fact]
+    public async Task ArriveByCode_ExcludesInHouseUnits_LeavesExpectedNoBackflush()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var (_, unitId, unitCode) = await SeedFj2UnitAsync(factory, inHouse: true);
+        var service = new ProductionUnitService(factory, OfficeUser, new PinnedCatalogueProvider(factory));
+
+        var outcome = await service.ArriveByCodeAsync(unitCode);
+
+        Assert.Equal(ScanOutcome.Unknown, outcome);
+        await using var db = await factory.CreateDbContextAsync();
+        var unit = await db.ProductionUnits.SingleAsync(u => u.Id == unitId);
+        Assert.Equal(ProductionUnitState.Expected, unit.State);
+        Assert.Empty(await db.MaterialStocks.ToListAsync());
+    }
+
+    // Regression: a unit can still carry a live SupplierOrderId after its model gets unmapped from
+    // that supplier and remapped in-house (the reachable escape hatch) - FinishAsync must not
+    // backflush materials never used and strand the still-Sent PO it's linked to.
+    [Fact]
+    public async Task Finish_RejectsUnitLinkedToSupplierOrder()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        var (_, unitId, _) = await SeedFj2UnitAsync(factory, inHouse: true);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var supplier = new Supplier { Code = "SUPX", Name = "Sup X" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            var po = new SupplierOrder { PoNumber = "PO-2026-0001", SupplierId = supplier.Id, CreatedByUserId = "office-1", CreatedAt = DateTime.UtcNow, State = SupplierOrderState.Sent };
+            db.SupplierOrders.Add(po);
+            await db.SaveChangesAsync();
+            (await db.ProductionUnits.SingleAsync(u => u.Id == unitId)).SupplierOrderId = po.Id;
+            await db.SaveChangesAsync();
+        }
+        var service = new ProductionUnitService(factory, OfficeUser, new PinnedCatalogueProvider(factory));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.FinishAsync(unitId));
+        Assert.Contains("ordered from a supplier", ex.Message);
+
+        await using var check = await factory.CreateDbContextAsync();
+        Assert.Equal(ProductionUnitState.Expected, (await check.ProductionUnits.SingleAsync(u => u.Id == unitId)).State);
+        Assert.Empty(await check.MaterialStocks.ToListAsync());
+    }
+
     [Fact]
     public async Task ListUnits_InHouseFilterPartitions()
     {

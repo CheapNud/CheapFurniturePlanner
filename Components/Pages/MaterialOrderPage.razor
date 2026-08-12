@@ -101,7 +101,7 @@
                             {
                                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                     <MudNumericField T="decimal" Value="_receiveQuantities.GetValueOrDefault(context.Id)"
-                                                      ValueChanged="@((decimal v) => _receiveQuantities[context.Id] = v)" Dense="true" Min="0" Style="width:100px" />
+                                                      ValueChanged="@((decimal v) => _receiveQuantities[context.Id] = v)" Dense="true" Min="0" />
                                     <MudButton Size="Size.Small" OnClick="@(() => ReceiveLineAsync(context))">Receive</MudButton>
                                 </MudStack>
                             }

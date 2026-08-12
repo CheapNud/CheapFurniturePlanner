@@ -227,9 +227,12 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
         await RequireAdminOrOfficeAsync();
         var code = RequireTrimmed(modelCode, "Model code");
         await using var db = await factory.CreateDbContextAsync(ct);
-        if (await db.SupplierModelMaps.AnyAsync(m => m.ModelCode == code, ct))
+        var existing = await db.SupplierModelMaps.FirstOrDefaultAsync(m => m.ModelCode == code, ct);
+        if (existing is not null)
         {
-            throw new InvalidOperationException($"Model code '{code}' is already mapped to a supplier.");
+            throw new InvalidOperationException(existing.SupplierId is null
+                ? $"Model code '{code}' is already marked in-house."
+                : $"Model code '{code}' is already mapped to supplier '{await SupplierCodeAsync(db, existing.SupplierId.Value, ct)}'.");
         }
         db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = supplierId, ModelCode = code });
         await db.SaveChangesAsync(ct);
@@ -254,7 +257,7 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
         var existing = await db.SupplierModelMaps.FirstOrDefaultAsync(m => m.ModelCode == code, ct);
         if (existing is { SupplierId: not null })
         {
-            throw new InvalidOperationException($"Model code '{code}' is already mapped to a supplier.");
+            throw new InvalidOperationException($"Model code '{code}' is already mapped to supplier '{await SupplierCodeAsync(db, existing.SupplierId.Value, ct)}'.");
         }
         if (existing is null)
         {
@@ -262,6 +265,9 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
             await db.SaveChangesAsync(ct);
         }
     }
+
+    private static async Task<string> SupplierCodeAsync(FurniturePlannerContext db, int supplierId, CancellationToken ct) =>
+        await db.Suppliers.Where(s => s.Id == supplierId).Select(s => s.Code).FirstOrDefaultAsync(ct) ?? supplierId.ToString();
 
     public async Task UnmarkModelInHouseAsync(string modelCode, CancellationToken ct = default)
     {

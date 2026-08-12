@@ -147,7 +147,11 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         await RequireWarehouseStaffAsync();
         await using var db = await factory.CreateDbContextAsync(ct);
         var trimmedCode = (unitCode ?? "").Trim();
-        var unit = await db.ProductionUnits.FirstOrDefaultAsync(u => u.UnitCode == trimmedCode, ct);
+        // In-house units never pass through the dock - excluding them here makes a scanned in-house
+        // code behave exactly like an unknown one, rather than silently arriving without a backflush
+        // and vanishing from both pools.
+        var inHouseLineIds = InHouseLineIds(db);
+        var unit = await db.ProductionUnits.FirstOrDefaultAsync(u => u.UnitCode == trimmedCode && !inHouseLineIds.Contains(u.OrderLineId), ct);
         if (unit is null || unit.State is ProductionUnitState.Delivered or ProductionUnitState.Cancelled) { return ScanOutcome.Unknown; }
         if (unit.State == ProductionUnitState.Arrived) { return ScanOutcome.AlreadyArrived; }
         Arrive(unit);
@@ -186,6 +190,11 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         await using var db = await factory.CreateDbContextAsync(ct);
         var unit = await RequireUnitAsync(db, unitId, ct);
         if (unit.State != ProductionUnitState.Expected) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not expected."); }
+        // A unit can still carry a live SupplierOrderId after its model gets unmapped from that
+        // supplier and remapped in-house - finishing it here would backflush materials never used
+        // and strand the still-Sent PO it's linked to, so a supplier-linked unit must go through the
+        // dock (ArriveAsync/ArriveByCodeAsync) instead, whatever the current map says.
+        if (unit.SupplierOrderId is not null) { throw new InvalidOperationException($"Unit {unit.UnitCode} was ordered from a supplier - receive it instead."); }
         if (!await IsInHouseUnitAsync(db, unit, ct)) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not marked in-house."); }
         Arrive(unit);
         await ApplyBackflushAsync(db, unit, -1m, ct);

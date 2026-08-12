@@ -99,6 +99,34 @@ public class MaterialOrderServiceTests
         Assert.Null(await materials.GetAsync(first.Id));
     }
 
+    // Regression: a Sent order with a 0-qty line can never complete (ReceiveAsync rejects any
+    // receipt against a zero remainder) and a Sent order is neither editable nor deletable -
+    // permanently stuck. Both line entry points must reject it up front.
+    [Fact]
+    public async Task CreateDraft_RejectsZeroOrNegativeQuantityLine()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.CreateDraftAsync(supplierId, [FoamLine(0m)]));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.CreateDraftAsync(supplierId, [FoamLine(-1m)]));
+    }
+
+    [Fact]
+    public async Task AddLine_RejectsZeroOrNegativeQuantityLine()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId, []);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.AddLineAsync(order.Id, FoamLine(0m)));
+        Assert.Empty((await materials.GetAsync(order.Id))!.Lines);
+    }
+
     [Fact]
     public async Task AddLine_RemoveLine_OnlyOnDraft()
     {

@@ -16,6 +16,7 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
     public async Task<MaterialOrder> CreateDraftAsync(int supplierId, IReadOnlyList<MaterialOrderLine> lines, CancellationToken ct = default)
     {
         await RequireAdminOrOfficeAsync();
+        RequirePositiveQuantities(lines);
         await using var db = await factory.CreateDbContextAsync(ct);
 
         var prefix = $"MPO-{DateTime.UtcNow.Year}-";
@@ -60,10 +61,22 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
     public async Task AddLineAsync(int materialOrderId, MaterialOrderLine line, CancellationToken ct = default)
     {
         await RequireAdminOrOfficeAsync();
+        RequirePositiveQuantities([line]);
         await using var db = await factory.CreateDbContextAsync(ct);
         var order = await RequireDraftAsync(db, materialOrderId, ct);
         order.Lines.Add(line);
         await db.SaveChangesAsync(ct);
+    }
+
+    // A zero/negative ordered quantity would never be receivable (ReceiveAsync rejects any receipt
+    // against a zero remainder), and a Sent order is neither editable nor deletable - such a line
+    // would permanently strand the order in Sent. Reject it on both entry points instead.
+    private static void RequirePositiveQuantities(IReadOnlyList<MaterialOrderLine> lines)
+    {
+        if (lines.Any(l => l.QuantityOrdered <= 0))
+        {
+            throw new InvalidOperationException("Ordered quantity must be greater than zero.");
+        }
     }
 
     public async Task RemoveLineAsync(int materialOrderId, int lineId, CancellationToken ct = default)

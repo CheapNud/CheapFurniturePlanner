@@ -71,7 +71,7 @@ public class MaterialOrderPdfTests
         var supplierId = await SeedSupplierAsync(factory, "WOODWORKS", "Woodworks Fine");
         var materials = new MaterialOrderService(factory, OfficeUser);
         var order = await materials.CreateDraftAsync(supplierId,
-            [new MaterialOrderLine { Kind = MaterialKind.Foam, Code = "F-100", HardnessCode = "H35", DisplayName = "Foam H35", QuantityOrdered = 20m }]);
+            [new MaterialOrderLine { Kind = MaterialKind.Foam, Code = "F-100", HardnessCode = "H35", DisplayName = "Seat cushion foam", QuantityOrdered = 20m }]);
         await materials.SendAsync(order.Id);
 
         var pdf = new MaterialOrderPdf(factory, new PdfExportService(new PdfTemplateService()), NewPdfOutputRoot());
@@ -86,6 +86,9 @@ public class MaterialOrderPdfTests
         Assert.Contains("Alpine Living", pageText);
         Assert.Contains("BE0999999999", pageText);
         Assert.Contains("F-100", pageText);
+        // Foam identity is (code, hardness) everywhere else in the app - the PDF the supplier ships
+        // from must carry the hardness too, or the wrong grade goes out the door.
+        Assert.Contains("H35", pageText);
     }
 
     [Fact]
