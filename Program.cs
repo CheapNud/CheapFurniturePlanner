@@ -190,6 +190,7 @@ class Program
         builder.Services.AddScoped<OrderEntryService>();
         builder.Services.AddScoped<ServiceTicketService>();
         builder.Services.AddScoped<PurchasingService>();
+        builder.Services.AddScoped<MaterialOrderService>();
 
         builder.Services.AddSingleton<IPdfTemplateService, PdfTemplateService>();
         builder.Services.AddSingleton<IPdfExportService, PdfExportService>();
@@ -224,6 +225,10 @@ class Program
         builder.Services.AddScoped(sp => new SupplierOrderXml(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             Path.Combine(GetAppDataPath(), "exports")));
+        builder.Services.AddScoped(sp => new MaterialOrderPdf(
+            sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
+            sp.GetRequiredService<IPdfExportService>(),
+            Path.Combine(GetAppDataPath(), "reports")));
         builder.Services.AddSingleton(new ServicePhotoStore(Path.Combine(GetAppDataPath(), "service")));
 
         // Run the app - all Avalonia complexity handled by the package

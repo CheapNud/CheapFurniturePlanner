@@ -1,0 +1,294 @@
+using CheapFurniturePlanner.Auth;
+using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Production;
+using CheapFurniturePlanner.Models;
+using CheapFurniturePlanner.Services;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Xunit;
+
+namespace CheapFurniturePlanner.Tests.Services;
+
+// Task 4: MaterialOrder's own lifecycle (Draft -> Sent -> Completed), independent of SupplierOrder
+// - a material need has no ProductionUnit to double as its line, so receipt applies straight to a
+// stored MaterialOrderLine and, in the same SaveChanges, to a MaterialStock balance. Harness mirrors
+// PurchasingServiceTests: in-memory SQLite, migrated schema, FakeCurrentUser, direct-EF seeding.
+public class MaterialOrderServiceTests
+{
+    private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new(options);
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    private static async Task<(IDbContextFactory<FurniturePlannerContext> Factory, SqliteConnection Connection)> NewFactoryAsync()
+    {
+        var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(connection).Options;
+        await using (var migrateContext = new FurniturePlannerContext(options))
+        {
+            await migrateContext.Database.MigrateAsync();
+        }
+        return (new TestDbContextFactory(options), connection);
+    }
+
+    private static readonly FakeCurrentUser OfficeUser = new("office-1", Roles.Office);
+
+    private static async Task<int> SeedSupplierAsync(IDbContextFactory<FurniturePlannerContext> factory, string code)
+    {
+        await using var db = await factory.CreateDbContextAsync();
+        var supplier = new Supplier { Code = code, Name = code };
+        db.Suppliers.Add(supplier);
+        await db.SaveChangesAsync();
+        return supplier.Id;
+    }
+
+    private static MaterialOrderLine FoamLine(decimal ordered) =>
+        new() { Kind = MaterialKind.Foam, Code = "F-100", HardnessCode = "H35", DisplayName = "Foam H35", QuantityOrdered = ordered };
+
+    [Fact]
+    public async Task CreateDraft_NumbersWithMpoPrefix_AcceptsEmptyLines()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+
+        var order = await materials.CreateDraftAsync(supplierId, []);
+
+        Assert.StartsWith($"MPO-{DateTime.UtcNow.Year}-", order.Number);
+        Assert.Equal(MaterialOrderState.Draft, order.State);
+        Assert.Empty(order.Lines);
+    }
+
+    [Fact]
+    public async Task CreateDraft_WithLines_PersistsThem()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+
+        var order = await materials.CreateDraftAsync(supplierId, [FoamLine(20m)]);
+
+        var reloaded = await materials.GetAsync(order.Id);
+        var line = Assert.Single(reloaded!.Lines);
+        Assert.Equal("F-100", line.Code);
+        Assert.Equal(20m, line.QuantityOrdered);
+    }
+
+    [Fact]
+    public async Task Numbering_SurvivesDeletedDraft_NoCollision()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+
+        var first = await materials.CreateDraftAsync(supplierId, []);
+        var second = await materials.CreateDraftAsync(supplierId, []);
+        await materials.DeleteDraftAsync(first.Id);
+        var third = await materials.CreateDraftAsync(supplierId, []);
+
+        // A naive count-based scheme (1 live draft left after the delete -> count+1) would reissue
+        // second's own suffix here. Max-suffix numbering must always clear the highest live one.
+        var suffixSecond = int.Parse(second.Number.Split('-')[^1]);
+        var suffixThird = int.Parse(third.Number.Split('-')[^1]);
+        Assert.True(suffixThird > suffixSecond, $"expected {third.Number} suffix to exceed {second.Number} suffix");
+        Assert.Null(await materials.GetAsync(first.Id));
+    }
+
+    [Fact]
+    public async Task AddLine_RemoveLine_OnlyOnDraft()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId, []);
+
+        await materials.AddLineAsync(order.Id, FoamLine(10m));
+        var withLine = await materials.GetAsync(order.Id);
+        var line = Assert.Single(withLine!.Lines);
+
+        await materials.RemoveLineAsync(order.Id, line.Id);
+        var withoutLine = await materials.GetAsync(order.Id);
+        Assert.Empty(withoutLine!.Lines);
+
+        await materials.AddLineAsync(order.Id, FoamLine(10m));
+        await materials.SendAsync(order.Id);
+        var sentLine = Assert.Single((await materials.GetAsync(order.Id))!.Lines);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.AddLineAsync(order.Id, FoamLine(5m)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.RemoveLineAsync(order.Id, sentLine.Id));
+    }
+
+    [Fact]
+    public async Task DeleteDraft_NonEmptyAllowed_CascadesLines_SentRejected()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId, [FoamLine(10m)]);
+
+        // Draft deletable even non-empty - lines cascade (unlike SupplierOrder's empty-only guard,
+        // MaterialOrderLine is a real stored row with nothing else pointing at it).
+        await materials.DeleteDraftAsync(order.Id);
+        Assert.Null(await materials.GetAsync(order.Id));
+
+        var sentOrder = await materials.CreateDraftAsync(supplierId, [FoamLine(10m)]);
+        await materials.SendAsync(sentOrder.Id);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.DeleteDraftAsync(sentOrder.Id));
+    }
+
+    [Fact]
+    public async Task Send_RequiresAtLeastOneLine_StampsSentAt_RejectsResend()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var emptyOrder = await materials.CreateDraftAsync(supplierId, []);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.SendAsync(emptyOrder.Id));
+
+        var order = await materials.CreateDraftAsync(supplierId, [FoamLine(10m)]);
+        await materials.SendAsync(order.Id);
+        var sent = await materials.GetAsync(order.Id);
+        Assert.Equal(MaterialOrderState.Sent, sent!.State);
+        Assert.NotNull(sent.SentAt);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.SendAsync(order.Id));
+    }
+
+    [Fact]
+    public async Task SetTheirReference_SentOrCompletedOnly()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId, [FoamLine(10m)]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.SetTheirReferenceAsync(order.Id, "REF-1"));
+
+        await materials.SendAsync(order.Id);
+        await materials.SetTheirReferenceAsync(order.Id, "  REF-1  ");
+        Assert.Equal("REF-1", (await materials.GetAsync(order.Id))!.TheirReference);
+
+        var line = Assert.Single((await materials.GetAsync(order.Id))!.Lines);
+        await materials.ReceiveAsync(order.Id, line.Id, 10m);
+        var completed = await materials.GetAsync(order.Id);
+        Assert.Equal(MaterialOrderState.Completed, completed!.State);
+
+        // A fast-completing order (received in full on the first receipt) must still accept the
+        // supplier's ref, same guarantee as PurchasingService.SetTheirReferenceAsync.
+        await materials.SetTheirReferenceAsync(order.Id, "REF-2");
+        Assert.Equal("REF-2", (await materials.GetAsync(order.Id))!.TheirReference);
+    }
+
+    [Fact]
+    public async Task Receive_OnlyOnSent()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId, [FoamLine(10m)]);
+        var line = Assert.Single(order.Lines);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, 5m));
+
+        await materials.SendAsync(order.Id);
+        await materials.ReceiveAsync(order.Id, line.Id, 10m);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, 1m)); // now Completed
+    }
+
+    [Fact]
+    public async Task Receive_RejectsZeroNegativeAndOverReceipt()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId, [FoamLine(10m)]);
+        var line = Assert.Single(order.Lines);
+        await materials.SendAsync(order.Id);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, 0m));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, -1m));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, 10.01m));
+
+        await materials.ReceiveAsync(order.Id, line.Id, 6m);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, 5m)); // remainder is 4
+    }
+
+    [Fact]
+    public async Task Receive_IncrementsStock_UpsertsByKindCodeHardness_SameSaveChanges()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId, [FoamLine(20m)]);
+        var line = Assert.Single(order.Lines);
+        await materials.SendAsync(order.Id);
+
+        await materials.ReceiveAsync(order.Id, line.Id, 6m);
+
+        // Asserted immediately after ReceiveAsync returns - the stock mutation must land in the
+        // same SaveChanges as the receipt, not a follow-up write.
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "F-100" && s.HardnessCode == "H35");
+            Assert.Equal(6m, stock.Amount);
+            Assert.True(stock.UpdatedAt > DateTime.UtcNow.AddMinutes(-1));
+        }
+
+        await materials.ReceiveAsync(order.Id, line.Id, 4m);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "F-100" && s.HardnessCode == "H35");
+            Assert.Equal(10m, stock.Amount); // upserted onto the same row, not a second one
+            Assert.Equal(1, await db.MaterialStocks.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Receive_TwoPartials_CompletesOrder_OnlyWhenEveryLineFullyReceived()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId, [FoamLine(10m), new MaterialOrderLine { Kind = MaterialKind.Cotton, Code = "COT-1", QuantityOrdered = 5m }]);
+        var foamLine = order.Lines.Single(l => l.Kind == MaterialKind.Foam);
+        var cottonLine = order.Lines.Single(l => l.Kind == MaterialKind.Cotton);
+        await materials.SendAsync(order.Id);
+
+        await materials.ReceiveAsync(order.Id, foamLine.Id, 10m); // first line fully received
+        var stillSent = await materials.GetAsync(order.Id);
+        Assert.Equal(MaterialOrderState.Sent, stillSent!.State); // second line still outstanding
+
+        await materials.ReceiveAsync(order.Id, cottonLine.Id, 5m); // second (and last) line fully received
+        var completed = await materials.GetAsync(order.Id);
+        Assert.Equal(MaterialOrderState.Completed, completed!.State);
+    }
+
+    [Fact]
+    public async Task List_ReturnsAllOrders_WithSupplierAndLines()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        await materials.CreateDraftAsync(supplierId, [FoamLine(10m)]);
+        await materials.CreateDraftAsync(supplierId, []);
+
+        var list = await materials.ListAsync();
+
+        Assert.Equal(2, list.Count);
+        Assert.All(list, o => Assert.Equal("SUPA", o.Supplier!.Code));
+    }
+}
