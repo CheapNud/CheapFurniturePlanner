@@ -120,9 +120,14 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
     }
 
     // FrameBody carries no display name (Domain/Masters/FrameBody.cs) - falls back to the code
-    // itself, same as any material code the masters don't otherwise know about.
-    private static string ResolveDisplayName(CatalogueSnapshot snapshot, MaterialKind kind, string code) =>
-        kind == MaterialKind.Frame ? code : snapshot.Materials.FirstOrDefault(m => m.Code == code)?.Name ?? code;
+    // itself, same as any material code the masters don't otherwise know about. Fabric resolves
+    // against the fabric groups' colour masters (FabricColor.Name), not the plain Materials list.
+    private static string ResolveDisplayName(CatalogueSnapshot snapshot, MaterialKind kind, string code) => kind switch
+    {
+        MaterialKind.Frame => code,
+        MaterialKind.Fabric => snapshot.FabricGroups.SelectMany(g => g.Colors).FirstOrDefault(c => c.Code == code)?.Name ?? code,
+        _ => snapshot.Materials.FirstOrDefault(m => m.Code == code)?.Name ?? code,
+    };
 
     // Quote a field only when the delimiter/quote/newline forces it - keeps codes untouched (CatalogueExport idiom).
     private static string Escape(string field) =>

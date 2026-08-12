@@ -65,7 +65,7 @@ public class MaterialNeedsServiceTests
     // Seeds a Seller/Consumer/Placed order pinned to the given catalogue version, with one
     // configured line - the minimal chain a material-needs candidate needs.
     private static async Task<(int OrderId, int LineId)> SeedOrderLineAsync(IDbContextFactory<FurniturePlannerContext> factory,
-        string modelCode, string elementCode, string pinnedVersion, int? lineSupplierId = null)
+        string modelCode, string elementCode, string pinnedVersion, int? lineSupplierId = null, string fabricColorCode = "AQUA-BLUE")
     {
         await using var db = await factory.CreateDbContextAsync();
         var seller = new Seller { Name = "Shop", Multiplier = 1m };
@@ -89,7 +89,7 @@ public class MaterialNeedsServiceTests
             ModelCode = modelCode,
             ElementCode = elementCode,
             SelectionsJson = CanonicalJson.Serialize(StdSelections),
-            FabricColorCode = "AQUA-BLUE",
+            FabricColorCode = fabricColorCode,
             SupplierId = lineSupplierId,
             DeliverToWarehouse = true,
             Quantity = 1,
@@ -203,6 +203,7 @@ public class MaterialNeedsServiceTests
 
         var fabric = forecast.Rows.Single(r => r.Kind == MaterialKind.Fabric);
         Assert.Equal("AQUA-BLUE", fabric.Code);
+        Assert.Equal("Aqua Blue", fabric.DisplayName); // resolved from the AQUA fabric group's colour master
         Assert.Equal(8.0m, fabric.GrossNeed);
         Assert.Equal(8.0m, fabric.SuggestedToOrder);
 
@@ -211,6 +212,33 @@ public class MaterialNeedsServiceTests
         Assert.Equal("Glue", misc.DisplayName);
         Assert.Equal(8m, misc.GrossNeed);
         Assert.Equal(8m, misc.SuggestedToOrder);
+    }
+
+    // Same Kind (Fabric), two different Codes: seeded in reverse-alphabetical order to prove the
+    // row sort is a genuine ordinal-Code tie-break, not insertion order.
+    [Fact]
+    public async Task ComputeAsync_OrdersRowsWithinKindByCodeOrdinal()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            await db.SaveChangesAsync();
+        }
+
+        var (greenOrderId, greenLineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1", fabricColorCode: "AQUA-GREEN");
+        await SeedUnitAsync(factory, greenOrderId, greenLineId, 1);
+        var (blueOrderId, blueLineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1", fabricColorCode: "AQUA-BLUE");
+        await SeedUnitAsync(factory, blueOrderId, blueLineId, 1);
+
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var fabricCodes = forecast.Rows.Where(r => r.Kind == MaterialKind.Fabric).Select(r => r.Code).ToArray();
+        Assert.Equal(["AQUA-BLUE", "AQUA-GREEN"], fabricCodes);
     }
 
     [Fact]
