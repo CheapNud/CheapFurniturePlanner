@@ -79,7 +79,7 @@ public class TripLoadListPdfTests
             northRegionId = region.Id;
         }
 
-        var units = new ProductionUnitService(factory, OfficeUser);
+        var units = new ProductionUnitService(factory, OfficeUser, new PinnedCatalogueProvider(factory));
         var orderAId = await SeedOrderAsync(factory, "Missed Street", northRegionId, new DateTime(2026, 8, 15));
         var orderBId = await SeedOrderAsync(factory, "OnTime Street", northRegionId, null);
         var orderCId = await SeedOrderAsync(factory, "Expected Street", northRegionId, null);

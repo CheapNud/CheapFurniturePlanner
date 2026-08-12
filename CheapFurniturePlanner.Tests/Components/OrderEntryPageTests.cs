@@ -72,7 +72,7 @@ public class OrderEntryPageTests : TestContext
         var articles = new ArticleAuthoringService(store, publish);
         var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var pinned = new PinnedCatalogueProvider(factory);
-        var productionUnits = new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var productionUnits = new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office), new PinnedCatalogueProvider(factory));
         var orders = new OrderEntryService(factory, source, pinned, productionUnits);
         var discounts = new DiscountService(factory);
         var seller = await parties.AddSellerAsync("Northwind Reseller", 1.2m);
@@ -87,8 +87,7 @@ public class OrderEntryPageTests : TestContext
         Services.AddSingleton(factory);
         Services.AddSingleton<ICatalogueSource>(sp => new DbCatalogueSource(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new PinnedCatalogueProvider(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
-        Services.AddSingleton(sp => new ProductionUnitService(
-            sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office)));
+        Services.AddSingleton(sp => new ProductionUnitService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), new FakeCurrentUser("office-1", Roles.Office), sp.GetRequiredService<PinnedCatalogueProvider>()));
         Services.AddSingleton(sp => new OrderEntryService(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<ICatalogueSource>(),

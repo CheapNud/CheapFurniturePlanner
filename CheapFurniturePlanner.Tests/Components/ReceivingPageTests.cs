@@ -85,7 +85,7 @@ public class ReceivingPageTests : TestContext
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
-        var units = new ProductionUnitService(factory, dock);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
         var (_, unitCodes) = await SeedPlacedOrderWithUnitsAsync(factory, units);
         ConfigureServices(factory, units, dock);
 
@@ -104,7 +104,7 @@ public class ReceivingPageTests : TestContext
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
-        var units = new ProductionUnitService(factory, dock);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
         var (orderId, unitCodes) = await SeedPlacedOrderWithUnitsAsync(factory, units);
         var seededCode = unitCodes.Single();
         ConfigureServices(factory, units, dock);
@@ -126,7 +126,7 @@ public class ReceivingPageTests : TestContext
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
-        var units = new ProductionUnitService(factory, dock);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
         var (_, unitCodes) = await SeedPlacedOrderWithUnitsAsync(factory, units);
         await using (var db = await factory.CreateDbContextAsync())
         {
@@ -181,7 +181,7 @@ public class ReceivingPageTests : TestContext
         using var _ = conn;
         var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
         var office = new FakeCurrentUser("office-1", Roles.Office);
-        var units = new ProductionUnitService(factory, dock);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
         var purchasing = new PurchasingService(factory, office);
 
         await using var setupDb = await factory.CreateDbContextAsync();
@@ -234,13 +234,62 @@ public class ReceivingPageTests : TestContext
         });
     }
 
+    // Seeds a Deliver-to-Warehouse unit whose model maps to the null-supplier "made here" marker -
+    // the same three-state rule Task 5's ListUnitsAsync(inHouseOnly:) filter and FinishAsync share.
+    private static async Task<(int OrderId, string UnitCode)> SeedInHouseUnitAsync(
+        IDbContextFactory<FurniturePlannerContext> factory, ProductionUnitService units, string orderNumber)
+    {
+        await using var db = await factory.CreateDbContextAsync();
+        db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "INHOUSE-1" });
+        var seller = new Seller { Name = "Shop", Multiplier = 1m };
+        var consumer = new Consumer { Name = "Jansen" };
+        db.Sellers.Add(seller);
+        db.Consumers.Add(consumer);
+        await db.SaveChangesAsync();
+        var order = new Order
+        {
+            OrderNumber = orderNumber,
+            SellerId = seller.Id,
+            ConsumerId = consumer.Id,
+            MarketCode = "BE",
+            State = OrderState.Placed,
+            Lines = [new OrderLine { DisplayIndex = 0, Kind = OrderLineKind.ConfiguredElement, ModelCode = "INHOUSE-1", ElementCode = "EL1", DeliverToWarehouse = true, Quantity = 1 }],
+        };
+        db.Orders.Add(order);
+        await db.SaveChangesAsync();
+
+        await units.SpawnForOrderAsync(order.Id);
+        var unitCode = (await units.UnitsForOrderAsync(order.Id)).Single().UnitCode;
+        return (order.Id, unitCode);
+    }
+
+    [Fact]
+    public async Task Render_ExcludesInHouseUnits_FromPool()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
+        var (_, externalUnitCodes) = await SeedPlacedOrderWithUnitsAsync(factory, units);
+        var (_, inHouseUnitCode) = await SeedInHouseUnitAsync(factory, units, "ORD-2026-0002");
+        ConfigureServices(factory, units, dock);
+
+        var cut = Render<ReceivingPage>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(externalUnitCodes.Single(), cut.Markup);
+            Assert.DoesNotContain(inHouseUnitCode, cut.Markup);
+        });
+    }
+
     [Fact]
     public async Task ScanEnter_UnknownCode_ShowsReviewList()
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
-        var units = new ProductionUnitService(factory, dock);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
         ConfigureServices(factory, units, dock);
 
         var cut = Render<ReceivingPage>();

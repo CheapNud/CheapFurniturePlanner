@@ -390,7 +390,7 @@ public class PurchasingServiceTests
 
         // A fast-completing PO (its one unit arrives) must still accept the supplier's ref - the
         // class comment promises TheirReference regardless of how quickly the PO closes.
-        var units = new ProductionUnitService(factory, new FakeCurrentUser("wh-1", Roles.Warehouse));
+        var units = new ProductionUnitService(factory, new FakeCurrentUser("wh-1", Roles.Warehouse), new PinnedCatalogueProvider(factory));
         await units.ArriveAsync(unitId);
         var completed = await purchasing.GetOrderAsync(orderId);
         Assert.Equal(SupplierOrderState.Completed, completed!.State);

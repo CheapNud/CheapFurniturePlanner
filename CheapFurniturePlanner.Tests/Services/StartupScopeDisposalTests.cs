@@ -37,6 +37,7 @@ public class StartupScopeDisposalTests
         services.AddSingleton<IDbContextFactory<FurniturePlannerContext>>(new TestDbContextFactory(options));
         services.AddScoped<AuthenticationStateProvider, HttpContextAuthenticationStateProvider>();
         services.AddScoped<ICurrentUser, CurrentUser>();
+        services.AddScoped<PinnedCatalogueProvider>();
         services.AddScoped<ProductionUnitService>();
 
         using var provider = services.BuildServiceProvider();

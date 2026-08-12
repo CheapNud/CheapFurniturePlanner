@@ -96,7 +96,7 @@ public class TripPagesTests : TestContext
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
-        var units = new ProductionUnitService(factory, dock);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
         var (orderId, unitCodes) = await SeedPlacedOrderWithUnitsAsync(factory, units, quantity: 2);
         foreach (var unitCode in unitCodes)
         {
@@ -152,7 +152,7 @@ public class TripPagesTests : TestContext
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
         var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
-        var units = new ProductionUnitService(factory, dock);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
         var seeded = await units.CreateTripAsync();
         ConfigureServices(factory, units, dock);
 

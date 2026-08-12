@@ -1,5 +1,7 @@
 using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Production;
+using CheapFurniturePlanner.Domain.Serialization;
 using CheapFurniturePlanner.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,7 +13,8 @@ public enum ScanOutcome { Arrived, AlreadyArrived, Unknown }
 // Every unit/trip mutation lives here so the two state machines are enforced in one place.
 // Spawn/backfill/cancel are cascade entry points invoked by order flows and the startup
 // backfill (no signed-in user), so they carry no role guard; the dock actions (Task 3) do.
-public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerContext> factory, ICurrentUser currentUser)
+public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerContext> factory, ICurrentUser currentUser,
+    PinnedCatalogueProvider pinnedCatalogueProvider)
 {
     public async Task SpawnForOrderAsync(int orderId, CancellationToken ct = default)
     {
@@ -92,7 +95,8 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         }
     }
 
-    public async Task<List<ProductionUnit>> ListUnitsAsync(string? orderNumberFilter = null, ProductionUnitState? stateFilter = null, int? supplierDeliveryId = null, CancellationToken ct = default)
+    public async Task<List<ProductionUnit>> ListUnitsAsync(string? orderNumberFilter = null, ProductionUnitState? stateFilter = null,
+        int? supplierDeliveryId = null, bool? inHouseOnly = null, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
         var unitsQuery = db.ProductionUnits.AsNoTracking()
@@ -110,6 +114,13 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         if (supplierDeliveryId is int wantedDeliveryId)
         {
             unitsQuery = unitsQuery.Where(u => u.SupplierDeliveryId == wantedDeliveryId);
+        }
+        if (inHouseOnly is bool wantsInHouse)
+        {
+            var inHouseLineIds = InHouseLineIds(db);
+            unitsQuery = wantsInHouse
+                ? unitsQuery.Where(u => inHouseLineIds.Contains(u.OrderLineId))
+                : unitsQuery.Where(u => !inHouseLineIds.Contains(u.OrderLineId));
         }
         return await unitsQuery.OrderBy(u => u.UnitCode).ToListAsync(ct);
     }
@@ -165,6 +176,21 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         TryCompleteSupplierOrder(order);
     }
 
+    // The in-house counterpart to ArriveAsync: a production-floor completion instead of a dock
+    // receipt, so it moves Expected -> Arrived the same way but also consumes the unit's resolved
+    // material needs (T1/T2) - backflush fires ONLY on this path, never on external ArriveAsync.
+    public async Task FinishAsync(int unitId, CancellationToken ct = default)
+    {
+        await RequireWarehouseStaffAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var unit = await RequireUnitAsync(db, unitId, ct);
+        if (unit.State != ProductionUnitState.Expected) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not expected."); }
+        if (!await IsInHouseUnitAsync(db, unit, ct)) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not marked in-house."); }
+        Arrive(unit);
+        await ApplyBackflushAsync(db, unit, -1m, ct);
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task UndoArriveAsync(int unitId, string? reviewNote = null, CancellationToken ct = default)
     {
         await RequireWarehouseStaffAsync();
@@ -183,6 +209,10 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
             var order = await db.SupplierOrders.FirstOrDefaultAsync(o => o.Id == supplierOrderId, ct);
             if (order is not null && order.State == SupplierOrderState.Completed) { order.State = SupplierOrderState.Sent; }
         }
+        // Symmetric with FinishAsync's -1: only an in-house unit ever had its materials consumed on
+        // arrival, so only an in-house unit gets them back here. An externally-received unit never
+        // backflushed (ArriveAsync never does), so this branch must stay untouched for it.
+        if (await IsInHouseUnitAsync(db, unit, ct)) { await ApplyBackflushAsync(db, unit, 1m, ct); }
         await db.SaveChangesAsync(ct);
     }
 
@@ -392,6 +422,44 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
     {
         unit.State = ProductionUnitState.Arrived;
         unit.ArrivedAt = DateTime.UtcNow;
+    }
+
+    // The one query shape for "in-house" (FinishAsync's guard, UndoArriveAsync's reversal branch,
+    // ListUnitsAsync's pool filter): a priced ConfiguredElement line with no per-line supplier
+    // override, whose model maps to an explicit null-supplier "made here" row - same three-state
+    // rule as MaterialNeedsService's sweep (a missing map row is "not in-house", same as a real one).
+    private static IQueryable<int> InHouseLineIds(FurniturePlannerContext db) =>
+        db.OrderLines
+            .Where(l => l.Kind == OrderLineKind.ConfiguredElement && l.SupplierId == null && l.ModelCode != null)
+            .Where(l => db.SupplierModelMaps.Any(m => m.ModelCode == l.ModelCode && m.SupplierId == null))
+            .Select(l => l.Id);
+
+    private static Task<bool> IsInHouseUnitAsync(FurniturePlannerContext db, ProductionUnit unit, CancellationToken ct) =>
+        InHouseLineIds(db).AnyAsync(id => id == unit.OrderLineId, ct);
+
+    // Resolves the unit's material needs off its order's pinned snapshot (T1) and upserts each
+    // stock row (T2) by sign * Quantity - finish consumes (-1), undo-arrive's in-house branch gives
+    // it back (+1). An absent stock row is created at 0 first, so it may end up negative; that's the
+    // forecast's problem to surface, not this method's to prevent.
+    private async Task ApplyBackflushAsync(FurniturePlannerContext db, ProductionUnit unit, decimal sign, CancellationToken ct)
+    {
+        var line = await db.OrderLines.FirstAsync(l => l.Id == unit.OrderLineId, ct);
+        var pinnedVersion = await db.Orders.Where(o => o.Id == unit.OrderId).Select(o => o.PinnedCatalogueVersion).FirstAsync(ct)
+            ?? throw new InvalidOperationException($"Order {unit.OrderId} has no pinned catalogue version.");
+        var snapshot = await pinnedCatalogueProvider.GetAsync(pinnedVersion, ct);
+        var selections = CanonicalJson.Deserialize<Dictionary<string, string>>(line.SelectionsJson) ?? [];
+        var needLines = MaterialRequirements.Resolve(snapshot, line.ModelCode!, line.ElementCode!, selections, line.FabricColorCode);
+        foreach (var need in needLines)
+        {
+            var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == need.Kind && s.Code == need.Code && s.HardnessCode == need.HardnessCode, ct);
+            if (stock is null)
+            {
+                stock = new MaterialStock { Kind = need.Kind, Code = need.Code, HardnessCode = need.HardnessCode };
+                db.MaterialStocks.Add(stock);
+            }
+            stock.Amount += sign * need.Quantity;
+            stock.UpdatedAt = DateTime.UtcNow;
+        }
     }
 
     private static async Task<ProductionUnit> RequireUnitAsync(FurniturePlannerContext db, int unitId, CancellationToken ct) =>

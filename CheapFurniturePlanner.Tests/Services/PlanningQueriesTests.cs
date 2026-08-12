@@ -78,7 +78,7 @@ public class PlanningQueriesTests
             await db.SaveChangesAsync();
         }
         var northRegionId = await (await factory.CreateDbContextAsync()).Regions.Select(r => r.Id).SingleAsync();
-        var units = new ProductionUnitService(factory, OfficeUser);
+        var units = new ProductionUnitService(factory, OfficeUser, new PinnedCatalogueProvider(factory));
         var northOrderId = await SeedOrderAsync(factory, OrderState.Placed, northRegionId);
         var noAddressOrderId = await SeedOrderAsync(factory, OrderState.Placed, regionId: null);
         await units.SpawnForOrderAsync(northOrderId);
@@ -121,7 +121,7 @@ public class PlanningQueriesTests
     {
         var (factory, conn) = await NewFactoryAsync();
         using var _ = conn;
-        var units = new ProductionUnitService(factory, OfficeUser);
+        var units = new ProductionUnitService(factory, OfficeUser, new PinnedCatalogueProvider(factory));
         var orders = new OrderEntryService(factory, new DbCatalogueSource(factory), new PinnedCatalogueProvider(factory), units);
         var orderId = await SeedOrderAsync(factory, OrderState.Draft, regionId: null);
 

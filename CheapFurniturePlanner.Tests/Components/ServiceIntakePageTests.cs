@@ -49,7 +49,7 @@ public class ServiceIntakePageTests : TestContext
         Services.AddSingleton(new ServicePhotoStore(photoRoot));
         Services.AddSingleton<ICatalogueSource>(sp => new DbCatalogueSource(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
         Services.AddSingleton(sp => new PinnedCatalogueProvider(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>()));
-        Services.AddSingleton(sp => new ProductionUnitService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), who));
+        Services.AddSingleton(sp => new ProductionUnitService(sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(), who, sp.GetRequiredService<PinnedCatalogueProvider>()));
         Services.AddSingleton(sp => new OrderEntryService(
             sp.GetRequiredService<IDbContextFactory<FurniturePlannerContext>>(),
             sp.GetRequiredService<ICatalogueSource>(),

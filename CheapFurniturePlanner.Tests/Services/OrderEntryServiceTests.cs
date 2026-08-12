@@ -72,7 +72,7 @@ public class OrderEntryServiceTests
         await publish.RepublishAsync();
 
         var pinned = new PinnedCatalogueProvider(factory);
-        var productionUnits = new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var productionUnits = new ProductionUnitService(factory, new FakeCurrentUser("office-1", Roles.Office), new PinnedCatalogueProvider(factory));
         var orders = new OrderEntryService(factory, source, pinned, productionUnits);
         var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
         var seller = await parties.AddSellerAsync("Northwind Reseller", 1.2m);
