@@ -98,8 +98,12 @@ else
         }
         try
         {
-            await PriceVersionService.PublishNewVersionAsync(effectiveDate);
+            var warnings = await PriceVersionService.PublishNewVersionAsync(effectiveDate);
             Snackbar.Add($"Published — effective {effectiveDate:yyyy-MM-dd}.", Severity.Success);
+            foreach (var warning in warnings)
+            {
+                Snackbar.Add(warning, Severity.Warning);
+            }
         }
         catch (InvalidOperationException ex)
         {

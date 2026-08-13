@@ -5,6 +5,8 @@ using CheapFurniturePlanner.Components.Pages;
 using CheapFurniturePlanner.Components.Studio;
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Fabrics;
+using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
 using Microsoft.Data.Sqlite;
@@ -200,6 +202,41 @@ public class PriceVersionsPageTests : TestContext
             Assert.Contains("Export CSV", scheduledButtons);
             Assert.Contains("Export JSON", scheduledButtons);
         });
+    }
+
+    // A colour code shared by two fabric groups an element's FabricOption both reference is a publish
+    // warning (CataloguePublishService.DetectWarnings), not an error - the publish still succeeds.
+    // The office running the publish needs to see it, not just the success toast.
+    [Fact]
+    public async Task PublishNewVersion_ColourCollision_ShowsWarningSnackbar()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = await SeedAndPublishAsync(factory);
+        var masters = await store.LoadAsync();
+        masters.FabricGroups.Add(new FabricGroup { Code = "COLLIDE_A", PriceGroupCode = masters.PriceGroups[0].Code, Colors = [new FabricColor { Code = "COLLIDE", Name = "Collide A" }] });
+        masters.FabricGroups.Add(new FabricGroup { Code = "COLLIDE_B", PriceGroupCode = masters.PriceGroups[0].Code, Colors = [new FabricColor { Code = "COLLIDE", Name = "Collide B" }] });
+        await store.SaveMastersAsync(masters);
+        var model = masters.Models[0];
+        var element = model.Elements[0];
+        element.Options.Add(new FabricOption { OptionDefinitionCode = "COLLISION_FABRIC", FabricGroupCodes = ["COLLIDE_A", "COLLIDE_B"] });
+        await store.SaveModelAsync(model);
+        var dialogProvider = ConfigureServices(factory, NewOutputRoot());
+        var snackbarHost = Render<MudSnackbarProvider>();
+
+        var cut = Render<PriceVersionsPage>();
+        cut.WaitForAssertion(() => Assert.Contains("Unpublished price changes", cut.Markup));
+
+        var publishButton = cut.FindAll("button").Single(b => b.TextContent.Trim() == "Publish new version");
+        var pendingClick = cut.InvokeAsync(() => publishButton.Click());
+
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<PublishVersionDialog>().Count > 0);
+        var dialog = dialogProvider.FindComponent<PublishVersionDialog>();
+        var confirmButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Publish");
+        await dialog.InvokeAsync(() => confirmButton.Click());
+        await pendingClick;
+
+        snackbarHost.WaitForAssertion(() => Assert.Contains("multiple fabric groups", snackbarHost.Markup));
     }
 
     [Fact]

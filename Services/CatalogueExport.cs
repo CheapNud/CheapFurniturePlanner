@@ -32,7 +32,7 @@ public sealed class CatalogueExport(IDbContextFactory<FurniturePlannerContext> f
                 // value's real precision - it does NOT itself apply the engine's rounding. Row.Price
                 // only actually carries 2 decimals because FinalizeStages.RoundFinal ran during
                 // pricing, which only happens when the market's RoundingPolicy.Stages includes
-                // RoundStage.Final (CatalogueExportTests.CsvPrice_AllFixtureMarkets_RoundFinalStage
+                // RoundStage.Final (CatalogueExportTests.FixtureMarkets_AllEnableRoundStageFinal
                 // pins that every fixture market does). A market whose Stages OMITS RoundStage.Final
                 // would still print a 2-decimal string here, silently masking un-rounded precision a
                 // partner re-derives differently - if that's ever a real requirement, round explicitly
