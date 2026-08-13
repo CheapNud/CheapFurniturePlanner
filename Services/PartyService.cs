@@ -388,10 +388,14 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
         // by insertion order into the change tracker, and entry was loaded (and so tracked) before
         // siblings, so a single combined SaveChanges could try to flip entry to true before the old
         // default flips to false and trip the index mid-transaction. Saving the sibling clears first
-        // guarantees the old default is already gone before entry ever claims it.
+        // guarantees the old default is already gone before entry ever claims it. Wrapped in an
+        // explicit transaction (same pattern as ModelAuthoringService.DeleteAsync) so a crash between
+        // the two saves can't leave the consumer with zero defaults.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.SaveChangesAsync(ct);
         entry.IsDefault = true;
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     public async Task RemoveDeliveryAddressAsync(int deliveryAddressId, CancellationToken ct = default)
