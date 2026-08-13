@@ -93,6 +93,57 @@ public class ResolveStageTests
         Assert.DoesNotContain(resolvedElement.EffectiveLines, l => l.Line.LineKey == "F2");
     }
 
+    // Item 6: pins the deliberate substitution scope documented at the ResolveStage.BuildEffectiveLines
+    // substitution block - a rule whose ReplaceMaterialCode happens to match a Frame or Cotton line
+    // does NOT rewrite it, only Foam and Misc lines are ever rewritten.
+    [Fact]
+    public void Run_SubstitutionRule_RewritesFoamAndMiscOnly_LeavesFrameAndCottonUnchanged()
+    {
+        // Arrange - one always-satisfied substitution rule per BOM line kind.
+        var element = new Element
+        {
+            Code = "SEAT",
+            Name = "Seat",
+            Bom = new BomDocument
+            {
+                Sections =
+                [
+                    new BomSection { Kind = BomSectionKind.Frame, Lines = [new FrameBomLine { LineKey = "FR1", FrameBodyCode = "FR-STD" }] },
+                    new BomSection { Kind = BomSectionKind.Cotton, Lines = [new CottonBomLine { LineKey = "CT1", CottonQualityCode = "COT-STD" }] },
+                    new BomSection { Kind = BomSectionKind.Foam, Lines = [new FoamBomLine { LineKey = "FM1", FoamCode = "FOAM-STD" }] },
+                    new BomSection { Kind = BomSectionKind.Misc, Lines = [new MiscBomLine { LineKey = "M1", MaterialCode = "GLUE" }] }
+                ]
+            },
+            Substitutions =
+            [
+                new SubstitutionRule(new ApplicabilityCondition([]), ReplaceMaterialCode: "FR-STD", WithMaterialCode: "FR-SHOULD-NOT-APPLY", QuantityOverride: null),
+                new SubstitutionRule(new ApplicabilityCondition([]), ReplaceMaterialCode: "COT-STD", WithMaterialCode: "COT-SHOULD-NOT-APPLY", QuantityOverride: null),
+                new SubstitutionRule(new ApplicabilityCondition([]), ReplaceMaterialCode: "FOAM-STD", WithMaterialCode: "FOAM-SUBBED", QuantityOverride: null),
+                new SubstitutionRule(new ApplicabilityCondition([]), ReplaceMaterialCode: "GLUE", WithMaterialCode: "GLUE-SUBBED", QuantityOverride: null)
+            ]
+        };
+        var model = new FurnitureModel { Code = "SOFA", Name = "Sofa", Elements = [element] };
+        var snapshot = new CatalogueSnapshot { Version = "1", Models = [model], Markets = [CreateMarket()] };
+        var selection = new ElementSelection("SEAT", 1, new Dictionary<string, string>(), null);
+        var configuration = new ProductConfiguration("SOFA", [selection]);
+        var request = new PricingRequest(snapshot, configuration, new PricingContext(CreateMarket()));
+
+        // Act
+        var (resolved, errors) = ResolveStage.Run(request);
+
+        // Assert
+        Assert.Empty(errors);
+        var resolvedElement = Assert.Single(resolved);
+        var frame = Assert.IsType<FrameBomLine>(resolvedElement.EffectiveLines.Single(l => l.Line.LineKey == "FR1").Line);
+        Assert.Equal("FR-STD", frame.FrameBodyCode);   // untouched despite a matching rule
+        var cotton = Assert.IsType<CottonBomLine>(resolvedElement.EffectiveLines.Single(l => l.Line.LineKey == "CT1").Line);
+        Assert.Equal("COT-STD", cotton.CottonQualityCode);   // untouched despite a matching rule
+        var foam = Assert.IsType<FoamBomLine>(resolvedElement.EffectiveLines.Single(l => l.Line.LineKey == "FM1").Line);
+        Assert.Equal("FOAM-SUBBED", foam.FoamCode);   // rewritten
+        var misc = Assert.IsType<MiscBomLine>(resolvedElement.EffectiveLines.Single(l => l.Line.LineKey == "M1").Line);
+        Assert.Equal("GLUE-SUBBED", misc.MaterialCode);   // rewritten
+    }
+
     [Fact]
     public void Run_ElementWithoutFabricOption_ResolvesWithSentinelPriceGroup()
     {

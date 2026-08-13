@@ -126,6 +126,11 @@ internal static class ResolveStage
                 continue;
             }
 
+            // Deliberate scope: only Foam and Misc lines are ever rewritten (the two BOM kinds a
+            // manufacturing decision realistically swaps at order time - a firmer foam grade, a
+            // different glue). Frame and Cotton lines (and CutSort/Labor) are never rewritten even
+            // when a rule's ReplaceMaterialCode happens to match one, by design - see TODO.md
+            // 2026-07-05 [audit]. Extend only against a real need naming the additional BOM kind.
             for (var i = 0; i < lines.Count; i++)
             {
                 lines[i] = lines[i].Line switch

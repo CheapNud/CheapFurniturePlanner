@@ -75,11 +75,32 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
             }
             foreach (var element in model.Elements)
             {
+                // Item 1 backstop: ElementAuthoringService/OptionAuthoringService already reject these
+                // separators at the authoring seam, but a catalogue could still reach the store some
+                // other way - re-check here so publish is a real backstop, not decoration on that seam.
+                if (VariantCode.FindReservedSeparator(element.Code) is char elementOffender)
+                {
+                    errors.Add($"Element '{element.Code}' code cannot contain '{elementOffender}' (reserved as a variant-code separator).");
+                }
                 foreach (var option in element.Options)
                 {
                     if (option.OptionDefinitionCode == VariantCode.MaterialDefCode)
                     {
                         errors.Add($"Element '{element.Code}' uses reserved option code '{VariantCode.MaterialDefCode}'.");
+                    }
+                    if (VariantCode.FindReservedSeparator(option.OptionDefinitionCode) is char optionOffender)
+                    {
+                        errors.Add($"Element '{element.Code}' option '{option.OptionDefinitionCode}' cannot contain '{optionOffender}' (reserved as a variant-code separator).");
+                    }
+                    if (option is ChoiceOption choiceForSeparators)
+                    {
+                        foreach (var value in choiceForSeparators.Values)
+                        {
+                            if (VariantCode.FindReservedSeparator(value.OptionChoiceCode) is char choiceOffender)
+                            {
+                                errors.Add($"Element '{element.Code}' option '{option.OptionDefinitionCode}' choice '{value.OptionChoiceCode}' cannot contain '{choiceOffender}' (reserved as a variant-code separator).");
+                            }
+                        }
                     }
                     if (option is FabricOption fabricOption)
                     {
