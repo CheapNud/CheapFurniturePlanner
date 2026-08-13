@@ -182,6 +182,67 @@ public class PricingEngineTests
         Assert.Equal(CanonicalJson.Serialize(untamperedResult.Breakdown), CanonicalJson.Serialize(tamperedResult.Breakdown));
     }
 
+    // Item 3: no other test in this fixture enables ONLY RoundStage.Subtotal (see TODO.md 2026-07-05
+    // [audit]) - with Line rounding off, per-line/overhead/transport amounts keep their raw decimal
+    // precision, so RoundSubtotal's Math.Round on the chainBase is the only rounding that ever runs,
+    // and it has to visibly change the value for the coverage to mean anything.
+    //
+    // Derivation: multi-line element = 1 Labor line (1 unit * 20.005 UnitCost = 20.005) + 1 Misc line
+    // (1 * 5.00 material UnitCost / 1 conversion factor = 5.00) -> costBase = 25.005 (raw, unrounded).
+    // FixedCostPercent=0 and TransportRatePerUnit=0 keep overhead/transport at a clean 0.00 each, so
+    // the chainBase math isolates to just the subtotal step: chainBase = RoundSubtotal(25.005 + 0.00 +
+    // 0.00) = Math.Round(25.005m, 2, AwayFromZero) = 25.01 - the canonical away-from-zero midpoint case.
+    // RoundStage.Final is not enabled, so UnitPrice carries that subtotal-rounded value forward as-is.
+    [Fact]
+    public void Calculate_SubtotalStageOnly_RoundsChainBaseAtTheMidpointAwayFromZero()
+    {
+        // Arrange
+        var subtotalOnlyRounding = new RoundingPolicy(2, 2, MidpointRounding.AwayFromZero, RoundStage.Subtotal);
+        var market = new MarketParameters("EU", TransportRatePerUnit: 0m, FixedCostPercent: 0m, MarkupSteps: [], Rounding: subtotalOnlyRounding);
+        var element = new Element
+        {
+            Code = "SEAT",
+            Name = "Seat",
+            Bom = new BomDocument
+            {
+                Sections =
+                [
+                    new BomSection { Kind = BomSectionKind.Labor, Lines = [new LaborBomLine { LineKey = "LB1", OperationCode = "OP1", Units = 1m }] },
+                    new BomSection { Kind = BomSectionKind.Misc, Lines = [new MiscBomLine { LineKey = "M1", MaterialCode = "GLUE" }] }
+                ]
+            }
+        };
+        var model = new FurnitureModel { Code = "SOFA", Name = "Sofa", Elements = [element] };
+        var snapshot = new CatalogueSnapshot
+        {
+            Version = "1",
+            Models = [model],
+            Operations = [new Operation("OP1", "Sew", 20.005m)],
+            Materials = [new Material("GLUE", "Glue", 5.00m, "pc")],
+            Markets = [market]
+        };
+        var selection = new ElementSelection("SEAT", 1, new Dictionary<string, string>(), null);
+        var configuration = new ProductConfiguration("SOFA", [selection]);
+        var request = new PricingRequest(snapshot, configuration, new PricingContext(market));
+
+        // Act
+        var result = PricingEngine.Calculate(request);
+
+        // Assert
+        Assert.True(result.IsSuccess, $"Expected success but got: {string.Join(", ", result.Errors.Select(e => $"{e.Kind}:{e.Subject}"))}");
+        var elementBreakdown = Assert.Single(result.Breakdown!.Elements);
+
+        // Per-stage subtotals stay raw - RoundStage.Line is not enabled, so RoundSubtotal is the only
+        // rounding applied and it targets ChainBase alone.
+        Assert.Equal(20.005m, elementBreakdown.StageSubtotals["Labor"]);
+        Assert.Equal(5.00m, elementBreakdown.StageSubtotals["Materials"]);
+        Assert.Equal(0.00m, elementBreakdown.StageSubtotals["Overhead"]);
+        Assert.Equal(0.00m, elementBreakdown.StageSubtotals["Transport"]);
+        Assert.Equal(25.01m, elementBreakdown.StageSubtotals["ChainBase"]);
+        Assert.Equal(25.01m, elementBreakdown.StageSubtotals["UnitPrice"]);
+        Assert.Equal(25.01m, elementBreakdown.ElementTotal);
+    }
+
     [Fact]
     public void Calculate_CostStageError_ReturnsErrorsOnlyResultWithNullBreakdown()
     {

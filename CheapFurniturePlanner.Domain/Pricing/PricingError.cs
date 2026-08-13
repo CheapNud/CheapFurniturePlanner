@@ -9,6 +9,7 @@ public enum PricingErrorKind
     SelectionViolatesVisibility,
     UnknownFabricColor,
     NoPriceGroupForMaterialKind,
+    UnknownMaterialKind,
     MissingBomSection,
     UnknownOperation,
     UnknownMaterial,

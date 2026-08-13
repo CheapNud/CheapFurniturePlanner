@@ -438,6 +438,111 @@ public class ResolveStageTests
         Assert.Equal("SEAT:PG-MISSING", error.Subject);
     }
 
+    // Item 2: PriceGroup.Kind is a plain (non-Flags) FabricMaterialKind enum, but the deserialized
+    // catalogue trusts whatever int value the source data carries - an out-of-range value (neither
+    // Fabric nor Leather) must not silently price at RatePerMeter, it must surface as a PricingError.
+    [Fact]
+    public void Run_ResolvedPriceGroupHasUndefinedKind_ReturnsUnknownMaterialKindError()
+    {
+        // Arrange
+        var element = new Element
+        {
+            Code = "SEAT",
+            Name = "Seat",
+            Options = [new FabricOption { OptionDefinitionCode = "FABRIC", FabricGroupCodes = ["GRP1"] }]
+        };
+        var model = new FurnitureModel { Code = "SOFA", Name = "Sofa", Elements = [element] };
+        var snapshot = new CatalogueSnapshot
+        {
+            Version = "1",
+            Models = [model],
+            FabricGroups = [new FabricGroup { Code = "GRP1", PriceGroupCode = "PG1", Colors = [new FabricColor { Code = "CRIMSON", Name = "Crimson" }] }],
+            PriceGroups = [new PriceGroup { Code = "PG1", Kind = (FabricMaterialKind)99, RatePerMeter = 10m }],
+            Markets = [CreateMarket()]
+        };
+        var selection = new ElementSelection("SEAT", 1, new Dictionary<string, string>(), "CRIMSON");
+        var configuration = new ProductConfiguration("SOFA", [selection]);
+        var request = new PricingRequest(snapshot, configuration, new PricingContext(CreateMarket()));
+
+        // Act
+        var (resolved, errors) = ResolveStage.Run(request);
+
+        // Assert
+        Assert.Empty(resolved);
+        var error = Assert.Single(errors);
+        Assert.Equal(PricingErrorKind.UnknownMaterialKind, error.Kind);
+        Assert.Equal("SEAT:PG1", error.Subject);
+    }
+
+    // Item 4: a non-required FabricOption without a chosen colour keeps today's fabric-less pricing
+    // (sentinel price group, no error) - only a Required=true fabric option demands a colour.
+    [Fact]
+    public void Run_RequiredFabricOptionNullColor_ReturnsIncompleteConfigurationError()
+    {
+        // Arrange
+        var element = new Element
+        {
+            Code = "SEAT",
+            Name = "Seat",
+            Options = [new FabricOption { OptionDefinitionCode = "FABRIC", Required = true, FabricGroupCodes = ["GRP1"] }]
+        };
+        var model = new FurnitureModel { Code = "SOFA", Name = "Sofa", Elements = [element] };
+        var snapshot = new CatalogueSnapshot
+        {
+            Version = "1",
+            Models = [model],
+            FabricGroups = [new FabricGroup { Code = "GRP1", PriceGroupCode = "PG1", Colors = [new FabricColor { Code = "CRIMSON", Name = "Crimson" }] }],
+            PriceGroups = [new PriceGroup { Code = "PG1", Kind = FabricMaterialKind.Fabric, RatePerMeter = 10m }],
+            Markets = [CreateMarket()]
+        };
+        var selection = new ElementSelection("SEAT", 1, new Dictionary<string, string>(), null);
+        var configuration = new ProductConfiguration("SOFA", [selection]);
+        var request = new PricingRequest(snapshot, configuration, new PricingContext(CreateMarket()));
+
+        // Act
+        var (resolved, errors) = ResolveStage.Run(request);
+
+        // Assert
+        Assert.Empty(resolved);
+        var error = Assert.Single(errors);
+        Assert.Equal(PricingErrorKind.IncompleteConfiguration, error.Kind);
+        Assert.Equal("SEAT:FABRIC", error.Subject);
+    }
+
+    [Fact]
+    public void Run_NonRequiredFabricOptionNullColor_ResolvesWithSentinelPriceGroup()
+    {
+        // Arrange
+        var element = new Element
+        {
+            Code = "SEAT",
+            Name = "Seat",
+            Options = [new FabricOption { OptionDefinitionCode = "FABRIC", Required = false, FabricGroupCodes = ["GRP1"] }],
+            Bom = new BomDocument { Sections = [new BomSection { Kind = BomSectionKind.Misc, Lines = [new MiscBomLine { LineKey = "M1", MaterialCode = "GLUE" }] }] }
+        };
+        var model = new FurnitureModel { Code = "SOFA", Name = "Sofa", Elements = [element] };
+        var snapshot = new CatalogueSnapshot
+        {
+            Version = "1",
+            Models = [model],
+            FabricGroups = [new FabricGroup { Code = "GRP1", PriceGroupCode = "PG1", Colors = [new FabricColor { Code = "CRIMSON", Name = "Crimson" }] }],
+            PriceGroups = [new PriceGroup { Code = "PG1", Kind = FabricMaterialKind.Fabric, RatePerMeter = 10m }],
+            Markets = [CreateMarket()]
+        };
+        var selection = new ElementSelection("SEAT", 1, new Dictionary<string, string>(), null);
+        var configuration = new ProductConfiguration("SOFA", [selection]);
+        var request = new PricingRequest(snapshot, configuration, new PricingContext(CreateMarket()));
+
+        // Act
+        var (resolved, errors) = ResolveStage.Run(request);
+
+        // Assert
+        Assert.Empty(errors);
+        var resolvedElement = Assert.Single(resolved);
+        Assert.Equal("", resolvedElement.ResolvedPriceGroup.Code);
+        Assert.Equal(0m, resolvedElement.ResolvedPriceGroup.RatePerMeter);
+    }
+
     [Fact]
     public void Run_MarketNotInSnapshot_ReturnsUnknownMarketError()
     {

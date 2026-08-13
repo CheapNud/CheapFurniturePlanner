@@ -34,9 +34,9 @@ _Nothing blocking._
 
 - [x] (2026-07-28 → 2026-07-31) supplies phase: drop the retired OrderLines/SupplierReports supplier-ref string columns and delete the startup absorber once every db has migrated through the address release [plan]
 - [x] (2026-07-05 → 2026-08-13) variant code: validate option/element codes exclude '-' and ':' separators (Domain/Pricing/VariantCode.cs) [audit]
-- [ ] (2026-07-05) pricing: enforce MaterialKind match between fabric color's price group and price group kind (Domain/Pricing/Engine/ResolveStage.cs) [audit]
-- [ ] (2026-07-05) pricing: add subtotal-stage rounding coverage (no market/test currently enables RoundStage.Subtotal) [audit]
-- [ ] (2026-07-05) pricing: consult FabricOption.Required for optional fabric options (Domain/Pricing/Engine/ResolveStage.cs) [audit]
+- [x] (2026-07-05 → 2026-08-13) pricing: enforce MaterialKind match between fabric color's price group and price group kind (Domain/Pricing/Engine/ResolveStage.cs) [audit]
+- [x] (2026-07-05 → 2026-08-13) pricing: add subtotal-stage rounding coverage (no market/test currently enables RoundStage.Subtotal) [audit]
+- [x] (2026-07-05 → 2026-08-13) pricing: consult FabricOption.Required for optional fabric options (Domain/Pricing/Engine/ResolveStage.cs) [audit]
 - [x] (2026-07-05 → 2026-08-13) serialization: add property-order pin test asserting PriceBreakdown's canonical key sequence [audit]
 - [x] (2026-07-05 → 2026-08-13) pricing: substitution rules only rewrite foam and misc lines; extend or document (Domain/Pricing/Engine/ResolveStage.cs) [audit] — documented in place, no extension without a named need
 
