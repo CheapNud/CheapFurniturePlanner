@@ -43,8 +43,10 @@
                     <MudDatePicker Label="Departure date" Date="_departureDate" DateChanged="OnFieldsChangedDate" Disabled="@(!IsPlanning)" />
                     <MudTextField T="string" Label="Truck" Value="_truckName" ValueChanged="OnTruckChanged" Disabled="@(!IsPlanning)" />
                     <MudTextField T="string" Label="Driver" Value="_driverName" ValueChanged="OnDriverChanged" Disabled="@(!IsPlanning)" />
+                    @* Clearable is the one clear affordance (matches every other select in the app) -
+                       a manual "—" item here used to duplicate it, which read as two competing ways
+                       to clear the same field. *@
                     <MudSelect T="int?" Label="Region" Value="_regionId" ValueChanged="OnRegionChanged" Disabled="@(!IsPlanning)" Clearable="true">
-                        <MudSelectItem T="int?" Value="@((int?)null)">—</MudSelectItem>
                         @foreach (var region in _regions)
                         {
                             <MudSelectItem T="int?" Value="@((int?)region.Id)">@region.Code — @region.Name</MudSelectItem>

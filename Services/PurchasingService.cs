@@ -91,6 +91,34 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
         await db.SaveChangesAsync(ct);
     }
 
+    // Releases a whole group of units in one SaveChanges instead of the page looping
+    // ReleaseUnitAsync per unit (each with its own round trip). Same draft-only guard as
+    // ReleaseUnitAsync; retry-safe - a unit already released (SupplierOrderId already null) is
+    // skipped rather than treated as an error, so re-clicking Release after a partial failure
+    // doesn't blow up on the units that already went through.
+    public async Task ReleaseUnitsAsync(IReadOnlyCollection<int> unitIds, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        if (unitIds.Count == 0) { return; }
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var units = await db.ProductionUnits.Where(u => unitIds.Contains(u.Id)).ToListAsync(ct);
+        if (units.Count != unitIds.Count)
+        {
+            var missingId = unitIds.Except(units.Select(u => u.Id)).First();
+            throw new InvalidOperationException($"Unit {missingId} not found.");
+        }
+        var orderIds = units.Where(u => u.SupplierOrderId is not null).Select(u => u.SupplierOrderId!.Value).Distinct().ToList();
+        var orders = await db.SupplierOrders.Where(o => orderIds.Contains(o.Id)).ToDictionaryAsync(o => o.Id, ct);
+        foreach (var unit in units)
+        {
+            if (unit.SupplierOrderId is not int supplierOrderId) { continue; } // already released - retry-safe
+            var order = orders[supplierOrderId];
+            if (order.State != SupplierOrderState.Draft) { throw new InvalidOperationException($"Purchase order {order.PoNumber} is no longer a draft."); }
+            unit.SupplierOrderId = null;
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task DeleteOrderAsync(int supplierOrderId, CancellationToken ct = default)
     {
         await RequireAdminOrOfficeAsync();
@@ -250,6 +278,7 @@ public sealed class PurchasingService(IDbContextFactory<FurniturePlannerContext>
         var order = await db.SupplierOrders.FirstAsync(o => o.Id == supplierOrderId, ct);
         if (order.State != SupplierOrderState.Sent) { throw new InvalidOperationException($"Purchase order {order.PoNumber} has not been sent."); }
         if (order.SupplierId != announcement.SupplierId) { throw new InvalidOperationException($"Unit {unit.UnitCode} belongs to a different supplier."); }
+        if (unit.State == ProductionUnitState.Cancelled) { throw new InvalidOperationException($"Unit {unit.UnitCode} has been cancelled."); }
         if (unit.State is ProductionUnitState.Arrived or ProductionUnitState.Delivered) { throw new InvalidOperationException($"Unit {unit.UnitCode} has already arrived."); }
         if (unit.SupplierDeliveryId is not null) { throw new InvalidOperationException($"Unit {unit.UnitCode} is already on an announcement."); }
         unit.SupplierDeliveryId = supplierDeliveryId;

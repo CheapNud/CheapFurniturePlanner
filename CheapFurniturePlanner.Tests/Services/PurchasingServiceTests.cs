@@ -321,6 +321,57 @@ public class PurchasingServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.ReleaseUnitAsync(unitId2));
     }
 
+    // Counts SaveChangesAsync calls per DbContext instance - pins ReleaseUnitsAsync's "one save for
+    // the whole group" contract instead of the page's old per-unit ReleaseUnitAsync loop (one save
+    // per unit).
+    private sealed class SaveCountingContext(DbContextOptions<FurniturePlannerContext> options) : FurniturePlannerContext(options)
+    {
+        public int SaveCount;
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            SaveCount++;
+            return base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class SaveCountingContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public readonly List<SaveCountingContext> Created = [];
+        public FurniturePlannerContext CreateDbContext()
+        {
+            var context = new SaveCountingContext(options);
+            Created.Add(context);
+            return context;
+        }
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    [Fact]
+    public async Task ReleaseUnits_Group_OneSaveChanges_RetrySafe()
+    {
+        var (baseFactory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(baseFactory, "SUPA");
+        var (unitAId, _) = await SeedUnitAsync(baseFactory, "MODELA", lineSupplierId: supplierId);
+        var (unitBId, _) = await SeedUnitAsync(baseFactory, "MODELA", lineSupplierId: supplierId);
+        var (unitCId, _) = await SeedUnitAsync(baseFactory, "MODELA", lineSupplierId: supplierId);
+        var setupPurchasing = new PurchasingService(baseFactory, OfficeUser);
+        var sweep = await setupPurchasing.GenerateOrdersAsync();
+        var orderId = Assert.Single(sweep.SupplierOrderIds);
+
+        var countingFactory = new SaveCountingContextFactory(new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options);
+        var purchasing = new PurchasingService(countingFactory, OfficeUser);
+
+        await purchasing.ReleaseUnitsAsync([unitAId, unitBId, unitCId]);
+
+        Assert.Equal(1, countingFactory.Created.Sum(c => c.SaveCount));
+        var order = await setupPurchasing.GetOrderAsync(orderId);
+        Assert.Empty(order!.Units);
+
+        // Retry-safe: calling again with the same (now-released) ids must not throw.
+        await purchasing.ReleaseUnitsAsync([unitAId, unitBId, unitCId]);
+    }
+
     [Fact]
     public async Task DeleteOrder_OnlyEmptyDraft()
     {

@@ -287,6 +287,29 @@ public class ProductionDockTests
         Assert.DoesNotContain(units[0].UnitCode, failure.Message);
     }
 
+    // The single-laggard case above never exercised the comma join itself (nothing to join with
+    // one entry). Two-plus laggards must read as a proper comma-separated list.
+    [Fact]
+    public async Task Depart_WithMultipleExpectedAboard_JoinsLaggardCodesWithComma()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
+        var units = await SeedSpawnedUnitsAsync(factory, service, 3);
+        var trip = await service.CreateTripAsync();
+
+        await service.ArriveAsync(units[0].Id);
+        await service.AssignToTripAsync(trip.Id, units[0].Id);
+        await service.AssignToTripAsync(trip.Id, units[1].Id); // still Expected - plan-ahead
+        await service.AssignToTripAsync(trip.Id, units[2].Id); // still Expected - plan-ahead
+
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => service.DepartAsync(trip.Id));
+
+        Assert.Equal(
+            $"Trip {trip.TripCode} cannot depart - not yet arrived: {units[1].UnitCode}, {units[2].UnitCode}.",
+            failure.Message);
+    }
+
     [Fact]
     public async Task Depart_SetsDepartedOnly_UnitsStayArrivedInTransit()
     {
@@ -337,6 +360,32 @@ public class ProductionDockTests
 
         var newTrip = await service.CreateTripAsync();
         await service.AssignToTripAsync(newTrip.Id, units[0].Id);
+    }
+
+    // Regression: ConfirmFailedAsync used to overwrite ReviewNote outright, wiping any earlier
+    // receiving-time note. It must append instead so both survive.
+    [Fact]
+    public async Task ConfirmFailed_AppendsToExistingReviewNote()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
+        var units = await SeedSpawnedUnitsAsync(factory, service, 1);
+        await service.ArriveAsync(units[0].Id);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            (await db.ProductionUnits.SingleAsync(u => u.Id == units[0].Id)).ReviewNote = "wrong item scanned";
+            await db.SaveChangesAsync();
+        }
+        var trip = await service.CreateTripAsync();
+        await service.AssignToTripAsync(trip.Id, units[0].Id);
+        await service.DepartAsync(trip.Id);
+
+        await service.ConfirmFailedAsync(units[0].Id, "refused at door");
+
+        await using var checkDb = await factory.CreateDbContextAsync();
+        var reloaded = await checkDb.ProductionUnits.SingleAsync(u => u.Id == units[0].Id);
+        Assert.Equal("wrong item scanned / failure: refused at door", reloaded.ReviewNote);
     }
 
     [Fact]

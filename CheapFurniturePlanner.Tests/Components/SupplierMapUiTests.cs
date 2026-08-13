@@ -132,6 +132,37 @@ public class SupplierMapUiTests : TestContext
         await pendingClick;
     }
 
+    // Regression: a rejected Add (duplicate code) used to still call ReloadAsync even though
+    // nothing changed - a redundant round trip. The rejection must leave the map list exactly as
+    // it was (no duplicate row added) and clear the input either way.
+    [Fact]
+    public async Task ModelsDialog_AddDuplicateCode_RejectedWithoutCorruptingList()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        await parties.AddSupplierModelMapAsync(supplierId, "MODELA");
+        var dialogProvider = ConfigureServices(factory);
+
+        var cut = Render<PartiesPage>();
+        var dialog = OpenModelsDialog(cut, dialogProvider, out var pendingClick);
+        dialog.WaitForAssertion(() => Assert.Contains("MODELA", dialog.Markup));
+
+        var codeField = dialog.FindComponent<MudTextField<string>>();
+        await dialog.InvokeAsync(() => codeField.Instance.ValueChanged.InvokeAsync("MODELA"));
+        var addButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Add");
+        await dialog.InvokeAsync(() => addButton.Click());
+
+        var maps = await parties.SupplierModelMapsAsync(supplierId);
+        Assert.Single(maps);
+        dialog.WaitForAssertion(() => Assert.Equal(string.Empty, dialog.FindComponent<MudTextField<string>>().Instance.Value));
+
+        var closeButton = dialog.FindAll("button").Single(b => b.TextContent.Trim() == "Close");
+        await dialog.InvokeAsync(() => closeButton.Click());
+        await pendingClick;
+    }
+
     [Fact]
     public async Task ModelsDialog_Remove_ClearsMapping()
     {

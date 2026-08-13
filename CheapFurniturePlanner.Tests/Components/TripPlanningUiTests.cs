@@ -167,6 +167,25 @@ public class TripPlanningUiTests : TestContext
         Assert.NotEqual(northOrderId, regionlessOrderId);
     }
 
+    // Regression guard: the pool went plan-ahead (Expected units are assignable too, not just
+    // Arrived - see AssignableUnitsAsync), so its empty state must not claim "arrived" units are
+    // the only ones missing.
+    [Fact]
+    public async Task Pool_EmptyState_DoesNotClaimArrivedOnly()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
+        var trip = await units.CreateTripAsync();
+        ConfigureServices(factory, dock);
+
+        var cut = Render<TripPage>(p => p.Add(x => x.Id, trip.Id));
+
+        cut.WaitForAssertion(() => Assert.Contains("Nothing plannable right now", cut.Markup));
+        Assert.DoesNotContain("arrived", cut.Markup, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task Depart_DisabledWithExpectedAboard_TooltipNamesThem()
     {
@@ -245,5 +264,33 @@ public class TripPlanningUiTests : TestContext
 
         var completedTrip = await units.GetTripAsync(trip.Id);
         Assert.Equal(TripState.Completed, completedTrip!.State);
+    }
+
+    // Regression: the Region select used to render a manual "—" MudSelectItem *alongside*
+    // Clearable="true" - two competing ways to clear the same field (the ledgered "double-clear
+    // affordance"), unlike every other Clearable select in the app which relies on the X button
+    // alone. One region seeded should mean exactly one selectable item, not two.
+    [Fact]
+    public async Task RegionSelect_NoRedundantNullItem_ClearButtonAloneResetsRegion()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var dock = new FakeCurrentUser("dock-1", Roles.Warehouse);
+        var units = new ProductionUnitService(factory, dock, new PinnedCatalogueProvider(factory));
+        var regionId = await SeedRegionAsync(factory, "NORTH");
+        var trip = await units.CreateTripAsync();
+        await units.UpdateTripAsync(trip.Id, departureDate: null, truckName: null, driverName: null, regionId: regionId);
+        ConfigureServices(factory, dock);
+
+        var cut = Render<TripPage>(p => p.Add(x => x.Id, trip.Id));
+        cut.WaitForAssertion(() => Assert.Contains("NORTH", cut.Markup));
+
+        Assert.Single(cut.FindComponents<MudSelectItem<int?>>());
+
+        var clearButton = cut.Find("button[aria-label='Clear']");
+        await cut.InvokeAsync(() => clearButton.Click());
+
+        var reloaded = await units.GetTripAsync(trip.Id);
+        Assert.Null(reloaded!.RegionId);
     }
 }

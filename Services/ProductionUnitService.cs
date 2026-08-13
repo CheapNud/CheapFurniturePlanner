@@ -367,7 +367,10 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         var trip = await RequireDepartedTripAsync(db, unit, ct);
         unit.TripId = null;
         unit.LoadPosition = null;
-        unit.ReviewNote = reason.Trim();
+        // Append rather than overwrite - a unit can already carry a receiving-time review note
+        // (e.g. ArriveAsync flagging a mismatch), and a failed delivery must not erase it.
+        var trimmedReason = reason.Trim();
+        unit.ReviewNote = string.IsNullOrWhiteSpace(unit.ReviewNote) ? trimmedReason : $"{unit.ReviewNote} / failure: {trimmedReason}";
         trip.Units.Remove(unit);
         TryCompleteTrip(trip);
         await db.SaveChangesAsync(ct);
