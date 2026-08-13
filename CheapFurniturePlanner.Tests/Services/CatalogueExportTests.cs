@@ -119,6 +119,22 @@ public class CatalogueExportTests
         Assert.Equal(Encoding.UTF8.GetBytes(bundleJson), writtenBytes);
     }
 
+    // Export 1: GenerateCsvAsync formats every price with "0.00" - that format string always prints
+    // exactly 2 decimals, it does not itself round. The engine value only actually carries 2
+    // decimals because RoundStage.Final ran during pricing (FinalizeStages.RoundFinal). Pins that
+    // every market in the fixture the CSV tests round-trip actually enables RoundStage.Final, so the
+    // "0.00" format cannot silently diverge from the priced value today - see the comment on
+    // CatalogueExport.GenerateCsvAsync for what to do if a market ever needs to omit it.
+    [Fact]
+    public void FixtureMarkets_AllEnableRoundStageFinal()
+    {
+        var snapshot = LoadEmbeddedFjordSeed();
+
+        Assert.NotEmpty(snapshot.Markets);
+        Assert.All(snapshot.Markets, market => Assert.True(market.Rounding.Stages.HasFlag(RoundStage.Final),
+            $"Market '{market.Code}' does not enable RoundStage.Final - the CSV's \"0.00\" format would print an unrounded price."));
+    }
+
     [Fact]
     public async Task Generate_UnknownVersionThrows()
     {

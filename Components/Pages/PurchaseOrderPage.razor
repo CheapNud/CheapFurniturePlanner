@@ -259,7 +259,7 @@
     {
         try
         {
-            foreach (var unit in group.Units) { await Purchasing.ReleaseUnitAsync(unit.Id); }
+            await Purchasing.ReleaseUnitsAsync(group.Units.Select(u => u.Id).ToList());
             await ReloadAsync();
         }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }

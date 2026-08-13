@@ -308,6 +308,19 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
         await db.SaveChangesAsync(ct);
     }
 
+    // Addresses 4: the deliberate-clear counterpart to SetSupplierAddressAsync's upsert. Sets
+    // AddressId back to null - the Address row itself is left behind (same "leave it orphaned"
+    // idiom RemoveDeliveryAddressAsync uses), nothing else references a supplier's Address by row.
+    public async Task ClearSupplierAddressAsync(int supplierId, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var supplier = await db.Suppliers.FirstOrDefaultAsync(s => s.Id == supplierId, ct)
+            ?? throw new InvalidOperationException($"Supplier {supplierId} not found.");
+        supplier.AddressId = null;
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task SetConsumerPrimaryAddressAsync(int consumerId, Address addressValues, CancellationToken ct = default)
     {
         await RequireAdminOrOfficeAsync();
@@ -370,8 +383,19 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
         var siblings = await db.ConsumerDeliveryAddresses
             .Where(d => d.ConsumerId == entry.ConsumerId && d.Id != entry.Id).ToListAsync(ct);
         foreach (var sibling in siblings) { sibling.IsDefault = false; }
+        // HD1 backstop: the filtered unique index (ConsumerId) WHERE IsDefault = 1 checks per
+        // statement, not deferred to commit - EF's default SaveChanges batch order tracks entities
+        // by insertion order into the change tracker, and entry was loaded (and so tracked) before
+        // siblings, so a single combined SaveChanges could try to flip entry to true before the old
+        // default flips to false and trip the index mid-transaction. Saving the sibling clears first
+        // guarantees the old default is already gone before entry ever claims it. Wrapped in an
+        // explicit transaction (same pattern as ModelAuthoringService.DeleteAsync) so a crash between
+        // the two saves can't leave the consumer with zero defaults.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.SaveChangesAsync(ct);
         entry.IsDefault = true;
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     public async Task RemoveDeliveryAddressAsync(int deliveryAddressId, CancellationToken ct = default)

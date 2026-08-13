@@ -271,6 +271,27 @@ public class PurchasingFlowTests
         Assert.Equal(goodUnitId, Assert.Single(reloaded.Units).Id);
     }
 
+    // Regression: a Cancelled unit still carries its Sent-PO link (CancelForOrderAsync only clears
+    // the Draft link), so none of the existing guards caught it - it would attach silently and sit
+    // there inert (it can never arrive, so it never resolves). Must reject with a friendly error
+    // like every other terminal state.
+    [Fact]
+    public async Task AttachToAnnouncement_RejectsCancelledUnit()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "SUPA");
+        var sentPoId = await SeedSupplierOrderAsync(factory, supplierId, "PO-2026-0001", SupplierOrderState.Sent);
+        var (_, cancelledUnitId) = await SeedUnitAsync(factory, supplierOrderId: sentPoId, state: ProductionUnitState.Cancelled);
+        var purchasing = new PurchasingService(factory, OfficeUser);
+        var announcement = await purchasing.CreateAnnouncementAsync(supplierId, "DN-0001", null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => purchasing.AttachToAnnouncementAsync(announcement.Id, cancelledUnitId));
+
+        var reloaded = await purchasing.ListAnnouncementsAsync(supplierId, openOnly: false);
+        Assert.Empty(reloaded.Single(a => a.Id == announcement.Id).Units);
+    }
+
     [Fact]
     public async Task DetachFromAnnouncement_OnlyUnarrived()
     {

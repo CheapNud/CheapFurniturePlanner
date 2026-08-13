@@ -71,7 +71,11 @@
         }
         catch (InvalidOperationException ex)
         {
+            // Rejected - the map list didn't change, so reloading it would just be a redundant
+            // round trip. _newCode still clears below so the field doesn't keep the rejected code.
             Snackbar.Add(ex.Message, Severity.Error);
+            _newCode = string.Empty;
+            return;
         }
         _newCode = string.Empty;
         await ReloadAsync();
@@ -85,7 +89,9 @@
         }
         catch (InvalidOperationException ex)
         {
+            // Rejected - nothing changed, skip the redundant reload (see AddAsync).
             Snackbar.Add(ex.Message, Severity.Error);
+            return;
         }
         await ReloadAsync();
     }

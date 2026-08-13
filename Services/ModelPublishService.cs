@@ -80,8 +80,9 @@ public sealed class ModelPublishService(IDbContextFactory<FurniturePlannerContex
     // Loads the persisted authoring catalogue, keeps only the models whose state row is Active, and
     // publishes that Active-only snapshot. PublishAsync validates, persists, flips IsCurrent and
     // invalidates the source, so the published catalogue the planner reads only ever contains
-    // released models.
-    public async Task RepublishAsync(DateTime? effectiveDate = null, CancellationToken ct = default)
+    // released models. Returns the advisory warnings (e.g. colour-collision) so callers that want to
+    // surface them to a user can; callers that don't care can ignore the return value.
+    public async Task<IReadOnlyList<string>> RepublishAsync(DateTime? effectiveDate = null, CancellationToken ct = default)
     {
         var snapshot = await LoadActiveSnapshotAsync(ct);
         var result = await publish.PublishAsync(snapshot, effectiveDate);
@@ -89,5 +90,6 @@ public sealed class ModelPublishService(IDbContextFactory<FurniturePlannerContex
         {
             throw new InvalidOperationException("Republish failed validation: " + string.Join("; ", result.Errors));
         }
+        return result.Warnings;
     }
 }

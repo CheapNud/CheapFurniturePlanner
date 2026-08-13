@@ -28,6 +28,15 @@ public sealed class CatalogueExport(IDbContextFactory<FurniturePlannerContext> f
                 Escape(row.ModelCode), Escape(row.ModelName), Escape(row.CollectionCode ?? ""),
                 Escape(row.ElementCode), Escape(row.ElementName),
                 Escape(row.PriceGroupCode), Escape(row.MarketCode),
+                // Export 1: "0.00" always prints exactly 2 decimals regardless of the underlying
+                // value's real precision - it does NOT itself apply the engine's rounding. Row.Price
+                // only actually carries 2 decimals because FinalizeStages.RoundFinal ran during
+                // pricing, which only happens when the market's RoundingPolicy.Stages includes
+                // RoundStage.Final (CatalogueExportTests.FixtureMarkets_AllEnableRoundStageFinal
+                // pins that every fixture market does). A market whose Stages OMITS RoundStage.Final
+                // would still print a 2-decimal string here, silently masking un-rounded precision a
+                // partner re-derives differently - if that's ever a real requirement, round explicitly
+                // against the row's own market policy before formatting, don't rely on this format string.
                 row.Price.ToString("0.00", CultureInfo.InvariantCulture)));
         }
         return await WriteAsync($"catalogue-{version}.csv", Encoding.UTF8.GetBytes(csv.ToString()), ct);

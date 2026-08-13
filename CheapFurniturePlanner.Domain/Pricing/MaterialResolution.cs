@@ -17,7 +17,12 @@ internal static class MaterialResolution
         }
         if (selection.FabricColorCode is null)
         {
-            errors.Add(new PricingError(PricingErrorKind.IncompleteConfiguration, $"{element.Code}:{fabricOption.OptionDefinitionCode}"));
+            // A non-required fabric option left unset is a valid, fabric-less configuration - only
+            // a required one demands a colour.
+            if (fabricOption.Required)
+            {
+                errors.Add(new PricingError(PricingErrorKind.IncompleteConfiguration, $"{element.Code}:{fabricOption.OptionDefinitionCode}"));
+            }
             return new PriceGroup { Code = "", Kind = FabricMaterialKind.Fabric, RatePerMeter = 0m };
         }
         var group = fabricOption.FabricGroupCodes
@@ -32,6 +37,13 @@ internal static class MaterialResolution
         if (priceGroup is null)
         {
             errors.Add(new PricingError(PricingErrorKind.NoPriceGroupForMaterialKind, $"{element.Code}:{group.PriceGroupCode}"));
+            return new PriceGroup { Code = "", Kind = FabricMaterialKind.Fabric, RatePerMeter = 0m };
+        }
+        // The catalogue trusts whatever Kind value the source data carries; an out-of-range value
+        // (neither Fabric nor Leather) is a catalogue defect, not a silently-priced material.
+        if (!Enum.IsDefined(priceGroup.Kind))
+        {
+            errors.Add(new PricingError(PricingErrorKind.UnknownMaterialKind, $"{element.Code}:{priceGroup.Code}"));
             return new PriceGroup { Code = "", Kind = FabricMaterialKind.Fabric, RatePerMeter = 0m };
         }
         return priceGroup;

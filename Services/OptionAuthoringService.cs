@@ -15,8 +15,6 @@ namespace CheapFurniturePlanner.Services;
 // FabricOptions never affect it).
 public sealed class OptionAuthoringService(AuthoringCatalogueStore store, ModelPublishService publish, ArticleAuthoringService articles)
 {
-    private static readonly char[] ForbiddenCodeChars = [':', '-'];   // VariantCode delimiters
-
     public async Task AddOptionAsync(string modelCode, string elementCode, ProductOption option, CancellationToken ct = default)
     {
         var (model, element) = await LoadDraftElementAsync(modelCode, elementCode, ct);
@@ -279,6 +277,9 @@ public sealed class OptionAuthoringService(AuthoringCatalogueStore store, ModelP
     private static void RequireCode(string code, string label)
     {
         if (string.IsNullOrEmpty(code)) { throw new InvalidOperationException($"{label} is required."); }
-        if (code.IndexOfAny(ForbiddenCodeChars) >= 0) { throw new InvalidOperationException($"{label} cannot contain ':' or '-'."); }
+        if (VariantCode.FindReservedSeparator(code) is char offender)
+        {
+            throw new InvalidOperationException($"{label} '{code}' cannot contain '{offender}' - reserved as a variant-code separator.");
+        }
     }
 }

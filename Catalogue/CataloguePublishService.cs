@@ -1,5 +1,6 @@
 using CheapFurniturePlanner.Data;
 using CheapFurniturePlanner.Domain.Bom;
+using CheapFurniturePlanner.Domain.Fabrics;
 using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Domain.Serialization;
@@ -8,16 +9,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CheapFurniturePlanner.Catalogue;
 
-public record PublishResult(bool Success, IReadOnlyList<string> Errors, string? Version);
+// Warnings are advisory - they never block a publish (unlike Errors), so a snapshot with warnings
+// still reaches PublishedCatalogues and flips IsCurrent.
+public record PublishResult(bool Success, IReadOnlyList<string> Errors, string? Version, IReadOnlyList<string> Warnings);
 
 public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerContext> factory, ICatalogueSource source)
 {
     public async Task<PublishResult> PublishAsync(CatalogueSnapshot snapshot, DateTime? effectiveDate = null)
     {
         List<string> errors = Validate(snapshot);
+        var warnings = DetectWarnings(snapshot);
         if (errors.Count > 0)
         {
-            return new PublishResult(false, errors, null);
+            return new PublishResult(false, errors, null, warnings);
         }
 
         await using var ctx = await factory.CreateDbContextAsync();
@@ -48,7 +52,50 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
         await ctx.SaveChangesAsync();
         await tx.CommitAsync();
         source.Invalidate();
-        return new PublishResult(true, [], next);
+        return new PublishResult(true, [], next, warnings);
+    }
+
+    // Export 2: MaterialResolution.ResolveFabricPriceGroup picks the FIRST fabric group (in
+    // FabricGroupCodes order) whose Colors contain the selected colour code - if the same colour
+    // code lives in two groups the same fabric option references, that resolution is order-dependent
+    // and the "wrong" group's price group can win depending on authoring order. Not an error (the
+    // catalogue is still fully resolvable, just ambiguous) - flagged as a warning so authoring can
+    // decide whether the overlap is intentional.
+    private static List<string> DetectWarnings(CatalogueSnapshot snapshot)
+    {
+        List<string> warnings = [];
+        var fabricGroupsByCode = snapshot.FabricGroups.ToDictionary(g => g.Code);
+        foreach (var model in snapshot.Models)
+        {
+            foreach (var element in model.Elements)
+            {
+                foreach (var option in element.Options.OfType<FabricOption>())
+                {
+                    Dictionary<string, List<string>> groupsByColor = [];
+                    foreach (var groupCode in option.FabricGroupCodes)
+                    {
+                        if (!fabricGroupsByCode.TryGetValue(groupCode, out var group)) { continue; } // missing group is already an Error
+                        foreach (var color in group.Colors)
+                        {
+                            if (!groupsByColor.TryGetValue(color.Code, out var groups))
+                            {
+                                groups = [];
+                                groupsByColor[color.Code] = groups;
+                            }
+                            groups.Add(groupCode);
+                        }
+                    }
+                    foreach (var (colorCode, groups) in groupsByColor)
+                    {
+                        if (groups.Count > 1)
+                        {
+                            warnings.Add($"Element '{element.Code}' option '{option.OptionDefinitionCode}' colour '{colorCode}' appears in multiple fabric groups ({string.Join(", ", groups)}) - price group resolution picks the first one in authoring order.");
+                        }
+                    }
+                }
+            }
+        }
+        return warnings;
     }
 
     private static List<string> Validate(CatalogueSnapshot snapshot)
@@ -75,11 +122,32 @@ public sealed class CataloguePublishService(IDbContextFactory<FurniturePlannerCo
             }
             foreach (var element in model.Elements)
             {
+                // Item 1 backstop: ElementAuthoringService/OptionAuthoringService already reject these
+                // separators at the authoring seam, but a catalogue could still reach the store some
+                // other way - re-check here so publish is a real backstop, not decoration on that seam.
+                if (VariantCode.FindReservedSeparator(element.Code) is char elementOffender)
+                {
+                    errors.Add($"Element '{element.Code}' code cannot contain '{elementOffender}' (reserved as a variant-code separator).");
+                }
                 foreach (var option in element.Options)
                 {
                     if (option.OptionDefinitionCode == VariantCode.MaterialDefCode)
                     {
                         errors.Add($"Element '{element.Code}' uses reserved option code '{VariantCode.MaterialDefCode}'.");
+                    }
+                    if (VariantCode.FindReservedSeparator(option.OptionDefinitionCode) is char optionOffender)
+                    {
+                        errors.Add($"Element '{element.Code}' option '{option.OptionDefinitionCode}' cannot contain '{optionOffender}' (reserved as a variant-code separator).");
+                    }
+                    if (option is ChoiceOption choiceForSeparators)
+                    {
+                        foreach (var value in choiceForSeparators.Values)
+                        {
+                            if (VariantCode.FindReservedSeparator(value.OptionChoiceCode) is char choiceOffender)
+                            {
+                                errors.Add($"Element '{element.Code}' option '{option.OptionDefinitionCode}' choice '{value.OptionChoiceCode}' cannot contain '{choiceOffender}' (reserved as a variant-code separator).");
+                            }
+                        }
                     }
                     if (option is FabricOption fabricOption)
                     {

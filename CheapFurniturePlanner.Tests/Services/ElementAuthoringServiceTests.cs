@@ -97,8 +97,10 @@ public class ElementAuthoringServiceTests
             harness.Elements.AddElementAsync(Studio, new Element { Code = "SEAT", Name = "   " }));
     }
 
-    [Fact]
-    public async Task AddElementAsync_CodeWithHyphen_Throws()
+    [Theory]
+    [InlineData("BAD-CODE")]
+    [InlineData("BAD:CODE")]
+    public async Task AddElementAsync_CodeWithDelimiter_Throws(string code)
     {
         var (factory, conn) = NewFactory();
         using var _ = conn;
@@ -106,7 +108,7 @@ public class ElementAuthoringServiceTests
         var harness = await NewHarnessAsync(factory);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            harness.Elements.AddElementAsync(Studio, new Element { Code = "BAD-CODE", Name = "Bad" }));
+            harness.Elements.AddElementAsync(Studio, new Element { Code = code, Name = "Bad" }));
     }
 
     [Fact]

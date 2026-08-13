@@ -1,5 +1,6 @@
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Pricing;
 
 namespace CheapFurniturePlanner.Services;
 
@@ -106,6 +107,9 @@ public sealed class ElementAuthoringService(AuthoringCatalogueStore store, Model
     {
         if (string.IsNullOrEmpty(elementCode)) { throw new InvalidOperationException("Element code is required."); }
         if (string.IsNullOrEmpty(elementName)) { throw new InvalidOperationException("Element name is required."); }
-        if (elementCode.Contains('-')) { throw new InvalidOperationException("Element code cannot contain '-'."); }
+        if (VariantCode.FindReservedSeparator(elementCode) is char offender)
+        {
+            throw new InvalidOperationException($"Element code '{elementCode}' cannot contain '{offender}' - reserved as a variant-code separator.");
+        }
     }
 }

@@ -1,4 +1,5 @@
 using System.Linq;
+using AngleSharp.Dom;
 using Bunit;
 using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Components.Pages;
@@ -135,6 +136,55 @@ public class PartiesAddressUiTests : TestContext
         // guard at the service boundary (mirrors PartiesPageTests.DeleteSellerWithOrders_ThrowsAtService).
         await Assert.ThrowsAsync<InvalidOperationException>(() => parties.DeleteRegionAsync(region.Id));
         Assert.Contains(await parties.RegionsAsync(), r => r.Id == region.Id);
+    }
+
+    // Addresses 2: end-to-end region delete through the page (Delete button -> MudMessageBox
+    // confirm -> gone from the table), plus the blocked-when-used path driven the same way instead
+    // of only through the service (mirrors StudioElementsPageTests.DeleteElement_ThroughConfirm_RemovesIt).
+    [Fact]
+    public async Task RegionsTab_DeleteThroughConfirm_RemovesIt_BlockedWhenReferenced()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var parties = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var unreferenced = await parties.AddRegionAsync("SOUTH", "South");
+        var referenced = await parties.AddRegionAsync("NORTH", "North");
+        var seller = await parties.AddSellerAsync("Refs", 1m);
+        await parties.SetSellerAddressAsync(seller.Id, new Address { Street = "Main", Number = "1", PostalCode = "1000", City = "Springfield", RegionId = referenced.Id });
+
+        var dialogProvider = ConfigureServices(factory);
+        var cut = Render<PartiesPage>();
+        ActivateTab(cut, 3);
+        cut.WaitForAssertion(() => Assert.NotNull(FindRegionRowDeleteButton(cut, "SOUTH")));
+
+        // Unreferenced region: delete goes through end-to-end.
+        var deleteUnreferenced = FindRegionRowDeleteButton(cut, "SOUTH");
+        var pendingUnreferencedClick = cut.InvokeAsync(() => deleteUnreferenced.Click());
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<MudMessageBox>().Count > 0);
+        var confirmUnreferenced = dialogProvider.FindComponent<MudMessageBox>().FindAll("button").Single(b => b.TextContent.Trim() == "Delete");
+        await cut.InvokeAsync(() => confirmUnreferenced.Click());
+        await pendingUnreferencedClick;
+
+        Assert.DoesNotContain(await parties.RegionsAsync(), r => r.Id == unreferenced.Id);
+        cut.WaitForAssertion(() => Assert.Null(FindRegionRowDeleteButton(cut, "SOUTH")));
+
+        // Referenced region: delete is confirmed but the service guard rejects it, surfaced as a
+        // Snackbar - the row must still be there afterward.
+        var deleteReferenced = FindRegionRowDeleteButton(cut, "NORTH");
+        var pendingReferencedClick = cut.InvokeAsync(() => deleteReferenced.Click());
+        dialogProvider.WaitForState(() => dialogProvider.FindComponents<MudMessageBox>().Count > 0);
+        var confirmReferenced = dialogProvider.FindComponent<MudMessageBox>().FindAll("button").Single(b => b.TextContent.Trim() == "Delete");
+        await cut.InvokeAsync(() => confirmReferenced.Click());
+        await pendingReferencedClick;
+
+        Assert.Contains(await parties.RegionsAsync(), r => r.Id == referenced.Id);
+        cut.WaitForAssertion(() => Assert.NotNull(FindRegionRowDeleteButton(cut, "NORTH")));
+    }
+
+    private static IElement? FindRegionRowDeleteButton(IRenderedComponent<PartiesPage> cut, string regionCode)
+    {
+        var row = cut.FindAll("tbody tr").FirstOrDefault(tr => tr.QuerySelectorAll("td").Any(td => td.TextContent.Trim() == regionCode));
+        return row?.QuerySelectorAll("button").SingleOrDefault(b => b.TextContent.Trim() == "Delete");
     }
 
     // Regression: SellersAsync() used to omit the Address navigation, so the seller's Address

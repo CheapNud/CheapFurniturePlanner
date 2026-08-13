@@ -102,4 +102,50 @@ public class AddressSchemaTests
             Assert.Equal("LAMPCO", loadedLine.Supplier!.Code);
         }
     }
+
+    // HD1 backstop: the filtered unique index (ConsumerId) WHERE IsDefault = 1 rejects a second
+    // default row for the same consumer even when inserted directly (bypassing PartyService).
+    // The swap itself (PartyService.SetDefaultDeliveryAddressAsync's clear-siblings-then-set, now
+    // wrapped in a transaction) is covered end-to-end through the real service by
+    // PartyAddressTests.Book_FirstAutoDefaults_SetDefaultClears_RemoveGuards - a hand-rolled repro
+    // against the raw DbContext here would depend on EF's change-tracker flush order, which isn't
+    // a contract worth pinning in a schema test.
+    [Fact]
+    public async Task ConsumerDeliveryAddress_OneDefaultPerConsumer_IndexRejectsRawDuplicate()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+
+        int consumerId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var consumer = new Consumer { Name = "Jansen" };
+            db.Consumers.Add(consumer);
+            await db.SaveChangesAsync();
+            consumerId = consumer.Id;
+
+            db.ConsumerDeliveryAddresses.Add(new ConsumerDeliveryAddress
+            {
+                ConsumerId = consumerId,
+                Address = new Address { Street = "A St", Number = "1", PostalCode = "1000", City = "Springfield" },
+                Label = "Home",
+                IsDefault = true,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Raw duplicate default insert (bypassing PartyService's clear-siblings step) - rejected by
+        // the filtered unique index.
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.ConsumerDeliveryAddresses.Add(new ConsumerDeliveryAddress
+            {
+                ConsumerId = consumerId,
+                Address = new Address { Street = "B St", Number = "2", PostalCode = "2000", City = "Harborville" },
+                Label = "Work",
+                IsDefault = true,
+            });
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+    }
 }

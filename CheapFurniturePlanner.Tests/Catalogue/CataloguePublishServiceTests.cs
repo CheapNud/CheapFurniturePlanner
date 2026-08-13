@@ -700,6 +700,94 @@ public class CataloguePublishServiceTests
         }
     }
 
+    // Export 2: a colour code living in two fabric groups the same element's fabric option
+    // references is a price-group misattribution hazard (MaterialResolution.ResolveFabricPriceGroup
+    // picks the first matching group), but it's still fully resolvable - a WARNING, not a blocking
+    // Error, so Success stays true and the version still publishes.
+    [Fact]
+    public async Task PublishAsync_ColourCodeInTwoFabricGroups_WarnsButStillPublishes()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                PriceGroups = [new PriceGroup { Code = "PGA", RatePerMeter = 21.50m }, new PriceGroup { Code = "PGB", RatePerMeter = 30.00m }],
+                FabricGroups =
+                [
+                    new FabricGroup { Code = "AQUA", PriceGroupCode = "PGA", Colors = [new FabricColor { Code = "BLUE01", Name = "Aqua Blue" }] },
+                    new FabricGroup { Code = "OCEAN", PriceGroupCode = "PGB", Colors = [new FabricColor { Code = "BLUE01", Name = "Ocean Blue" }] },
+                ],
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Options = [new FabricOption { OptionDefinitionCode = "FABRIC", FabricGroupCodes = ["AQUA", "OCEAN"] }],
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.True(result.Success);
+            Assert.Empty(result.Errors);
+            Assert.NotNull(result.Version);
+            Assert.Contains(result.Warnings, w => w.Contains("BLUE01") && w.Contains("AQUA") && w.Contains("OCEAN"));
+        }
+    }
+
+    [Fact]
+    public async Task PublishAsync_ColourCodeUniquePerFabricGroup_NoWarning()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var source = new FakeCatalogueSource();
+            var service = new CataloguePublishService(factory, source);
+            var snapshot = new CatalogueSnapshot
+            {
+                Version = "irrelevant",
+                PriceGroups = [new PriceGroup { Code = "PGA", RatePerMeter = 21.50m }],
+                FabricGroups = [new FabricGroup { Code = "AQUA", PriceGroupCode = "PGA", Colors = [new FabricColor { Code = "BLUE01", Name = "Aqua Blue" }] }],
+                Models =
+                [
+                    new FurnitureModel
+                    {
+                        Code = "M1",
+                        Name = "Model One",
+                        Elements =
+                        [
+                            new Element
+                            {
+                                Code = "E1",
+                                Name = "Element One",
+                                Options = [new FabricOption { OptionDefinitionCode = "FABRIC", FabricGroupCodes = ["AQUA"] }],
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            var result = await service.PublishAsync(snapshot);
+
+            Assert.True(result.Success);
+            Assert.Empty(result.Warnings);
+        }
+    }
+
     [Fact]
     public async Task PublishAsync_EmbeddedFjordSeed_PublishesSuccessfully()
     {

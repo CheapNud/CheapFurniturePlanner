@@ -48,7 +48,7 @@ public sealed class PriceVersionService(IDbContextFactory<FurniturePlannerContex
         return workingSignature != ContentSignature(published);
     }
 
-    public Task PublishNewVersionAsync(DateTime effectiveDate, CancellationToken ct = default)
+    public Task<IReadOnlyList<string>> PublishNewVersionAsync(DateTime effectiveDate, CancellationToken ct = default)
         => publish.RepublishAsync(effectiveDate, ct);
 
     private static string ContentSignature(CatalogueSnapshot snapshot)

@@ -13,7 +13,11 @@ namespace CheapFurniturePlanner.Services;
 public sealed record MaterialForecastRow(MaterialKind Kind, string Code, string? HardnessCode, string DisplayName,
     decimal GrossNeed, decimal InStock, decimal StockAfterNeeds, decimal OnOrder, decimal SuggestedToOrder);
 
-public sealed record MaterialForecast(IReadOnlyList<MaterialForecastRow> Rows, IReadOnlyList<string> UnresolvedModelCodes);
+// UnpinnedUnitCodes: in-house-resolved units whose order carries no PinnedCatalogueVersion, so
+// there's no snapshot to resolve MaterialRequirements against - skipped from Rows the same way
+// FinishAsync would throw if asked to backflush one (Materials 1: previously silent, only visible
+// by a gross-need number that quietly excluded them).
+public sealed record MaterialForecast(IReadOnlyList<MaterialForecastRow> Rows, IReadOnlyList<string> UnresolvedModelCodes, IReadOnlyList<string> UnpinnedUnitCodes);
 
 // The in-house counterpart to PurchasingService's supplier sweep: instead of grouping Expected
 // units by external supplier, it sums their pinned-snapshot material needs (MaterialRequirements,
@@ -33,10 +37,16 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
 
         var modelCodeToSupplierId = await db.SupplierModelMaps.AsNoTracking().ToDictionaryAsync(m => m.ModelCode, m => m.SupplierId, ct);
 
+        // Materials 2: a StandaloneArticle line has no ModelCode/BOM to resolve material needs
+        // against - excluded here at the join, same as PurchasingService's sweep excludes it from
+        // material grouping. Unlike that sweep, this forecast never lists a standalone-unresolved
+        // unit in UnresolvedModelCodes either (PurchasingService.SweepResult does, via AssignedCode
+        // fallback) - standalone units are simply out of scope for a material forecast, not
+        // unresolved (the page carries the same note next to the unresolved warning).
         var candidates = await db.ProductionUnits.AsNoTracking()
             .Where(u => u.State == ProductionUnitState.Expected)
             .Join(db.OrderLines.AsNoTracking().Where(l => l.Kind == OrderLineKind.ConfiguredElement), u => u.OrderLineId, l => l.Id,
-                (u, l) => new { l.SupplierId, l.ModelCode, l.ElementCode, l.SelectionsJson, l.FabricColorCode, l.OrderId })
+                (u, l) => new { u.UnitCode, l.SupplierId, l.ModelCode, l.ElementCode, l.SelectionsJson, l.FabricColorCode, l.OrderId })
             .ToListAsync(ct);
 
         var orderIds = candidates.Select(c => c.OrderId).Distinct().ToList();
@@ -44,7 +54,7 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
             .ToDictionaryAsync(o => o.Id, o => o.PinnedCatalogueVersion, ct);
 
         var unresolvedModelCodes = new SortedSet<string>(StringComparer.Ordinal);
-        var inHouse = new List<(string ModelCode, string ElementCode, string SelectionsJson, string? FabricColorCode, string? PinnedVersion)>();
+        var inHouse = new List<(string UnitCode, string ModelCode, string ElementCode, string SelectionsJson, string? FabricColorCode, string? PinnedVersion)>();
         foreach (var candidate in candidates)
         {
             if (candidate.SupplierId is not null) { continue; } // dropship-pinned - someone else's problem
@@ -55,15 +65,24 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
                 continue;
             }
             if (mappedSupplierId is not null) { continue; } // mapped to an external supplier - excluded silently
-            inHouse.Add((candidate.ModelCode, candidate.ElementCode!, candidate.SelectionsJson, candidate.FabricColorCode,
+            inHouse.Add((candidate.UnitCode, candidate.ModelCode, candidate.ElementCode!, candidate.SelectionsJson, candidate.FabricColorCode,
                 pinnedVersions.GetValueOrDefault(candidate.OrderId)));
         }
 
+        // Materials 1: a unit whose order carries no pinned catalogue version has no snapshot to
+        // resolve MaterialRequirements against - the same seam ProductionUnitService.FinishAsync
+        // would hit (ApplyBackflushAsync fails hard there instead of skipping). Surfaced here as its
+        // own list rather than thrown, since a forecast sweep must keep going for every OTHER unit.
+        var unpinnedUnitCodes = new SortedSet<string>(StringComparer.Ordinal);
         var needs = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), decimal>();
         var displayNames = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), string>();
         foreach (var group in inHouse.GroupBy(c => c.PinnedVersion))
         {
-            if (group.Key is null) { continue; } // no pinned version to resolve against, guard only
+            if (group.Key is null)
+            {
+                foreach (var unit in group) { unpinnedUnitCodes.Add(unit.UnitCode); }
+                continue;
+            }
             var snapshot = await pinnedCatalogueProvider.GetAsync(group.Key, ct);
             foreach (var unit in group)
             {
@@ -98,7 +117,7 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
         })
         .OrderBy(r => r.Kind).ThenBy(r => r.Code, StringComparer.Ordinal).ToList();
 
-        return new MaterialForecast(rows, unresolvedModelCodes.ToList());
+        return new MaterialForecast(rows, unresolvedModelCodes.ToList(), unpinnedUnitCodes.ToList());
     }
 
     // Read-only, like MaterialOrderService.ListAsync/GetAsync - no role check, the /materials page

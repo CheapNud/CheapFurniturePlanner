@@ -1,6 +1,8 @@
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
+using CheapFurniturePlanner.Domain.Options;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
 using Microsoft.Data.Sqlite;
@@ -165,5 +167,50 @@ public class AuthoringPublishIntegrationTests
 
         Assert.False(result.Success);
         Assert.Contains(result.Errors, e => e.Contains("DROP-X"));
+    }
+
+    // Item 1 backstop: ElementAuthoringService/OptionAuthoringService already reject '-'/':' at the
+    // authoring seam, but a catalogue could still reach the store some other way (direct store write,
+    // future import path). Bypasses both authoring services entirely - writes straight to the
+    // AuthoringCatalogueStore document - then walks the exact store.LoadAsync() read RepublishAsync
+    // uses, proving publish validation is a real backstop, not just decoration on the authoring seam.
+    [Fact]
+    public async Task Validate_RejectsElementAndOptionCodesWithReservedSeparators_WrittenDirectlyToStore()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var store = new AuthoringCatalogueStore(factory);
+        await store.SeedFromAsync(SeedCatalogue.Load());
+
+        var model = (await store.LoadModelAsync("FJORD"))!;
+        model.Elements.Add(new Element
+        {
+            Code = "BAD:ELEM",
+            Name = "Bad Element",
+            Options =
+            [
+                new ChoiceOption
+                {
+                    OptionDefinitionCode = "BAD:OPT",
+                    Values = [new ProductOptionValue { OptionChoiceCode = "BAD:VAL" }]
+                }
+            ],
+            Bom = new BomDocument
+            {
+                Sections = [new BomSection { Kind = BomSectionKind.Misc, Lines = [new MiscBomLine { LineKey = "X", MaterialCode = "GLUE" }] }]
+            }
+        });
+        await store.SaveModelAsync(model);
+
+        var snapshot = await store.LoadAsync();
+        var source = new DbCatalogueSource(factory);
+        var publish = new CataloguePublishService(factory, source);
+
+        var result = await publish.PublishAsync(snapshot);
+
+        Assert.False(result.Success);
+        Assert.Contains(result.Errors, e => e.Contains("BAD:ELEM"));
+        Assert.Contains(result.Errors, e => e.Contains("BAD:OPT"));
+        Assert.Contains(result.Errors, e => e.Contains("BAD:VAL"));
     }
 }
