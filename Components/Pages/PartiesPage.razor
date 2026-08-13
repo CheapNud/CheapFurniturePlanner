@@ -249,7 +249,7 @@
 
     private async Task EditSellerAddressAsync(Seller existing)
     {
-        var parameters = new DialogParameters<SellerAddressDialog> { { d => d.Address, existing.Address ?? NewBlankAddress() }, { d => d.Regions, _regions } };
+        var parameters = new DialogParameters<SellerAddressDialog> { { d => d.Address, existing.Address ?? AddressEditor.NewBlankAddress() }, { d => d.Regions, _regions } };
         var dialogRef = await DialogService.ShowAsync<SellerAddressDialog>($"{existing.Name} — address", parameters);
         var dialogResult = await dialogRef.Result;
         if (dialogResult is null || dialogResult.Canceled || dialogResult.Data is not Address address) { return; }
@@ -329,6 +329,8 @@
         try
         {
             var added = await PartyService.AddSupplierAsync(supplier.Code, supplier.Name);
+            // A brand-new supplier never has an address to clear - a null Address here just means
+            // the dialog's "Add address" affordance was never used, same as blank fields.
             if (!string.IsNullOrWhiteSpace(supplier.Address?.Street) || !string.IsNullOrWhiteSpace(supplier.Address?.City))
             {
                 await PartyService.SetSupplierAddressAsync(added.Id, supplier.Address!);
@@ -350,9 +352,16 @@
         try
         {
             await PartyService.UpdateSupplierAsync(existing.Id, supplier.Code, supplier.Name);
-            if (!string.IsNullOrWhiteSpace(supplier.Address?.Street) || !string.IsNullOrWhiteSpace(supplier.Address?.City))
+            // Addresses 4: SupplierDialog returns Address == null only for a deliberate "Clear
+            // address" click (never for blank-but-untouched fields, which stay a real object) - that
+            // is the one case that must actually wipe the stored address rather than leave it alone.
+            if (supplier.Address is null)
             {
-                await PartyService.SetSupplierAddressAsync(existing.Id, supplier.Address!);
+                if (existing.Address is not null) { await PartyService.ClearSupplierAddressAsync(existing.Id); }
+            }
+            else if (!string.IsNullOrWhiteSpace(supplier.Address.Street) || !string.IsNullOrWhiteSpace(supplier.Address.City))
+            {
+                await PartyService.SetSupplierAddressAsync(existing.Id, supplier.Address);
             }
         }
         catch (InvalidOperationException ex)
@@ -434,6 +443,4 @@
         }
         await ReloadAsync();
     }
-
-    private static Address NewBlankAddress() => new() { Street = "", Number = "", PostalCode = "", City = "" };
 }

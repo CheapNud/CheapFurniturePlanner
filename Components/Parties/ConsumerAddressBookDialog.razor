@@ -79,7 +79,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _primaryAddress = Consumer.PrimaryAddress ?? NewBlankAddress();
+        _primaryAddress = Consumer.PrimaryAddress ?? AddressEditor.NewBlankAddress();
         await ReloadBookAsync();
     }
 
@@ -102,7 +102,7 @@
         _formOpen = true;
         _editingId = null;
         _label = string.Empty;
-        _entryAddress = NewBlankAddress();
+        _entryAddress = AddressEditor.NewBlankAddress();
     }
 
     private void StartEdit(ConsumerDeliveryAddress entry)
@@ -110,7 +110,7 @@
         _formOpen = true;
         _editingId = entry.Id;
         _label = entry.Label;
-        _entryAddress = entry.Address ?? NewBlankAddress();
+        _entryAddress = entry.Address ?? AddressEditor.NewBlankAddress();
     }
 
     private async Task SubmitEntryAsync()
@@ -159,6 +159,4 @@
         }
         await ReloadBookAsync();
     }
-
-    private static Address NewBlankAddress() => new() { Street = "", Number = "", PostalCode = "", City = "" };
 }

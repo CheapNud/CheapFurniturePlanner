@@ -257,7 +257,14 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         modelBuilder.Entity<Order>().HasOne(o => o.Firm).WithMany().HasForeignKey(o => o.FirmId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ConsumerDeliveryAddress>(entity =>
         {
-            entity.HasIndex(d => d.ConsumerId);
+            // HD1 backstop: PartyService.SetDefaultDeliveryAddressAsync already enforces "one default
+            // per consumer" in code (clear siblings, then set), but a filtered unique index makes the
+            // invariant hold even against a raw insert that bypasses the service. SQLite's filtered-index
+            // syntax takes a plain boolean SQL predicate over the stored column value (IsDefault is
+            // mapped as an INTEGER 0/1). Replaces the old plain ConsumerId index - EF Core keys index
+            // builders by property set, so a second HasIndex(d => d.ConsumerId) call reconfigures the
+            // same index rather than adding a distinct one.
+            entity.HasIndex(d => d.ConsumerId).IsUnique().HasFilter("IsDefault = 1").HasDatabaseName("IX_ConsumerDeliveryAddresses_ConsumerId_OneDefault");
             entity.HasOne<Consumer>().WithMany().HasForeignKey(d => d.ConsumerId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(d => d.Address).WithMany().HasForeignKey(d => d.AddressId).OnDelete(DeleteBehavior.Restrict);
         });

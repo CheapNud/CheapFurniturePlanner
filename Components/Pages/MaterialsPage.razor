@@ -30,9 +30,15 @@
                 }
             </MudStack>
 
+            <MudText Typo="Typo.body2" Class="mb-2">Standalone article units are out of scope for this forecast - only configured-element lines resolve material needs.</MudText>
+
             @if (_unresolvedModelCodes.Count > 0)
             {
                 <MudAlert Severity="Severity.Warning" Class="mb-4">Unresolved: @string.Join(", ", _unresolvedModelCodes)</MudAlert>
+            }
+            @if (_unpinnedUnitCodes.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-4">Skipped (no pinned catalogue version): @string.Join(", ", _unpinnedUnitCodes)</MudAlert>
             }
 
             @if (_forecast is null)
@@ -140,6 +146,7 @@
     private MaterialForecast? _forecast;
     private List<ForecastRowState> _forecastRows = [];
     private List<string> _unresolvedModelCodes = [];
+    private List<string> _unpinnedUnitCodes = [];
     private List<MaterialStock> _stock = [];
     private List<MaterialOrder> _orders = [];
 
@@ -168,6 +175,7 @@
             _forecast = await MaterialNeeds.ComputeAsync();
             _forecastRows = _forecast.Rows.Select(r => new ForecastRowState { Row = r, ToOrder = r.SuggestedToOrder }).ToList();
             _unresolvedModelCodes = _forecast.UnresolvedModelCodes.ToList();
+            _unpinnedUnitCodes = _forecast.UnpinnedUnitCodes.ToList();
         }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }

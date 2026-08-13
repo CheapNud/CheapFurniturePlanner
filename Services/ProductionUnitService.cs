@@ -194,7 +194,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         // supplier and remapped in-house - finishing it here would backflush materials never used
         // and strand the still-Sent PO it's linked to, so a supplier-linked unit must go through the
         // dock (ArriveAsync/ArriveByCodeAsync) instead, whatever the current map says.
-        if (unit.SupplierOrderId is not null) { throw new InvalidOperationException($"Unit {unit.UnitCode} was ordered from a supplier - receive it instead."); }
+        if (unit.SupplierOrderId is not null) { throw new InvalidOperationException($"Unit {unit.UnitCode} was ordered from a supplier - receive it instead, or unmark the model as in-house if it was remapped by mistake."); }
         if (!await IsInHouseUnitAsync(db, unit, ct)) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not marked in-house."); }
         Arrive(unit);
         await ApplyBackflushAsync(db, unit, -1m, ct);

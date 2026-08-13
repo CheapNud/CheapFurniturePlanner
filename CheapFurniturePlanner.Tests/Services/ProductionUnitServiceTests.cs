@@ -539,6 +539,10 @@ public class ProductionUnitServiceTests
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.FinishAsync(unitId));
         Assert.Contains("ordered from a supplier", ex.Message);
+        // Materials 3: the recovery this message points at is unmarking the model, not just
+        // receiving - this specific unit still has to go through the dock regardless (its own
+        // SupplierOrderId doesn't change), but the wording should name the actual root-cause fix.
+        Assert.Contains("unmark", ex.Message, StringComparison.OrdinalIgnoreCase);
 
         await using var check = await factory.CreateDbContextAsync();
         Assert.Equal(ProductionUnitState.Expected, (await check.ProductionUnits.SingleAsync(u => u.Id == unitId)).State);

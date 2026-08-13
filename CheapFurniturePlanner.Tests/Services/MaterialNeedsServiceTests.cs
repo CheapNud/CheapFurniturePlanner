@@ -65,7 +65,7 @@ public class MaterialNeedsServiceTests
     // Seeds a Seller/Consumer/Placed order pinned to the given catalogue version, with one
     // configured line - the minimal chain a material-needs candidate needs.
     private static async Task<(int OrderId, int LineId)> SeedOrderLineAsync(IDbContextFactory<FurniturePlannerContext> factory,
-        string modelCode, string elementCode, string pinnedVersion, int? lineSupplierId = null, string fabricColorCode = "AQUA-BLUE")
+        string modelCode, string elementCode, string? pinnedVersion, int? lineSupplierId = null, string fabricColorCode = "AQUA-BLUE")
     {
         await using var db = await factory.CreateDbContextAsync();
         var seller = new Seller { Name = "Shop", Multiplier = 1m };
@@ -239,6 +239,34 @@ public class MaterialNeedsServiceTests
 
         var fabricCodes = forecast.Rows.Where(r => r.Kind == MaterialKind.Fabric).Select(r => r.Code).ToArray();
         Assert.Equal(["AQUA-BLUE", "AQUA-GREEN"], fabricCodes);
+    }
+
+    // Materials 1: previously silent (the group with a null PinnedVersion key was just skipped in
+    // the aggregation loop) - now surfaced as its own list, mirroring UnresolvedModelCodes, so an
+    // in-house unit that can't resolve material needs yet doesn't just vanish from the forecast.
+    [Fact]
+    public async Task ComputeAsync_UnpinnedInHouseUnit_SurfacedInUnpinnedUnitCodes_NotUnresolved()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            await db.SaveChangesAsync();
+        }
+
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", pinnedVersion: null);
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var unitCode = $"ORD-{orderId}-1";
+
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        Assert.Equal([unitCode], forecast.UnpinnedUnitCodes);
+        Assert.Empty(forecast.UnresolvedModelCodes);
+        Assert.Empty(forecast.Rows);
     }
 
     [Fact]

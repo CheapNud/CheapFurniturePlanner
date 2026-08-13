@@ -102,4 +102,72 @@ public class AddressSchemaTests
             Assert.Equal("LAMPCO", loadedLine.Supplier!.Code);
         }
     }
+
+    // HD1 backstop: the filtered unique index (ConsumerId) WHERE IsDefault = 1 rejects a second
+    // default row for the same consumer even when inserted directly (bypassing PartyService), while
+    // PartyService.SetDefaultDeliveryAddressAsync's clear-siblings-then-set swap (same SaveChanges
+    // call) keeps working - the index only ever sees one row with IsDefault = 1 per consumer at
+    // commit time, whichever order EF flushes the two updates in.
+    [Fact]
+    public async Task ConsumerDeliveryAddress_OneDefaultPerConsumer_IndexRejectsRawDuplicateButSwapSucceeds()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+
+        int consumerId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var consumer = new Consumer { Name = "Jansen" };
+            db.Consumers.Add(consumer);
+            await db.SaveChangesAsync();
+            consumerId = consumer.Id;
+
+            db.ConsumerDeliveryAddresses.Add(new ConsumerDeliveryAddress
+            {
+                ConsumerId = consumerId,
+                Address = new Address { Street = "A St", Number = "1", PostalCode = "1000", City = "Springfield" },
+                Label = "Home",
+                IsDefault = true,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Raw duplicate default insert (bypassing PartyService's clear-siblings step) - rejected by
+        // the filtered unique index.
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.ConsumerDeliveryAddresses.Add(new ConsumerDeliveryAddress
+            {
+                ConsumerId = consumerId,
+                Address = new Address { Street = "B St", Number = "2", PostalCode = "2000", City = "Harborville" },
+                Label = "Work",
+                IsDefault = true,
+            });
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+
+        // The service's swap (clear old default, set new default, one SaveChanges) still succeeds -
+        // the index sees only the post-swap state at commit.
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var entries = await db.ConsumerDeliveryAddresses.Where(d => d.ConsumerId == consumerId).ToListAsync();
+            var oldDefault = entries.Single(d => d.IsDefault);
+            var newEntry = new ConsumerDeliveryAddress
+            {
+                ConsumerId = consumerId,
+                Address = new Address { Street = "B St", Number = "2", PostalCode = "2000", City = "Harborville" },
+                Label = "Work",
+                IsDefault = false,
+            };
+            db.ConsumerDeliveryAddresses.Add(newEntry);
+            await db.SaveChangesAsync();
+
+            oldDefault.IsDefault = false;
+            newEntry.IsDefault = true;
+            await db.SaveChangesAsync();
+
+            Assert.False((await db.ConsumerDeliveryAddresses.AsNoTracking().FirstAsync(d => d.Id == oldDefault.Id)).IsDefault);
+            Assert.True((await db.ConsumerDeliveryAddresses.AsNoTracking().FirstAsync(d => d.Id == newEntry.Id)).IsDefault);
+        }
+    }
 }

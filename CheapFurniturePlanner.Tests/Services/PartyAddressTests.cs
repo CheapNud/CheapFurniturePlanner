@@ -233,6 +233,27 @@ public class PartyAddressTests
         Assert.Equal("Church Road", reloaded.PrimaryAddress!.Street);
     }
 
+    // Addresses 4: SetSupplierAddressAsync only ever upserts - there was no path back to "no
+    // address". ClearSupplierAddressAsync sets AddressId to null; the orphaned Address row is left
+    // behind (RemoveDeliveryAddressAsync idiom), nothing else references a supplier's address by row.
+    [Fact]
+    public async Task ClearSupplierAddressAsync_SetsAddressIdNull()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var service = NewService(factory);
+
+        var supplier = await service.AddSupplierAsync("SUP1", "Supplier One");
+        await service.SetSupplierAddressAsync(supplier.Id, new Address { Street = "Main St", Number = "1", PostalCode = "1000", City = "Springfield" });
+        Assert.NotNull(Assert.Single(await service.SuppliersAsync(), s => s.Id == supplier.Id).Address);
+
+        await service.ClearSupplierAddressAsync(supplier.Id);
+
+        var reloaded = Assert.Single(await service.SuppliersAsync(), s => s.Id == supplier.Id);
+        Assert.Null(reloaded.AddressId);
+        Assert.Null(reloaded.Address);
+    }
+
     [Fact]
     public async Task Guards_MechanicRejected()
     {

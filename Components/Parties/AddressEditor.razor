@@ -67,5 +67,8 @@
         return ValueChanged.InvokeAsync(_working);
     }
 
-    private static Address NewBlankAddress() => new() { Street = "", Number = "", PostalCode = "", City = "" };
+    // The one shared home for the "blank address" default - was duplicated per party dialog
+    // (SupplierDialog, ConsumerAddressBookDialog, PartiesPage); every caller that needs a fresh,
+    // unsaved Address to seed a dialog or a not-yet-existing navigation now calls this instead.
+    public static Address NewBlankAddress() => new() { Street = "", Number = "", PostalCode = "", City = "" };
 }

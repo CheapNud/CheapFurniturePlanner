@@ -166,6 +166,65 @@ public class CatalogueFlattenerTests
         Assert.Equal(expected.Breakdown!.Elements[0].ElementTotal, row.Price);
     }
 
+    // Export 3: documents CatalogueFlattener.DefaultSelections' own stated assumption ("visibility
+    // triggers resolve before their dependents" - mirrors VariantEnumerator's identical comment).
+    // HEAD (dependent, DisplayIndex 0) is gated on MECH (trigger, DisplayIndex 1) - BACKWARDS from
+    // that assumption. The single DisplayIndex-order pass evaluates HEAD's visibility before MECH's
+    // default has been recorded, so HEAD reads as hidden and its own default (with a surcharge) is
+    // silently excluded from the representative configuration - even though a full, order-independent
+    // evaluation (MECH's actual default satisfies HEAD's trigger) would include it. Pins TODAY's
+    // behavior; the resolver's fixed-point loop (re-evaluate visibility until it stops changing) is
+    // the named upgrade path if this ever needs to be order-independent, not a fix here.
+    [Fact]
+    public void Flatten_DefaultWalk_AssumesVisibilityTriggersPrecedeDependentsInDisplayIndexOrder()
+    {
+        var element = LaborOnlyElement("SEAT",
+        [
+            new ChoiceOption
+            {
+                OptionDefinitionCode = "HEAD",
+                DisplayIndex = 0,
+                Required = false,
+                VisibilityRules = [new VisibilityRule("MECH", "RECLINE", "HEAD")],
+                Values = [new ProductOptionValue { OptionChoiceCode = "HS1", DisplayIndex = 0, IsDefault = true }],
+            },
+            new ChoiceOption
+            {
+                OptionDefinitionCode = "MECH",
+                DisplayIndex = 1,
+                Required = false,
+                Values = [new ProductOptionValue { OptionChoiceCode = "RECLINE", DisplayIndex = 0, IsDefault = true }],
+            },
+        ]);
+        var market = new MarketParameters("EU", TransportRatePerUnit: 3.00m, FixedCostPercent: 10m, MarkupSteps: [], Rounding: Rounding);
+        var snapshot = new CatalogueSnapshot
+        {
+            Version = "1",
+            ContentHash = "HASH1",
+            Models = [new FurnitureModel { Code = "SOFA", Name = "Sofa", Elements = [element] }],
+            Operations = [new Operation("OP1", "Sew", 5.00m)],
+            Markets = [market],
+            ChoiceSurcharges = [new ChoiceSurcharge("HS1", null, 18.00m)],
+        };
+
+        var rows = CatalogueFlattener.Flatten(snapshot);
+        var row = Assert.Single(rows);
+
+        // What the flattener actually priced: HEAD excluded (its visibility read false mid-walk).
+        var withoutHead = PricingEngine.Calculate(new PricingRequest(snapshot,
+            new ProductConfiguration("SOFA", [new ElementSelection(element.Code, 1, new Dictionary<string, string> { ["MECH"] = "RECLINE" }, null)]),
+            new PricingContext(market, 1m)));
+        // What a full, order-independent evaluation would price: both defaults applied, HS1's surcharge included.
+        var withHead = PricingEngine.Calculate(new PricingRequest(snapshot,
+            new ProductConfiguration("SOFA", [new ElementSelection(element.Code, 1, new Dictionary<string, string> { ["MECH"] = "RECLINE", ["HEAD"] = "HS1" }, null)]),
+            new PricingContext(market, 1m)));
+
+        Assert.True(withoutHead.IsSuccess);
+        Assert.True(withHead.IsSuccess);
+        Assert.NotEqual(withHead.Breakdown!.Elements[0].ElementTotal, withoutHead.Breakdown!.Elements[0].ElementTotal);
+        Assert.Equal(withoutHead.Breakdown!.Elements[0].ElementTotal, row.Price);
+    }
+
     [Fact]
     public void Flatten_ElementWithoutFabricOption_YieldsOneEmptyPriceGroupRowPerMarket()
     {

@@ -3,7 +3,24 @@
         <MudStack Spacing="3">
             <MudTextField T="string" Label="Code" @bind-Value="_code" Required="true" />
             <MudTextField T="string" Label="Name" @bind-Value="_name" Required="true" />
-            <AddressEditor Value="_address" ValueChanged="@(a => _address = a)" Regions="Regions" />
+            @if (_address is not null)
+            {
+                <AddressEditor Value="_address" ValueChanged="@(a => _address = a)" Regions="Regions" />
+                @if (Supplier?.Address is not null)
+                {
+                    @* Deliberate clear, not blank-skip: PartiesPage only calls SetSupplierAddressAsync when the
+                       address has real content (mirrors FI-1's ApplyValues blank-guard) - leaving the fields
+                       blank just means "no edit here", so clearing back to none needs its own explicit action. *@
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => _address = null)">Clear address</MudButton>
+                }
+            }
+            else
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.body2">No address.</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => _address = AddressEditor.NewBlankAddress())">Add address</MudButton>
+                </MudStack>
+            }
         </MudStack>
     </DialogContent>
     <DialogActions>
@@ -27,7 +44,9 @@
 
     private string _code = string.Empty;
     private string _name = string.Empty;
-    private Address _address = NewBlankAddress();
+    // Null means "explicitly cleared" (Addresses 4) - distinct from a blank-but-present Address,
+    // which PartiesPage treats as "no edit, leave the existing address alone".
+    private Address? _address = AddressEditor.NewBlankAddress();
 
     protected override void OnInitialized()
     {
@@ -35,11 +54,9 @@
         {
             _code = Supplier.Code;
             _name = Supplier.Name;
-            _address = Supplier.Address ?? NewBlankAddress();
+            _address = Supplier.Address ?? AddressEditor.NewBlankAddress();
         }
     }
-
-    private static Address NewBlankAddress() => new() { Street = "", Number = "", PostalCode = "", City = "" };
 
     private void Submit() => MudDialog.Close(DialogResult.Ok(new Supplier { Code = _code.Trim(), Name = _name.Trim(), Address = _address }));
 }
