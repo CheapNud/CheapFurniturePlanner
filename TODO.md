@@ -1,6 +1,6 @@
 <!--
   TODO.md — CheapFurniturePlanner project work tracker
-  Last updated: 2026-08-13
+  Last updated: 2026-08-16
 
   RULES FOR AI AGENTS:
   - Update the "Last updated" date above whenever you modify this file
@@ -42,6 +42,7 @@ _Nothing blocking._
 
 ## Future
 
+- [ ] (2026-08-16) auth: convert page/endpoint gating from direct role attributes to named authorization policies defined once in di (bootstrap admin gate stays a role attribute); keep the constants class, keep positive membership; one dedicated pass, gating tests updated alongside [user]
 - [x] (2026-08-12 → 2026-08-13) materials audit: forecast silently skips units without a pinned catalogue version where backflush throws (same seam, divergent honesty); unresolved standalone-article units appear in the purchasing feed but not the forecast's unresolved list; a supplier-linked unit marked in-house recovers via unmark (the finish error message points at receiving) [audit] — forecast now surfaces UnpinnedUnitCodes alongside UnresolvedModelCodes, page shows both plus a standalone-out-of-scope note, FinishAsync's error names unmark as the recovery
 - [ ] (2026-08-12) materials: supplier price registry, lead times/moq/reorder points (the mature legacy reorder-point model is the analog), stock audit log, material order ubl export, receipt undo - all deferred until the forecast proves its numbers in use [plan]
 - [x] (2026-08-10 → 2026-08-13) catalogue export audit: csv hard-rounds to 2 decimals (diverges from the engine if a market ever skips final-stage rounding); price group label can misattribute when one colour code lives in two fabric groups of an element (pre-existing resolution semantics, no publish validation); default-selection walk assumes visibility triggers precede dependents in display order (resolver's fixed-point loop is the upgrade path) [audit] — CatalogueExport documents the rounding assumption + a test pinning every fixture market enables RoundStage.Final; CataloguePublishService.PublishAsync now returns non-blocking Warnings, one fired for a colour code shared by two fabric groups; CatalogueFlattenerTests pins the current trigger-before-dependent walk behavior
