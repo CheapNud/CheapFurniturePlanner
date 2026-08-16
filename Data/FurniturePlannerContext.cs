@@ -72,6 +72,9 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
     public DbSet<MaterialStock> MaterialStocks => Set<MaterialStock>();
     public DbSet<MaterialOrder> MaterialOrders => Set<MaterialOrder>();
     public DbSet<MaterialOrderLine> MaterialOrderLines => Set<MaterialOrderLine>();
+    public DbSet<MaterialProfile> MaterialProfiles => Set<MaterialProfile>();
+    public DbSet<MaterialSupplierTerm> MaterialSupplierTerms => Set<MaterialSupplierTerm>();
+    public DbSet<MaterialMovement> MaterialMovements => Set<MaterialMovement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -306,6 +309,22 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasMany(o => o.Lines).WithOne().HasForeignKey(l => l.MaterialOrderId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<MaterialOrderLine>(entity => entity.Property(l => l.Kind).HasConversion<string>());
+        modelBuilder.Entity<MaterialProfile>(entity =>
+        {
+            entity.HasIndex(p => new { p.Kind, p.Code, p.HardnessCode }).IsUnique();
+            entity.Property(p => p.Kind).HasConversion<string>();
+        });
+        modelBuilder.Entity<MaterialSupplierTerm>(entity =>
+        {
+            entity.HasIndex(t => new { t.Kind, t.Code, t.HardnessCode, t.SupplierId }).IsUnique();
+            entity.Property(t => t.Kind).HasConversion<string>();
+            entity.HasOne(t => t.Supplier).WithMany().HasForeignKey(t => t.SupplierId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<MaterialMovement>(entity =>
+        {
+            entity.Property(m => m.Type).HasConversion<string>();
+            entity.Property(m => m.Kind).HasConversion<string>();
+        });
     }
 
     private static void SeedDefaultData(ModelBuilder modelBuilder)

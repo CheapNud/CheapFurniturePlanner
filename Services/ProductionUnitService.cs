@@ -462,6 +462,8 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         var snapshot = await pinnedCatalogueProvider.GetAsync(pinnedVersion, ct);
         var selections = CanonicalJson.Deserialize<Dictionary<string, string>>(line.SelectionsJson) ?? [];
         var needLines = MaterialRequirements.Resolve(snapshot, line.ModelCode!, line.ElementCode!, selections, line.FabricColorCode);
+        var movementType = sign < 0 ? MaterialMovementType.Backflush : MaterialMovementType.BackflushUndo;
+        var userId = await currentUser.UserIdAsync();
         foreach (var need in needLines)
         {
             var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == need.Kind && s.Code == need.Code && s.HardnessCode == need.HardnessCode, ct);
@@ -472,6 +474,18 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
             }
             stock.Amount += sign * need.Quantity;
             stock.UpdatedAt = DateTime.UtcNow;
+
+            db.MaterialMovements.Add(new MaterialMovement
+            {
+                Kind = need.Kind,
+                Code = need.Code,
+                HardnessCode = need.HardnessCode,
+                Quantity = sign * need.Quantity,
+                Type = movementType,
+                OccurredAt = DateTime.UtcNow,
+                Reference = unit.UnitCode,
+                UserId = userId,
+            });
         }
     }
 

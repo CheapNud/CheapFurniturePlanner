@@ -384,6 +384,22 @@ public class ProductionUnitServiceTests
         Assert.Equal(-3.0m, stocks[(MaterialKind.Cotton, "COT-STD", null)]);
         Assert.Equal(-4.0m, stocks[(MaterialKind.Fabric, "AQUA-BLUE", null)]);
         Assert.Equal(-4m, stocks[(MaterialKind.Misc, "GLUE", null)]);
+
+        // One Backflush movement per need line, same SaveChanges, negative quantity matching the
+        // stock consumption, referencing the unit's own code (not the order or an MPO).
+        var unitCode = (await db.ProductionUnits.SingleAsync(u => u.Id == unitId)).UnitCode;
+        var movements = await db.MaterialMovements.ToDictionaryAsync(m => (m.Kind, m.Code, m.HardnessCode), m => m);
+        Assert.Equal(5, movements.Count);
+        Assert.All(movements.Values, m =>
+        {
+            Assert.Equal(MaterialMovementType.Backflush, m.Type);
+            Assert.Equal(unitCode, m.Reference);
+        });
+        Assert.Equal(-1m, movements[(MaterialKind.Frame, "FBX", null)].Quantity);
+        Assert.Equal(-2m, movements[(MaterialKind.Foam, "FM-STD", null)].Quantity);
+        Assert.Equal(-3.0m, movements[(MaterialKind.Cotton, "COT-STD", null)].Quantity);
+        Assert.Equal(-4.0m, movements[(MaterialKind.Fabric, "AQUA-BLUE", null)].Quantity);
+        Assert.Equal(-4m, movements[(MaterialKind.Misc, "GLUE", null)].Quantity);
     }
 
     [Fact]
@@ -411,6 +427,8 @@ public class ProductionUnitServiceTests
 
         await using var db = await factory.CreateDbContextAsync();
         Assert.Empty(await db.MaterialStocks.ToListAsync());
+        // Both rejections threw before ApplyBackflushAsync ever ran - no orphaned movement rows.
+        Assert.Empty(await db.MaterialMovements.ToListAsync());
     }
 
     [Fact]
@@ -435,6 +453,18 @@ public class ProductionUnitServiceTests
         var stocks = await db.MaterialStocks.ToListAsync();
         Assert.Equal(5, stocks.Count);
         Assert.All(stocks, s => Assert.Equal(0m, s.Amount));
+
+        // Ten movement rows total - five Backflush from FinishAsync, five equal-and-opposite
+        // BackflushUndo from UndoArriveAsync, each pair keyed by the same material identity.
+        var movements = await db.MaterialMovements.ToListAsync();
+        Assert.Equal(10, movements.Count);
+        var backflush = movements.Where(m => m.Type == MaterialMovementType.Backflush).ToDictionary(m => (m.Kind, m.Code, m.HardnessCode), m => m.Quantity);
+        var undo = movements.Where(m => m.Type == MaterialMovementType.BackflushUndo).ToDictionary(m => (m.Kind, m.Code, m.HardnessCode), m => m.Quantity);
+        Assert.Equal(5, backflush.Count);
+        Assert.Equal(5, undo.Count);
+        Assert.All(backflush, kv => Assert.Equal(-kv.Value, undo[kv.Key])); // equal and opposite
+        Assert.All(undo.Values, q => Assert.True(q > 0m)); // BackflushUndo is always the positive side
+        Assert.All(movements, m => Assert.Equal(unit.UnitCode, m.Reference));
     }
 
     // Regression: undoing an arrival that never backflushed (the dock's external path) must never

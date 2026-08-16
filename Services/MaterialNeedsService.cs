@@ -137,6 +137,7 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
         await RequireAdminOrOfficeAsync();
         await using var db = await factory.CreateDbContextAsync(ct);
         var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == kind && s.Code == code && s.HardnessCode == hardnessCode, ct);
+        var oldAmount = stock?.Amount ?? 0m;
         if (stock is null)
         {
             stock = new MaterialStock { Kind = kind, Code = code, HardnessCode = hardnessCode, Amount = newAmount, UpdatedAt = DateTime.UtcNow };
@@ -147,6 +148,19 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
             stock.Amount = newAmount;
             stock.UpdatedAt = DateTime.UtcNow;
         }
+
+        db.MaterialMovements.Add(new MaterialMovement
+        {
+            Kind = kind,
+            Code = code,
+            HardnessCode = hardnessCode,
+            Quantity = newAmount - oldAmount,
+            Type = MaterialMovementType.Adjustment,
+            OccurredAt = _now(),
+            Reference = null,
+            UserId = await currentUser.UserIdAsync(),
+        });
+
         await db.SaveChangesAsync(ct);
     }
 

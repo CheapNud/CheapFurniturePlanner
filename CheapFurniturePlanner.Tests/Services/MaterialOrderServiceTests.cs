@@ -248,8 +248,22 @@ public class MaterialOrderServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, -1m));
         await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, 10.01m));
 
+        // Every rejected receipt above throws before the stock/movement mutation - no orphaned
+        // MaterialMovement row from a receipt that never actually landed.
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            Assert.Empty(await db.MaterialMovements.ToListAsync());
+        }
+
         await materials.ReceiveAsync(order.Id, line.Id, 6m);
         await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, 5m)); // remainder is 4
+
+        // The rejected over-receipt above must not have appended a second movement onto the one
+        // real receipt.
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            Assert.Equal(1, await db.MaterialMovements.CountAsync());
+        }
     }
 
     [Fact]
@@ -272,6 +286,16 @@ public class MaterialOrderServiceTests
             var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "F-100" && s.HardnessCode == "H35");
             Assert.Equal(6m, stock.Amount);
             Assert.True(stock.UpdatedAt > DateTime.UtcNow.AddMinutes(-1));
+
+            // Same guarantee for the movement row: exactly one Receipt movement, same SaveChanges,
+            // referencing this order's number.
+            var movement = await db.MaterialMovements.SingleAsync();
+            Assert.Equal(MaterialKind.Foam, movement.Kind);
+            Assert.Equal("F-100", movement.Code);
+            Assert.Equal("H35", movement.HardnessCode);
+            Assert.Equal(6m, movement.Quantity);
+            Assert.Equal(MaterialMovementType.Receipt, movement.Type);
+            Assert.Equal(order.Number, movement.Reference);
         }
 
         await materials.ReceiveAsync(order.Id, line.Id, 4m);
@@ -280,6 +304,11 @@ public class MaterialOrderServiceTests
             var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "F-100" && s.HardnessCode == "H35");
             Assert.Equal(10m, stock.Amount); // upserted onto the same row, not a second one
             Assert.Equal(1, await db.MaterialStocks.CountAsync());
+
+            // Two receipts -> two movement rows (a log, unlike the upserted stock balance).
+            var movements = await db.MaterialMovements.OrderBy(m => m.Id).ToListAsync();
+            Assert.Equal(2, movements.Count);
+            Assert.Equal(4m, movements[1].Quantity);
         }
     }
 

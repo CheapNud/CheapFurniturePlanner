@@ -365,6 +365,13 @@ public class MaterialNeedsServiceTests
         {
             var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "FM-STD" && s.HardnessCode == "H35");
             Assert.Equal(12m, stock.Amount);
+
+            // First adjustment: old amount 0 (no prior row) -> new 12, delta +12 (raise). Same
+            // SaveChanges as the stock insert; reference null (an adjustment carries no order/unit).
+            var movement = await db.MaterialMovements.SingleAsync();
+            Assert.Equal(MaterialMovementType.Adjustment, movement.Type);
+            Assert.Equal(12m, movement.Quantity);
+            Assert.Null(movement.Reference);
         }
 
         // Second call on the same (Kind, Code, HardnessCode) upserts the existing row absolutely -
@@ -375,6 +382,12 @@ public class MaterialNeedsServiceTests
             var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "FM-STD" && s.HardnessCode == "H35");
             Assert.Equal(-4m, stock.Amount);
             Assert.Equal(1, await db.MaterialStocks.CountAsync());
+
+            // Second adjustment: old amount 12 -> new -4, delta -16 (lower). A second movement row
+            // is appended (unlike the stock balance, the log never upserts).
+            var movements = await db.MaterialMovements.OrderBy(m => m.Id).ToListAsync();
+            Assert.Equal(2, movements.Count);
+            Assert.Equal(-16m, movements[1].Quantity);
         }
     }
 

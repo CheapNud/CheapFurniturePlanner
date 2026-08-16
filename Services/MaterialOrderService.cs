@@ -157,6 +157,18 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
         stock.Amount += quantity;
         stock.UpdatedAt = DateTime.UtcNow;
 
+        db.MaterialMovements.Add(new MaterialMovement
+        {
+            Kind = line.Kind,
+            Code = line.Code,
+            HardnessCode = line.HardnessCode,
+            Quantity = quantity,
+            Type = MaterialMovementType.Receipt,
+            OccurredAt = DateTime.UtcNow,
+            Reference = order.Number,
+            UserId = await currentUser.UserIdAsync(),
+        });
+
         TryComplete(order);
         await db.SaveChangesAsync(ct);
     }

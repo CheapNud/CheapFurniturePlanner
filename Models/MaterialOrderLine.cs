@@ -14,4 +14,8 @@ public class MaterialOrderLine
     public string? DisplayName { get; set; }
     public decimal QuantityOrdered { get; set; }
     public decimal QuantityReceived { get; set; }
+    // Snapshotted from the preferred supplier term at line creation - never re-read, so a later
+    // term price change never moves an existing line (order-entry task wires the snapshot; a
+    // manually added line with no preferred term just leaves this null, unpriced).
+    public decimal? UnitPrice { get; set; }
 }
