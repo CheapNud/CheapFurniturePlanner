@@ -110,4 +110,77 @@ public class MaterialOrderPdfTests
         Assert.Contains("Woodworks Fine", pageText);
         Assert.DoesNotContain("Ordered by", pageText);
     }
+
+    // --- price + total rule (Task 4) ---
+    // Decide+pin: the total only renders when EVERY line carries a price. A partial total (summing
+    // only the priced lines) would understate the order's real cost and look like the true total -
+    // worse than no total at all. Partial pricing still shows each priced line's own price.
+
+    [Fact]
+    public async Task GeneratePdf_AllLinesPriced_ShowsPerLinePrice_AndTotal()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "WOODWORKS", "Woodworks Fine");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId,
+        [
+            new MaterialOrderLine { Kind = MaterialKind.Foam, Code = "F-100", HardnessCode = "H35", DisplayName = "Seat cushion foam", QuantityOrdered = 20m, UnitPrice = 3.50m },
+            new MaterialOrderLine { Kind = MaterialKind.Cotton, Code = "COT-1", QuantityOrdered = 5m, UnitPrice = 1.20m },
+        ]);
+
+        var pdf = new MaterialOrderPdf(factory, new PdfExportService(new PdfTemplateService()), NewPdfOutputRoot());
+        var filePath = await pdf.GenerateAsync(order.Id);
+
+        using var readerDoc = new PdfDocument(new PdfReader(filePath));
+        var pageText = PdfTextExtractor.GetTextFromPage(readerDoc.GetFirstPage());
+
+        Assert.Contains("3.50", pageText);
+        Assert.Contains("1.20", pageText);
+        // (20 * 3.50) + (5 * 1.20) = 76.00
+        Assert.Contains("Total", pageText);
+        Assert.Contains("76.00", pageText);
+    }
+
+    [Fact]
+    public async Task GeneratePdf_PartiallyPriced_ShowsPricedLine_NoTotal()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "WOODWORKS", "Woodworks Fine");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId,
+        [
+            new MaterialOrderLine { Kind = MaterialKind.Foam, Code = "F-100", HardnessCode = "H35", DisplayName = "Seat cushion foam", QuantityOrdered = 20m, UnitPrice = 3.50m },
+            new MaterialOrderLine { Kind = MaterialKind.Cotton, Code = "COT-1", QuantityOrdered = 5m }, // no preferred term -> unpriced
+        ]);
+
+        var pdf = new MaterialOrderPdf(factory, new PdfExportService(new PdfTemplateService()), NewPdfOutputRoot());
+        var filePath = await pdf.GenerateAsync(order.Id);
+
+        using var readerDoc = new PdfDocument(new PdfReader(filePath));
+        var pageText = PdfTextExtractor.GetTextFromPage(readerDoc.GetFirstPage());
+
+        Assert.Contains("3.50", pageText);
+        Assert.DoesNotContain("Total", pageText);
+    }
+
+    [Fact]
+    public async Task GeneratePdf_NoLinesPriced_NoPriceToken_NoTotal()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(factory, "WOODWORKS", "Woodworks Fine");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierId,
+            [new MaterialOrderLine { Kind = MaterialKind.Cotton, Code = "COT-1", QuantityOrdered = 5m }]);
+
+        var pdf = new MaterialOrderPdf(factory, new PdfExportService(new PdfTemplateService()), NewPdfOutputRoot());
+        var filePath = await pdf.GenerateAsync(order.Id);
+
+        using var readerDoc = new PdfDocument(new PdfReader(filePath));
+        var pageText = PdfTextExtractor.GetTextFromPage(readerDoc.GetFirstPage());
+
+        Assert.DoesNotContain("Total", pageText);
+    }
 }

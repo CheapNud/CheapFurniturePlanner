@@ -48,7 +48,17 @@ public sealed class MaterialOrderPdf(IDbContextFactory<FurniturePlannerContext> 
             .OrderBy(line => line.Code, StringComparer.Ordinal)
             .Select(line => new DocumentRow(
                 string.IsNullOrWhiteSpace(line.HardnessCode) ? line.Code : $"{line.Code} / {line.HardnessCode}",
-                $"{line.Kind}{(string.IsNullOrWhiteSpace(line.DisplayName) ? "" : $" — {line.DisplayName}")} — ordered {line.QuantityOrdered.ToString(CultureInfo.InvariantCulture)}")));
+                $"{line.Kind}{(string.IsNullOrWhiteSpace(line.DisplayName) ? "" : $" — {line.DisplayName}")} — ordered {line.QuantityOrdered.ToString(CultureInfo.InvariantCulture)}" +
+                    (line.UnitPrice is decimal price ? $" @ {Money(price)}" : ""))));
+
+        // Decide+pin: the total only renders when EVERY line carries a price - a total that silently
+        // sums only the priced lines would understate the real cost while still looking authoritative.
+        // Partial pricing still shows each priced line's own price above; it just skips the total row.
+        if (order.Lines.Count > 0 && order.Lines.All(line => line.UnitPrice is not null))
+        {
+            var total = order.Lines.Sum(line => line.UnitPrice!.Value * line.QuantityOrdered);
+            rows.Add(new("Total", Money(total)));
+        }
 
         // Header/footer off: the library header prints literal company placeholders. IsBold off
         // everywhere: the packaged renderer duplicates bold cell text.
@@ -69,4 +79,8 @@ public sealed class MaterialOrderPdf(IDbContextFactory<FurniturePlannerContext> 
         await exporter.ExportToPdfFileAsync(rows, template, filePath);
         return filePath;
     }
+
+    // Invariant "0.00" - same formatting idiom as InvoicePdf.Money, invariant culture so downstream
+    // parsing (and the supplier reading this PDF) never sees a locale comma.
+    private static string Money(decimal amount) => amount.ToString("0.00", CultureInfo.InvariantCulture);
 }

@@ -1,9 +1,23 @@
 using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Production;
 using CheapFurniturePlanner.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace CheapFurniturePlanner.Services;
+
+// One selected forecast row headed for a PO - trimmed down from MaterialForecastRow to just what a
+// line needs plus the identity a draft groups by. Quantity is the caller's (possibly hand-edited)
+// order quantity, not necessarily SuggestedToOrder verbatim. UnitPrice/PreferredSupplierId are
+// already resolved by the caller (MaterialNeedsService.ComputeAsync reads the preferred term once
+// per forecast row) - this service trusts them rather than re-querying MaterialSupplierTerm itself.
+public sealed record MaterialOrderCandidate(MaterialKind Kind, string Code, string? HardnessCode, string? DisplayName,
+    decimal Quantity, int? PreferredSupplierId, decimal? UnitPrice);
+
+// CreatedOrderIds: one draft per distinct PreferredSupplierId among the assigned rows. Unassigned:
+// rows with no preferred supplier at all - handed back rather than silently dropped, for the
+// caller's manual-pick fallback (pick a supplier by hand, AddLineAsync onto an existing/new draft).
+public sealed record MaterialOrderDraftBatch(IReadOnlyList<int> CreatedOrderIds, IReadOnlyList<MaterialOrderCandidate> Unassigned);
 
 // A purchase order for raw materials (foam, frame stock, cotton, fabric, misc) sent to one
 // supplier - MaterialOrder is SupplierOrder's counterpart for in-house material needs, but unlike
@@ -40,6 +54,34 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
         return order;
     }
 
+    // Groups the caller's selected forecast rows by preferred supplier and opens one fresh draft per
+    // supplier via CreateDraftAsync (same numbering, same role/quantity checks - no need to
+    // reimplement either here). Validated up front across the whole batch so a bad row in one
+    // supplier's group never leaves an earlier supplier's draft half-created.
+    public async Task<MaterialOrderDraftBatch> CreateDraftsByPreferredSupplierAsync(IReadOnlyList<MaterialOrderCandidate> rows, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync(); // fail auth before validation, same order as every other entry point
+        var unassigned = rows.Where(r => r.PreferredSupplierId is null).ToList();
+        var bySupplier = rows.Where(r => r.PreferredSupplierId is not null)
+            .GroupBy(r => r.PreferredSupplierId!.Value).ToList();
+
+        RequirePositiveQuantities(bySupplier.SelectMany(g => g).Select(ToLine).ToList());
+
+        var createdOrderIds = new List<int>();
+        foreach (var group in bySupplier)
+        {
+            var order = await CreateDraftAsync(group.Key, group.Select(ToLine).ToList(), ct);
+            createdOrderIds.Add(order.Id);
+        }
+        return new MaterialOrderDraftBatch(createdOrderIds, unassigned);
+    }
+
+    private static MaterialOrderLine ToLine(MaterialOrderCandidate row) => new()
+    {
+        Kind = row.Kind, Code = row.Code, HardnessCode = row.HardnessCode, DisplayName = row.DisplayName,
+        QuantityOrdered = row.Quantity, UnitPrice = row.UnitPrice,
+    };
+
     public async Task<List<MaterialOrder>> ListAsync(CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
@@ -58,12 +100,21 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
             .FirstOrDefaultAsync(o => o.Id == materialOrderId, ct);
     }
 
+    // A manually added line carries no forecast-resolved price the way CreateDraftsByPreferredSupplierAsync's
+    // rows do - snapshot the preferred term's price here instead, same "read once, never re-read"
+    // rule. Only fills a gap: a caller-supplied price (e.g. a one-off negotiated rate) is left alone.
     public async Task AddLineAsync(int materialOrderId, MaterialOrderLine line, CancellationToken ct = default)
     {
         await RequireAdminOrOfficeAsync();
         RequirePositiveQuantities([line]);
         await using var db = await factory.CreateDbContextAsync(ct);
         var order = await RequireDraftAsync(db, materialOrderId, ct);
+        if (line.UnitPrice is null)
+        {
+            var preferredTerm = await db.MaterialSupplierTerms.AsNoTracking().FirstOrDefaultAsync(
+                t => t.Kind == line.Kind && t.Code == line.Code && t.HardnessCode == line.HardnessCode && t.IsPreferred, ct);
+            line.UnitPrice = preferredTerm?.UnitPrice;
+        }
         order.Lines.Add(line);
         await db.SaveChangesAsync(ct);
     }
