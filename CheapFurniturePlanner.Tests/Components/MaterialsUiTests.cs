@@ -214,9 +214,10 @@ public class MaterialsUiTests : TestContext
 
         cut.WaitForAssertion(() => Assert.Contains("FM-STD", cut.Markup));
 
-        // Two amount cells only (the h4 page title is also a MudText, filtered out by Typo) -
-        // StockAsync orders Foam(0) before Cotton(2), so index 0 is the negative row.
-        var amountTexts = cut.FindComponents<MudText>().Where(t => t.Instance.Typo != Typo.h4).ToList();
+        // Two amount cells only (the PageHeader's h4 title and overline kicker are also MudText,
+        // filtered out by Typo) - StockAsync orders Foam(0) before Cotton(2), so index 0 is the
+        // negative row.
+        var amountTexts = cut.FindComponents<MudText>().Where(t => t.Instance.Typo is not (Typo.h4 or Typo.overline)).ToList();
         Assert.Equal(2, amountTexts.Count);
         Assert.Equal(Color.Error, amountTexts[0].Instance.Color);
         Assert.NotEqual(Color.Error, amountTexts[1].Instance.Color);
@@ -341,7 +342,8 @@ public class MaterialsUiTests : TestContext
         cut.WaitForAssertion(() => Assert.Contains("F-LOW", cut.Markup));
 
         // Rows sort by Kind then Code ordinal: Foam(0) before Frame(1) - index 0 is the flagged row.
-        var amountTexts = cut.FindComponents<MudText>().Where(t => t.Instance.Typo != Typo.h4).ToList();
+        // (PageHeader's h4 title and overline kicker are also MudText, filtered out by Typo.)
+        var amountTexts = cut.FindComponents<MudText>().Where(t => t.Instance.Typo is not (Typo.h4 or Typo.overline)).ToList();
         Assert.Equal(2, amountTexts.Count);
         Assert.Equal(Color.Error, amountTexts[0].Instance.Color);
         Assert.NotEqual(Color.Error, amountTexts[1].Instance.Color);

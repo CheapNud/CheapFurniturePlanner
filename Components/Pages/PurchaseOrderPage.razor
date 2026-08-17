@@ -21,24 +21,24 @@
     }
     else
     {
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to purchasing" OnClick="@(() => Navigation.NavigateTo("/purchasing"))" />
-            <MudText Typo="Typo.h4">@_order.PoNumber</MudText>
-            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(_order.State)">@_order.State</MudChip>
-            <MudSpacer />
-            @if (_order.State == SupplierOrderState.Draft)
-            {
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SendAsync">Send</MudButton>
-            }
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</MudButton>
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Code" OnClick="ExportXmlAsync">XML</MudButton>
-            @if (_order.State == SupplierOrderState.Draft && _order.Units.Count == 0)
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Error" Title="Delete purchase order" OnClick="DeleteAsync">Delete</MudButton>
-            }
-        </MudStack>
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to purchasing" OnClick="@(() => Navigation.NavigateTo("/purchasing"))" Class="mb-2" />
+        <PageHeader Kicker="PURCHASING" Title="@_order.PoNumber">
+            <Actions>
+                <StatusChip Color="@StatusColors.For(_order.State)" Value="@_order.State.ToString()" />
+                @if (_order.State == SupplierOrderState.Draft)
+                {
+                    <ProgressButton OnClick="SendAsync">Send</ProgressButton>
+                }
+                <ProgressButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</ProgressButton>
+                <ProgressButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Code" OnClick="ExportXmlAsync">XML</ProgressButton>
+                @if (_order.State == SupplierOrderState.Draft && _order.Units.Count == 0)
+                {
+                    <ProgressButton Variant="Variant.Text" Color="Color.Error" OnClick="DeleteAsync">Delete</ProgressButton>
+                }
+            </Actions>
+        </PageHeader>
 
-        <MudPaper Class="pa-4 mb-4">
+        <MudPaper Class="pa-6 mb-6" Elevation="0">
             <MudText><b>Supplier:</b> @_order.Supplier?.Name</MudText>
             <MudText><b>Created:</b> @_order.CreatedAt.ToString("yyyy-MM-dd")</MudText>
             @if (_order.SentAt is DateTime sentAt)
@@ -51,46 +51,42 @@
             }
         </MudPaper>
 
-        <MudPaper Class="pa-4 mb-4">
+        <MudPaper Class="pa-6 mb-6" Elevation="0">
             <MudText Typo="Typo.h6" Class="mb-2">Units</MudText>
-            @if (_groups.Count == 0)
-            {
-                <EmptyState Text="No units on this order" />
-            }
-            else
-            {
-                <MudTable T="UnitGroup" Items="_groups" Dense="true">
-                    <HeaderContent>
-                        <MudTh>Identity</MudTh>
-                        <MudTh>Count</MudTh>
-                        <MudTh>Arrived</MudTh>
-                        <MudTh></MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Identity">@context.Identity</MudTd>
-                        <MudTd DataLabel="Count">@context.Units.Count</MudTd>
-                        <MudTd DataLabel="Arrived">@context.Units.Count(u => u.State is ProductionUnitState.Arrived or ProductionUnitState.Delivered)</MudTd>
-                        <MudTd>
-                            @if (_order.State == SupplierOrderState.Draft)
-                            {
-                                <MudButton Size="Size.Small" OnClick="@(() => ReleaseGroupAsync(context))">Release</MudButton>
-                            }
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-            }
+            <MudTable T="UnitGroup" Items="_groups" Dense="true" Loading="@_loading">
+                <HeaderContent>
+                    <MudTh>Identity</MudTh>
+                    <MudTh>Count</MudTh>
+                    <MudTh>Arrived</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Identity">@context.Identity</MudTd>
+                    <MudTd DataLabel="Count">@context.Units.Count</MudTd>
+                    <MudTd DataLabel="Arrived">@context.Units.Count(u => u.State is ProductionUnitState.Arrived or ProductionUnitState.Delivered)</MudTd>
+                    <MudTd>
+                        @if (_order.State == SupplierOrderState.Draft)
+                        {
+                            <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ReleaseGroupAsync(context))">Release</ProgressButton>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <EmptyState Text="No units on this order" />
+                </NoRecordsContent>
+            </MudTable>
         </MudPaper>
 
-        <MudPaper Class="pa-4">
+        <MudPaper Class="pa-6" Elevation="0">
             <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.h6">Announcements</MudText>
                 <MudSpacer />
-                <MudButton Variant="Variant.Outlined" OnClick="NewAnnouncementAsync">New announcement</MudButton>
+                <ProgressButton Variant="Variant.Text" OnClick="NewAnnouncementAsync">New announcement</ProgressButton>
             </MudStack>
 
             @if (_announceable.Count > 0 && _announcements.Count > 0)
             {
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
                     <MudSelect T="int?" Label="Unit" @bind-Value="_attachUnitId">
                         @foreach (var candidate in _announceable)
                         {
@@ -103,7 +99,7 @@
                             <MudSelectItem T="int?" Value="@((int?)announcement.Id)">@announcement.Reference</MudSelectItem>
                         }
                     </MudSelect>
-                    <MudButton Variant="Variant.Outlined" OnClick="AttachAsync">Attach</MudButton>
+                    <ProgressButton Variant="Variant.Text" OnClick="AttachAsync">Attach</ProgressButton>
                 </MudStack>
             }
 
@@ -125,12 +121,12 @@
                         <MudText Typo="Typo.body2">@arrivedCount arrived / @(announcement.Units.Count - arrivedCount) outstanding</MudText>
                         @if (PurchasingService.IsOverdue(announcement))
                         {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Overdue</MudChip>
+                            <StatusChip Color="Color.Warning" Value="Overdue" />
                         }
                         <MudSpacer />
                         @if (announcement.Units.Count == 0)
                         {
-                            <MudButton Size="Size.Small" Color="Color.Error" OnClick="@(() => DeleteAnnouncementAsync(announcement.Id))">Delete</MudButton>
+                            <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => DeleteAnnouncementAsync(announcement.Id))">Delete</ProgressButton>
                         }
                     </MudStack>
                     @foreach (var unit in announcement.Units)
@@ -162,6 +158,7 @@
     private string? _theirReference;
     private int? _attachUnitId;
     private int? _attachAnnouncementId;
+    private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -177,22 +174,30 @@
 
     private async Task ReloadAsync()
     {
-        _order = await Purchasing.GetOrderAsync(Id);
-        if (_order is not null)
+        _loading = true;
+        try
         {
-            _theirReference = _order.TheirReference;
-            _groups = _order.Units
-                .GroupBy(u => Identity(u.Order!.Lines.First(l => l.Id == u.OrderLineId)))
-                .OrderBy(g => g.Key, StringComparer.Ordinal)
-                .Select(g => new UnitGroup(g.Key, g.ToList()))
-                .ToList();
-            // Announceable = this PO's units still Expected and not already parked on another
-            // announcement - the same guard AttachToAnnouncementAsync enforces, minus the
-            // same-supplier/Sent-PO checks which are already guaranteed by being on this page.
-            _announceable = _order.Units.Where(u => u.SupplierDeliveryId is null && u.State == ProductionUnitState.Expected).ToList();
-            _announcements = await Purchasing.ListAnnouncementsAsync(_order.SupplierId);
-            _attachUnitId = null;
-            _attachAnnouncementId = null;
+            _order = await Purchasing.GetOrderAsync(Id);
+            if (_order is not null)
+            {
+                _theirReference = _order.TheirReference;
+                _groups = _order.Units
+                    .GroupBy(u => Identity(u.Order!.Lines.First(l => l.Id == u.OrderLineId)))
+                    .OrderBy(g => g.Key, StringComparer.Ordinal)
+                    .Select(g => new UnitGroup(g.Key, g.ToList()))
+                    .ToList();
+                // Announceable = this PO's units still Expected and not already parked on another
+                // announcement - the same guard AttachToAnnouncementAsync enforces, minus the
+                // same-supplier/Sent-PO checks which are already guaranteed by being on this page.
+                _announceable = _order.Units.Where(u => u.SupplierDeliveryId is null && u.State == ProductionUnitState.Expected).ToList();
+                _announcements = await Purchasing.ListAnnouncementsAsync(_order.SupplierId);
+                _attachUnitId = null;
+                _attachAnnouncementId = null;
+            }
+        }
+        finally
+        {
+            _loading = false;
         }
         StateHasChanged();
     }

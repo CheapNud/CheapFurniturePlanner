@@ -16,102 +16,99 @@
 <PageTitle>Materials</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">Materials</MudText>
+    <PageHeader Kicker="MATERIALS" Title="Materials" />
 
-    <MudTabs>
-        <MudTabPanel Text="Forecast">
-            @* Canon deviation (same as PurchasingPage's "Generate orders"): Compute is a recurring
-               sweep action, always available - not a genuine per-record "Add", so it stays visible
-               regardless of whether a forecast has ever run. *@
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="my-4">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Sync" OnClick="ComputeAsync">Compute</MudButton>
-                @if (_forecast is not null && _forecastRows.Count > 0)
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-4">
+            <MudTabPanel Text="Forecast">
+                @* Canon deviation (same as PurchasingPage's "Generate orders"): Compute is a recurring
+                   sweep action, always available - not a genuine per-record "Add", so it stays visible
+                   regardless of whether a forecast has ever run. *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+                    <ProgressButton OnClick="ComputeAsync" StartIcon="@Icons.Material.Filled.Sync">Compute</ProgressButton>
+                    @if (_forecast is not null && _forecastRows.Count > 0)
+                    {
+                        <ProgressButton Variant="Variant.Text" OnClick="ExportCsvAsync">Export CSV</ProgressButton>
+                        <ProgressButton Variant="Variant.Text" OnClick="CreateOrderAsync">Create order</ProgressButton>
+                    }
+                </MudStack>
+
+                <MudText Typo="Typo.body2" Class="mb-2">Standalone article units are out of scope for this forecast - only configured-element lines resolve material needs.</MudText>
+
+                @if (_unresolvedModelCodes.Count > 0)
                 {
-                    <MudButton Variant="Variant.Outlined" OnClick="ExportCsvAsync">Export CSV</MudButton>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="CreateOrderAsync">Create order</MudButton>
+                    <MudAlert Severity="Severity.Warning" Class="mb-4">Unresolved: @string.Join(", ", _unresolvedModelCodes)</MudAlert>
                 }
-            </MudStack>
+                @if (_unpinnedUnitCodes.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mb-4">Skipped (no pinned catalogue version): @string.Join(", ", _unpinnedUnitCodes)</MudAlert>
+                }
 
-            <MudText Typo="Typo.body2" Class="mb-2">Standalone article units are out of scope for this forecast - only configured-element lines resolve material needs.</MudText>
+                @if (_forecast is null)
+                {
+                    <EmptyState Text="No forecast computed yet" />
+                }
+                else
+                {
+                    <MudTable T="ForecastRowState" Items="_forecastRows" Hover="true" Dense="true" Loading="@_loading">
+                        <HeaderContent>
+                            <MudTh></MudTh>
+                            <MudTh>Kind</MudTh>
+                            <MudTh>Code</MudTh>
+                            <MudTh>Hardness</MudTh>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Gross need</MudTh>
+                            <MudTh>In stock</MudTh>
+                            <MudTh>Stock after</MudTh>
+                            <MudTh>On order</MudTh>
+                            <MudTh>Avg usage/wk</MudTh>
+                            <MudTh>Supplier</MudTh>
+                            <MudTh>Order by</MudTh>
+                            <MudTh>Est. cost</MudTh>
+                            <MudTh>To order</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd><MudCheckBox T="bool" Value="context.Selected" ValueChanged="@((bool v) => context.Selected = v)" /></MudTd>
+                            <MudTd DataLabel="Kind">@context.Row.Kind</MudTd>
+                            <MudTd DataLabel="Code">@context.Row.Code</MudTd>
+                            <MudTd DataLabel="Hardness">@context.Row.HardnessCode</MudTd>
+                            <MudTd DataLabel="Name">@context.Row.DisplayName</MudTd>
+                            <MudTd DataLabel="Gross need">@context.Row.GrossNeed</MudTd>
+                            <MudTd DataLabel="In stock">@context.Row.InStock</MudTd>
+                            <MudTd DataLabel="Stock after">
+                                @* Below-minimum flag: same HD-1 idiom the Stock tab uses (colored text, not a
+                                   chip) - a text flag, not a page-local color. *@
+                                <MudText Color="@(context.Row.BelowMinimum ? Color.Error : Color.Default)">@context.Row.StockAfterNeeds</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="On order">@context.Row.OnOrder</MudTd>
+                            <MudTd DataLabel="Avg usage/wk">@AverageUsageText(context.Row)</MudTd>
+                            <MudTd DataLabel="Supplier">@(context.Row.PreferredSupplierName ?? "—")</MudTd>
+                            <MudTd DataLabel="Order by">
+                                <MudText Color="@(context.Row.OrderByOverdue ? Color.Error : Color.Default)">@(context.Row.OrderByDate?.ToString("yyyy-MM-dd") ?? "—")</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Est. cost">
+                                @* Recomputed from the EDITED to-order quantity, not the frozen suggestion -
+                                   the estimate must track what the user is about to actually order. *@
+                                @(context.Row.UnitPrice is decimal price ? (context.ToOrder * price).ToString("C2") : "—")
+                            </MudTd>
+                            <MudTd DataLabel="To order">
+                                <MudNumericField T="decimal" Value="context.ToOrder" ValueChanged="@((decimal v) => context.ToOrder = v)" Min="0" Dense="true" />
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            <EmptyState Text="No material needs right now" />
+                        </NoRecordsContent>
+                        <PagerContent>
+                            <MudTablePager />
+                        </PagerContent>
+                    </MudTable>
+                }
+            </MudTabPanel>
 
-            @if (_unresolvedModelCodes.Count > 0)
-            {
-                <MudAlert Severity="Severity.Warning" Class="mb-4">Unresolved: @string.Join(", ", _unresolvedModelCodes)</MudAlert>
-            }
-            @if (_unpinnedUnitCodes.Count > 0)
-            {
-                <MudAlert Severity="Severity.Warning" Class="mb-4">Skipped (no pinned catalogue version): @string.Join(", ", _unpinnedUnitCodes)</MudAlert>
-            }
-
-            @if (_forecast is null)
-            {
-                <EmptyState Text="No forecast computed yet" />
-            }
-            else if (_forecastRows.Count == 0)
-            {
-                <EmptyState Text="No material needs right now" />
-            }
-            else
-            {
-                <MudTable T="ForecastRowState" Items="_forecastRows" Hover="true" Dense="true">
-                    <HeaderContent>
-                        <MudTh></MudTh>
-                        <MudTh>Kind</MudTh>
-                        <MudTh>Code</MudTh>
-                        <MudTh>Hardness</MudTh>
-                        <MudTh>Name</MudTh>
-                        <MudTh>Gross need</MudTh>
-                        <MudTh>In stock</MudTh>
-                        <MudTh>Stock after</MudTh>
-                        <MudTh>On order</MudTh>
-                        <MudTh>Avg usage/wk</MudTh>
-                        <MudTh>Supplier</MudTh>
-                        <MudTh>Order by</MudTh>
-                        <MudTh>Est. cost</MudTh>
-                        <MudTh>To order</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd><MudCheckBox T="bool" Value="context.Selected" ValueChanged="@((bool v) => context.Selected = v)" /></MudTd>
-                        <MudTd DataLabel="Kind">@context.Row.Kind</MudTd>
-                        <MudTd DataLabel="Code">@context.Row.Code</MudTd>
-                        <MudTd DataLabel="Hardness">@context.Row.HardnessCode</MudTd>
-                        <MudTd DataLabel="Name">@context.Row.DisplayName</MudTd>
-                        <MudTd DataLabel="Gross need">@context.Row.GrossNeed</MudTd>
-                        <MudTd DataLabel="In stock">@context.Row.InStock</MudTd>
-                        <MudTd DataLabel="Stock after">
-                            @* Below-minimum flag: same HD-1 idiom the Stock tab uses (colored text, not a
-                               chip) - a text flag, not a page-local color. *@
-                            <MudText Color="@(context.Row.BelowMinimum ? Color.Error : Color.Default)">@context.Row.StockAfterNeeds</MudText>
-                        </MudTd>
-                        <MudTd DataLabel="On order">@context.Row.OnOrder</MudTd>
-                        <MudTd DataLabel="Avg usage/wk">@AverageUsageText(context.Row)</MudTd>
-                        <MudTd DataLabel="Supplier">@(context.Row.PreferredSupplierName ?? "—")</MudTd>
-                        <MudTd DataLabel="Order by">
-                            <MudText Color="@(context.Row.OrderByOverdue ? Color.Error : Color.Default)">@(context.Row.OrderByDate?.ToString("yyyy-MM-dd") ?? "—")</MudText>
-                        </MudTd>
-                        <MudTd DataLabel="Est. cost">
-                            @* Recomputed from the EDITED to-order quantity, not the frozen suggestion -
-                               the estimate must track what the user is about to actually order. *@
-                            @(context.Row.UnitPrice is decimal price ? (context.ToOrder * price).ToString("C2") : "—")
-                        </MudTd>
-                        <MudTd DataLabel="To order">
-                            <MudNumericField T="decimal" Value="context.ToOrder" ValueChanged="@((decimal v) => context.ToOrder = v)" Min="0" Dense="true" />
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-            }
-        </MudTabPanel>
-
-        <MudTabPanel Text="Stock">
-            @if (_stock.Count == 0)
-            {
-                <EmptyState Text="No stock recorded yet" />
-            }
-            else
-            {
+            <MudTabPanel Text="Stock">
                 @* Union listing (spec 5): a material authored with a profile or supplier term but
                    never yet received shows here too, amount blank rather than a misleading "0". *@
-                <MudTable T="StockRowState" Items="_stock" Hover="true" Dense="true" Class="mt-4">
+                <MudTable T="StockRowState" Items="_stock" Hover="true" Dense="true" Loading="@_loading" Class="mt-4">
                     <HeaderContent>
                         <MudTh>Kind</MudTh>
                         <MudTh>Code</MudTh>
@@ -130,24 +127,23 @@
                         <MudTd DataLabel="Min">@(context.Profile is not null ? context.Profile.MinimumStock.ToString() : "")</MudTd>
                         <MudTd>
                             <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
-                                <MudButton Size="Size.Small" OnClick="@(() => AdjustStockAsync(context))">Adjust</MudButton>
-                                <MudButton Size="Size.Small" OnClick="@(() => OpenProfileAsync(context))">Profile</MudButton>
-                                <MudButton Size="Size.Small" OnClick="@(() => OpenMovementsAsync(context))">Movements</MudButton>
+                                <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => AdjustStockAsync(context))">Adjust</ProgressButton>
+                                <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => OpenProfileAsync(context))">Profile</ProgressButton>
+                                <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => OpenMovementsAsync(context))">Movements</ProgressButton>
                             </MudStack>
                         </MudTd>
                     </RowTemplate>
+                    <NoRecordsContent>
+                        <EmptyState Text="No stock recorded yet" />
+                    </NoRecordsContent>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
                 </MudTable>
-            }
-        </MudTabPanel>
+            </MudTabPanel>
 
-        <MudTabPanel Text="Orders">
-            @if (_orders.Count == 0)
-            {
-                <EmptyState Text="No material orders yet" />
-            }
-            else
-            {
-                <MudTable T="MaterialOrder" Items="_orders" Hover="true" Dense="true" Class="mt-4"
+            <MudTabPanel Text="Orders">
+                <MudTable T="MaterialOrder" Items="_orders" Hover="true" Dense="true" Loading="@_loading" Class="mt-4"
                           OnRowClick="@((TableRowClickEventArgs<MaterialOrder> args) => Navigation.NavigateTo($"/materials/orders/{args.Item!.Id}"))">
                     <HeaderContent>
                         <MudTh>Number</MudTh>
@@ -158,13 +154,19 @@
                     <RowTemplate>
                         <MudTd DataLabel="Number">@context.Number</MudTd>
                         <MudTd DataLabel="Supplier">@context.Supplier?.Name</MudTd>
-                        <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip></MudTd>
+                        <MudTd DataLabel="State"><StatusChip Color="@StatusColors.For(context.State)" Value="@context.State.ToString()" /></MudTd>
                         <MudTd DataLabel="Created">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
                     </RowTemplate>
+                    <NoRecordsContent>
+                        <EmptyState Text="No material orders yet" />
+                    </NoRecordsContent>
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
                 </MudTable>
-            }
-        </MudTabPanel>
-    </MudTabs>
+            </MudTabPanel>
+        </MudTabs>
+    </MudPaper>
 </MudContainer>
 
 @code {
@@ -194,6 +196,7 @@
     private List<string> _unpinnedUnitCodes = [];
     private List<StockRowState> _stock = [];
     private List<MaterialOrder> _orders = [];
+    private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -209,32 +212,40 @@
 
     private async Task ReloadStockAndOrdersAsync()
     {
-        var stock = await MaterialNeeds.StockAsync();
-        var profiles = await MaterialPlanning.ProfilesAsync();
-        var terms = await MaterialPlanning.AllTermsAsync();
-        _orders = await MaterialOrders.ListAsync();
+        _loading = true;
+        try
+        {
+            var stock = await MaterialNeeds.StockAsync();
+            var profiles = await MaterialPlanning.ProfilesAsync();
+            var terms = await MaterialPlanning.AllTermsAsync();
+            _orders = await MaterialOrders.ListAsync();
 
-        var rows = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), StockRowState>();
-        foreach (var s in stock)
-        {
-            var key = (s.Kind, s.Code, s.HardnessCode);
-            rows[key] = new StockRowState
+            var rows = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), StockRowState>();
+            foreach (var s in stock)
             {
-                Kind = s.Kind, Code = s.Code, HardnessCode = s.HardnessCode, Amount = s.Amount, HasStockRow = true,
-                Profile = profiles.FirstOrDefault(p => p.Kind == s.Kind && p.Code == s.Code && p.HardnessCode == s.HardnessCode),
-            };
-        }
-        foreach (var identity in profiles.Select(p => (p.Kind, p.Code, p.HardnessCode))
-                     .Concat(terms.Select(t => (t.Kind, t.Code, t.HardnessCode))).Distinct())
-        {
-            if (rows.ContainsKey(identity)) { continue; }
-            rows[identity] = new StockRowState
+                var key = (s.Kind, s.Code, s.HardnessCode);
+                rows[key] = new StockRowState
+                {
+                    Kind = s.Kind, Code = s.Code, HardnessCode = s.HardnessCode, Amount = s.Amount, HasStockRow = true,
+                    Profile = profiles.FirstOrDefault(p => p.Kind == s.Kind && p.Code == s.Code && p.HardnessCode == s.HardnessCode),
+                };
+            }
+            foreach (var identity in profiles.Select(p => (p.Kind, p.Code, p.HardnessCode))
+                         .Concat(terms.Select(t => (t.Kind, t.Code, t.HardnessCode))).Distinct())
             {
-                Kind = identity.Kind, Code = identity.Code, HardnessCode = identity.HardnessCode, HasStockRow = false,
-                Profile = profiles.FirstOrDefault(p => p.Kind == identity.Kind && p.Code == identity.Code && p.HardnessCode == identity.HardnessCode),
-            };
+                if (rows.ContainsKey(identity)) { continue; }
+                rows[identity] = new StockRowState
+                {
+                    Kind = identity.Kind, Code = identity.Code, HardnessCode = identity.HardnessCode, HasStockRow = false,
+                    Profile = profiles.FirstOrDefault(p => p.Kind == identity.Kind && p.Code == identity.Code && p.HardnessCode == identity.HardnessCode),
+                };
+            }
+            _stock = rows.Values.OrderBy(r => r.Kind).ThenBy(r => r.Code, StringComparer.Ordinal).ToList();
         }
-        _stock = rows.Values.OrderBy(r => r.Kind).ThenBy(r => r.Code, StringComparer.Ordinal).ToList();
+        finally
+        {
+            _loading = false;
+        }
     }
 
     // HD-1 idiom (negative amount -> Color.Error) extended with the below-minimum trigger, which

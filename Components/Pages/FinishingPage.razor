@@ -10,21 +10,16 @@
 <PageTitle>Finishing</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">Finishing</MudText>
+    <PageHeader Kicker="DOCK" Title="Finishing" />
 
-    <MudPaper Class="pa-4 mb-4">
+    <MudPaper Class="pa-6 mb-6" Elevation="0">
         <MudTextField T="string" @bind-Value="_scanEntry" Label="Scan or type a unit code" Immediate="true"
                       AutoFocus="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.QrCodeScanner"
                       OnKeyDown="OnScanKeyAsync" />
     </MudPaper>
 
-    @if (_units.Count == 0)
-    {
-        <EmptyState Text="Nothing to finish" />
-    }
-    else
-    {
-        <MudTable T="ProductionUnit" Items="_units" Hover="true" Dense="true">
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTable T="ProductionUnit" Items="_units" Hover="true" Dense="true" Loading="@_loading">
             <HeaderContent>
                 <MudTh>Unit code</MudTh>
                 <MudTh>Order</MudTh>
@@ -38,16 +33,23 @@
                 <MudTd DataLabel="Model/element">@ModelElement(context)</MudTd>
                 <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
                 <MudTd>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => FinishAsync(context.Id))">Finish</MudButton>
+                    <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => FinishAsync(context.Id))">Finish</ProgressButton>
                 </MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="Nothing to finish" />
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
-    }
+    </MudPaper>
 </MudContainer>
 
 @code {
     private List<ProductionUnit> _units = [];
     private string _scanEntry = "";
+    private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -61,8 +63,18 @@
         }
     }
 
-    private async Task LoadAsync() =>
-        _units = await Units.ListUnitsAsync(inHouseOnly: true, stateFilter: ProductionUnitState.Expected);
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _units = await Units.ListUnitsAsync(inHouseOnly: true, stateFilter: ProductionUnitState.Expected);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
 
     private static string ModelElement(ProductionUnit unit)
     {

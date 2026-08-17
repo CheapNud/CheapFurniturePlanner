@@ -11,9 +11,9 @@
 <PageTitle>Receiving</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">Receiving</MudText>
+    <PageHeader Kicker="DOCK" Title="Receiving" />
 
-    <MudPaper Class="pa-4 mb-4">
+    <MudPaper Class="pa-6 mb-6" Elevation="0">
         <MudTextField T="string" @bind-Value="_scanEntry" Label="Scan or type a unit code" Immediate="true"
                       AutoFocus="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.QrCodeScanner"
                       OnKeyDown="OnScanKeyAsync" />
@@ -25,29 +25,24 @@
         }
     </MudPaper>
 
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
-        <MudTextField T="string" Value="_orderFilter" ValueChanged="OnOrderFilterChanged" Label="Filter by order number" Clearable="true" />
-        <MudSelect T="ProductionUnitState?" Value="_stateFilter" ValueChanged="OnStateFilterChanged" Label="State" Clearable="true">
-            <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Expected)">Expected</MudSelectItem>
-            <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Arrived)">Arrived</MudSelectItem>
-            <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Delivered)">Delivered</MudSelectItem>
-            <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Cancelled)">Cancelled</MudSelectItem>
-        </MudSelect>
-        <MudSelect T="int?" Value="_announcementFilter" ValueChanged="OnAnnouncementFilterChanged" Label="Announcement" Clearable="true">
-            @foreach (var announcement in _announcements)
-            {
-                <MudSelectItem T="int?" Value="@((int?)announcement.Id)">@($"{announcement.Supplier?.Name} — {announcement.Reference}")</MudSelectItem>
-            }
-        </MudSelect>
-    </MudStack>
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudTextField T="string" Value="_orderFilter" ValueChanged="OnOrderFilterChanged" Label="Filter by order number" Clearable="true" />
+            <MudSelect T="ProductionUnitState?" Value="_stateFilter" ValueChanged="OnStateFilterChanged" Label="State" Clearable="true">
+                <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Expected)">Expected</MudSelectItem>
+                <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Arrived)">Arrived</MudSelectItem>
+                <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Delivered)">Delivered</MudSelectItem>
+                <MudSelectItem T="ProductionUnitState?" Value="@((ProductionUnitState?)ProductionUnitState.Cancelled)">Cancelled</MudSelectItem>
+            </MudSelect>
+            <MudSelect T="int?" Value="_announcementFilter" ValueChanged="OnAnnouncementFilterChanged" Label="Announcement" Clearable="true">
+                @foreach (var announcement in _announcements)
+                {
+                    <MudSelectItem T="int?" Value="@((int?)announcement.Id)">@($"{announcement.Supplier?.Name} — {announcement.Reference}")</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
 
-    @if (_units.Count == 0)
-    {
-        <EmptyState Text="Nothing expected right now" />
-    }
-    else
-    {
-        <MudTable T="ProductionUnit" Items="_units" Hover="true" Dense="true">
+        <MudTable T="ProductionUnit" Items="_units" Hover="true" Dense="true" Loading="@_loading">
             <HeaderContent>
                 <MudTh>Unit code</MudTh>
                 <MudTh>Order</MudTh>
@@ -62,7 +57,7 @@
                 <MudTd DataLabel="Consumer">@context.Order?.Consumer?.Name</MudTd>
                 <MudTd DataLabel="State">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip>
+                        <StatusChip Color="@StatusColors.For(context.State)" Value="@context.State.ToString()" />
                         @if (context.ReviewNote is not null)
                         {
                             <MudTooltip Text="@context.ReviewNote">
@@ -75,16 +70,22 @@
                 <MudTd>
                     @if (context.State == ProductionUnitState.Expected)
                     {
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ArriveAsync(context.Id))">Arrive</MudButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ArriveAsync(context.Id))">Arrive</ProgressButton>
                     }
                     else if (context.State == ProductionUnitState.Arrived && context.TripId is null)
                     {
-                        <MudButton Size="Size.Small" OnClick="@(() => UndoAsync(context.Id))">Undo</MudButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => UndoAsync(context.Id))">Undo</ProgressButton>
                     }
                 </MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="Nothing expected right now" />
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
-    }
+    </MudPaper>
 </MudContainer>
 
 @code {
@@ -95,6 +96,7 @@
     private string _orderFilter = "";
     private ProductionUnitState? _stateFilter;
     private int? _announcementFilter;
+    private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -109,8 +111,18 @@
         }
     }
 
-    private async Task LoadAsync() =>
-        _units = await Units.ListUnitsAsync(string.IsNullOrWhiteSpace(_orderFilter) ? null : _orderFilter, _stateFilter, _announcementFilter, inHouseOnly: false);
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _units = await Units.ListUnitsAsync(string.IsNullOrWhiteSpace(_orderFilter) ? null : _orderFilter, _stateFilter, _announcementFilter, inHouseOnly: false);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
 
     private async Task OnOrderFilterChanged(string filterText)
     {
