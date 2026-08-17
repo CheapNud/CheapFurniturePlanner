@@ -9,23 +9,19 @@
 <PageTitle>Firms</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Firms</MudText>
-        <MudSpacer />
-        @if (_firms.Count > 0)
-        {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddFirmAsync">Add firm</MudButton>
-        }
-    </MudStack>
+    <PageHeader Kicker="FIRMS" Title="Manage firms">
+        <Actions>
+            @if (_firms.Count > 0)
+            {
+                <ProgressButton OnClick="AddFirmAsync" StartIcon="@Icons.Material.Filled.Add">Add firm</ProgressButton>
+            }
+        </Actions>
+    </PageHeader>
 
-    @if (_firms.Count == 0)
-    {
-        <EmptyState Icon="@Icons.Material.Filled.AccountBalance" Text="No firms yet"
-                    ActionText="Add firm" OnAction="AddFirmAsync" />
-    }
-    else
-    {
-        <MudTable Items="_firms" Hover="true" Dense="true">
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTextField T="string" Value="_search" ValueChanged="@((string v) => _search = v)" Label="Search"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Class="mb-4" />
+        <MudTable Items="@FilteredFirms" Hover="true" Dense="true" Loading="@_loading">
             <HeaderContent>
                 <MudTh>Code</MudTh>
                 <MudTh>Name</MudTh>
@@ -42,16 +38,16 @@
                 <MudTd DataLabel="Default">
                     @if (context.IsDefault)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForActive(true)">Default</MudChip>
+                        <StatusChip Color="@StatusColors.ForActive(true)" Value="Default" />
                     }
                     else
                     {
-                        <MudButton Size="Size.Small" OnClick="@(() => SetDefaultAsync(context))">Make default</MudButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => SetDefaultAsync(context))">Make default</ProgressButton>
                     }
                 </MudTd>
                 <MudTd>
                     <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
-                        <MudButton Size="Size.Small" OnClick="@(() => EditCollectionsAsync(context))">Collections</MudButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditCollectionsAsync(context))">Collections</ProgressButton>
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Title="Edit firm"
                                        OnClick="@(() => EditFirmAsync(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Title="Delete firm"
@@ -59,14 +55,35 @@
                     </MudStack>
                 </MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                @if (_firms.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Filled.AccountBalance" Text="No firms yet"
+                                ActionText="Add firm" OnAction="AddFirmAsync" />
+                }
+                else
+                {
+                    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Text="No firms match your search." />
+                }
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
-    }
+    </MudPaper>
 </MudContainer>
 
 @code {
     private List<Firm> _firms = [];
     private Dictionary<int, int> _collectionCounts = [];
     private List<Region> _regions = [];
+    private bool _loading;
+    private string _search = "";
+
+    private IEnumerable<Firm> FilteredFirms => string.IsNullOrWhiteSpace(_search)
+        ? _firms
+        : _firms.Where(f => f.Code.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || f.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {
@@ -83,9 +100,17 @@
 
     private async Task ReloadAsync()
     {
-        _firms = await Firms.FirmsAsync();
-        _collectionCounts = (await Firms.AllCollectionsAsync())
-            .GroupBy(c => c.FirmId).ToDictionary(g => g.Key, g => g.Count());
+        _loading = true;
+        try
+        {
+            _firms = await Firms.FirmsAsync();
+            _collectionCounts = (await Firms.AllCollectionsAsync())
+                .GroupBy(c => c.FirmId).ToDictionary(g => g.Key, g => g.Count());
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private async Task AddFirmAsync()

@@ -21,90 +21,60 @@
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     @if (_roomPlan != null)
     {
-        <!-- Header with room plan info and actions -->
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
-                           OnClick="@(() => Navigation.NavigateTo("/room-plans"))"
-                           Title="Back to Room Plans" />
-
-            <MudStack Spacing="0">
-                <MudText Typo="Typo.h5">@_roomPlan.Name</MudText>
-                @if (!string.IsNullOrEmpty(_roomPlan.Description))
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => Navigation.NavigateTo("/room-plans"))"
+                       Title="Back to Room Plans"
+                       Class="mb-2" />
+        <PageHeader Kicker="PLANNER" Title="@_roomPlan.Name" Subtitle="@_roomPlan.Description">
+            <Actions>
+                @if (_hasUnsavedChanges)
                 {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        @_roomPlan.Description
-                    </MudText>
+                    <MudChip T="string" Icon="@Icons.Material.Filled.Schedule" Color="Color.Warning" Size="Size.Small" Variant="Variant.Text">
+                        Unsaved Changes
+                    </MudChip>
                 }
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @_roomPlan.Width � @_roomPlan.Height @_roomPlan.Unit
-                    � @_selectedFurniture.Count furniture items
-                    @if (_lastSaved.HasValue)
-                    {
-                        <span> � Last saved: @_lastSaved.Value.ToString("yyyy-MM-dd HH:mm")</span>
-                    }
-                </MudText>
-            </MudStack>
+                else if (_lastSaved.HasValue)
+                {
+                    <MudChip T="string" Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small" Variant="Variant.Text">
+                        Saved
+                    </MudChip>
+                }
 
-            <!-- Auto-save indicator -->
-            @if (_hasUnsavedChanges)
+                <ProgressButton StartIcon="@Icons.Material.Filled.Save" OnClick="SaveRoomPlan" Disabled="@(!_hasUnsavedChanges)">
+                    Save
+                </ProgressButton>
+                <ProgressButton Variant="Variant.Text" Color="Color.Info" StartIcon="@Icons.Material.Filled.GetApp" OnClick="ExportRoomPlan">
+                    Export
+                </ProgressButton>
+                <MudButton Variant="Variant.Text" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Settings" OnClick="OpenRoomSettings">
+                    Settings
+                </MudButton>
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Primary">
+                    <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy"
+                                 OnClick="DuplicateRoomPlan">
+                        Duplicate Plan
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Print"
+                                 OnClick="PrintRoomPlan">
+                        Print
+                    </MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem Icon="@Icons.Material.Filled.Delete"
+                                 OnClick="DeleteRoomPlan"
+                                 Style="color: var(--mud-palette-error);">
+                        Delete Plan
+                    </MudMenuItem>
+                </MudMenu>
+            </Actions>
+        </PageHeader>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-4">
+            @_roomPlan.Width � @_roomPlan.Height @_roomPlan.Unit
+            � @_selectedFurniture.Count furniture items
+            @if (_lastSaved.HasValue)
             {
-                <MudChip T="string" Icon="@Icons.Material.Filled.Schedule"
-                         Color="Color.Warning"
-                         Size="Size.Small">
-                    Unsaved Changes
-                </MudChip>
+                <span> � Last saved: @_lastSaved.Value.ToString("yyyy-MM-dd HH:mm")</span>
             }
-            else if (_lastSaved.HasValue)
-            {
-                <MudChip T="string" Icon="@Icons.Material.Filled.Check"
-                         Color="Color.Success"
-                         Size="Size.Small">
-                    Saved
-                </MudChip>
-            }
-
-            <MudSpacer />
-
-            <!-- Actions -->
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Secondary"
-                       StartIcon="@Icons.Material.Filled.Save"
-                       OnClick="SaveRoomPlan"
-                       Disabled="@(!_hasUnsavedChanges)">
-                Save
-            </MudButton>
-
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Info"
-                       StartIcon="@Icons.Material.Filled.GetApp"
-                       OnClick="ExportRoomPlan">
-                Export
-            </MudButton>
-
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Secondary"
-                       StartIcon="@Icons.Material.Filled.Settings"
-                       OnClick="OpenRoomSettings">
-                Settings
-            </MudButton>
-
-            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Primary">
-                <MudMenuItem Icon="@Icons.Material.Filled.ContentCopy"
-                             OnClick="DuplicateRoomPlan">
-                    Duplicate Plan
-                </MudMenuItem>
-                <MudMenuItem Icon="@Icons.Material.Filled.Print"
-                             OnClick="PrintRoomPlan">
-                    Print
-                </MudMenuItem>
-                <MudDivider />
-                <MudMenuItem Icon="@Icons.Material.Filled.Delete"
-                             OnClick="DeleteRoomPlan"
-                             Style="color: var(--mud-palette-error);">
-                    Delete Plan
-                </MudMenuItem>
-            </MudMenu>
-        </MudStack>
+        </MudText>
 
         <!-- Main Planner Component + Configuration Panel -->
         <MudGrid>
@@ -186,15 +156,15 @@
 
                     <MudText Typo="Typo.subtitle2">Default Behavior</MudText>
 
-                    <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.ShowGrid"
+                    <MudSwitch T="bool" @bind-Value="_editingRoomPlan.ShowGrid"
                                Label="Show Grid"
                                Color="Color.Primary" />
 
-                    <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.PreventOverlap"
+                    <MudSwitch T="bool" @bind-Value="_editingRoomPlan.PreventOverlap"
                                Label="Prevent Furniture Overlap"
                                Color="Color.Primary" />
 
-                    <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.EnableSnapping"
+                    <MudSwitch T="bool" @bind-Value="_editingRoomPlan.EnableSnapping"
                                Label="Enable Grid Snapping"
                                Color="Color.Primary" />
                 </MudStack>

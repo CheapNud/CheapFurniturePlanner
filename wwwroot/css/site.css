@@ -1,11 +1,37 @@
 /* Cheap Furniture Planner - Main Site Styles */
 
+/* UX-2 Task 1: self-hosted font aliases - the drop-in revert design. 'AppDisplay' (Sora) and
+   'AppBody' (Inter) are generic family names the theme (Ui/AppTheme.cs) points its typography
+   settings at. Swapping the font pair later means replacing the files under wwwroot/fonts/ only
+   - no theme, CSS, or page edit required. This block and Ui/AppTheme.cs are the only places
+   allowed to name a literal font family. */
+@font-face {
+    font-family: 'AppDisplay';
+    src: url('/fonts/Sora-Variable.ttf');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'AppBody';
+    src: url('/fonts/Inter-Variable.ttf');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
 /* Global Styles */
 html, body {
-    font-family: 'Roboto', sans-serif;
+    font-family: var(--mud-typography-default-family);
     height: 100%;
     margin: 0;
     padding: 0;
+}
+
+/* AppBar bottom hairline - flat chrome (Elevation="0") still needs a boundary line. */
+.app-bar-hairline {
+    border-bottom: 1px solid var(--mud-palette-lines-default);
 }
 
 /* Blazor loading styles */

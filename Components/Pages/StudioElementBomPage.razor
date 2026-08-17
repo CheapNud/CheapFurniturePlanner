@@ -17,11 +17,8 @@
 <PageTitle>BOM - @ElementCode</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to elements" Href="@($"/studio/{ModelCode}/elements")" />
-        <MudText Typo="Typo.h4">BOM — @ModelCode / @ElementCode</MudText>
-        <MudSpacer />
-    </MudStack>
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to elements" Href="@($"/studio/{ModelCode}/elements")" Class="mb-2" />
+    <PageHeader Kicker="STUDIO" Title="@($"BOM — {ModelCode} / {ElementCode}")" />
 
     @if (_element is not null && _state != TradeItemState.Draft)
     {
@@ -41,124 +38,105 @@ else
     @foreach (var kind in _kinds)
     {
         var lines = LinesFor(kind);
-        <MudPaper Elevation="1" Class="pa-4 mb-4">
+        <MudPaper Elevation="0" Class="pa-6 mb-6">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.h6">@kind</MudText>
-                <MudButton Size="Size.Small"
-                           Variant="Variant.Filled"
-                           Color="Color.Primary"
-                           StartIcon="@Icons.Material.Filled.Add"
-                           Disabled="@(_state != TradeItemState.Draft)"
-                           OnClick="@(() => AddAsync(kind))">
+                <ProgressButton Size="Size.Small" Variant="Variant.Text"
+                                Disabled="@(_state != TradeItemState.Draft)"
+                                StartIcon="@Icons.Material.Filled.Add"
+                                OnClick="@(() => AddAsync(kind))">
                     Add @kind line
-                </MudButton>
+                </ProgressButton>
             </MudStack>
-            @if (lines.Count == 0)
-            {
-                <MudText Typo="Typo.body2" Color="Color.Secondary">No lines.</MudText>
-            }
-            else
-            {
-                <MudTable Items="@lines" Hover="true" Dense="true" Elevation="0">
-                    <HeaderContent>
-                        <MudTh>Key</MudTh>
-                        <MudTh>Detail</MudTh>
-                        <MudTh>Qty</MudTh>
-                        <MudTh>Actions</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Key">@context.LineKey</MudTd>
-                        <MudTd DataLabel="Detail">
-                            @Summary(context)
-                            @if (context.Condition is not null)
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">@ConditionLabel(context)</MudText>
-                            }
-                        </MudTd>
-                        <MudTd DataLabel="Qty">@context.Quantity</MudTd>
-                        <MudTd DataLabel="Actions">
-                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
-                                               Size="Size.Small"
-                                               Title="Move up"
-                                               Disabled="@(_state != TradeItemState.Draft || IsFirst(kind, context))"
-                                               OnClick="@(() => MoveAsync(kind, context.LineKey, -1))" />
-                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
-                                               Size="Size.Small"
-                                               Title="Move down"
-                                               Disabled="@(_state != TradeItemState.Draft || IsLast(kind, context))"
-                                               OnClick="@(() => MoveAsync(kind, context.LineKey, 1))" />
-                                <MudButton Size="Size.Small"
-                                           Variant="Variant.Outlined"
-                                           Color="Color.Default"
-                                           Disabled="@(_state != TradeItemState.Draft)"
-                                           OnClick="@(() => EditAsync(kind, context))">
-                                    Edit
-                                </MudButton>
-                                <MudButton Size="Size.Small"
-                                           Variant="Variant.Outlined"
-                                           Color="Color.Error"
-                                           Disabled="@(_state != TradeItemState.Draft)"
-                                           OnClick="@(() => DeleteAsync(context))">
-                                    Delete
-                                </MudButton>
-                            </MudStack>
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-            }
-        </MudPaper>
-    }
-
-    <MudPaper Elevation="1" Class="pa-4 mb-4">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
-            <MudText Typo="Typo.h6">Substitutions</MudText>
-            <MudButton Size="Size.Small"
-                       Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Add"
-                       Disabled="@(_state != TradeItemState.Draft)"
-                       OnClick="@AddSubstitutionAsync">
-                Add substitution
-            </MudButton>
-        </MudStack>
-        @if (_element.Substitutions.Count == 0)
-        {
-            <MudText Typo="Typo.body2" Color="Color.Secondary">No substitutions.</MudText>
-        }
-        else
-        {
-            <MudTable Items="@_indexedSubstitutions" Hover="true" Dense="true" Elevation="0">
+            <MudTable Items="@lines" Hover="true" Dense="true" Elevation="0">
                 <HeaderContent>
-                    <MudTh>Swap</MudTh>
-                    <MudTh>When</MudTh>
+                    <MudTh>Key</MudTh>
+                    <MudTh>Detail</MudTh>
                     <MudTh>Qty</MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Swap">@context.Rule.ReplaceMaterialCode → @context.Rule.WithMaterialCode</MudTd>
-                    <MudTd DataLabel="When">@WhenLabel(context.Rule.When)</MudTd>
-                    <MudTd DataLabel="Qty">@(context.Rule.QuantityOverride?.ToString() ?? "-")</MudTd>
+                    <MudTd DataLabel="Key">@context.LineKey</MudTd>
+                    <MudTd DataLabel="Detail">
+                        @Summary(context)
+                        @if (context.Condition is not null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@ConditionLabel(context)</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Qty">@context.Quantity</MudTd>
                     <MudTd DataLabel="Actions">
-                        <MudStack Row="true" Spacing="1">
-                            <MudButton Size="Size.Small"
-                                       Variant="Variant.Outlined"
-                                       Disabled="@(_state != TradeItemState.Draft)"
-                                       OnClick="@(() => EditSubstitutionAsync(context.Index))">
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                           Size="Size.Small"
+                                           Title="Move up"
+                                           Disabled="@(_state != TradeItemState.Draft || IsFirst(kind, context))"
+                                           OnClick="@(() => MoveAsync(kind, context.LineKey, -1))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                           Size="Size.Small"
+                                           Title="Move down"
+                                           Disabled="@(_state != TradeItemState.Draft || IsLast(kind, context))"
+                                           OnClick="@(() => MoveAsync(kind, context.LineKey, 1))" />
+                            <ProgressButton Size="Size.Small" Variant="Variant.Text"
+                                            Disabled="@(_state != TradeItemState.Draft)"
+                                            OnClick="@(() => EditAsync(kind, context))">
                                 Edit
-                            </MudButton>
-                            <MudButton Size="Size.Small"
-                                       Variant="Variant.Outlined"
-                                       Color="Color.Error"
-                                       Disabled="@(_state != TradeItemState.Draft)"
-                                       OnClick="@(() => DeleteSubstitutionAsync(context.Index))">
+                            </ProgressButton>
+                            <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                            Disabled="@(_state != TradeItemState.Draft)"
+                                            OnClick="@(() => DeleteAsync(context))">
                                 Delete
-                            </MudButton>
+                            </ProgressButton>
                         </MudStack>
                     </MudTd>
                 </RowTemplate>
+                <NoRecordsContent>
+                    <EmptyState Text="No lines." />
+                </NoRecordsContent>
             </MudTable>
-        }
+        </MudPaper>
+    }
+
+    <MudPaper Elevation="0" Class="pa-6 mb-6">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h6">Substitutions</MudText>
+            <ProgressButton Size="Size.Small" Variant="Variant.Text"
+                            Disabled="@(_state != TradeItemState.Draft)"
+                            StartIcon="@Icons.Material.Filled.Add"
+                            OnClick="@AddSubstitutionAsync">
+                Add substitution
+            </ProgressButton>
+        </MudStack>
+        <MudTable Items="@_indexedSubstitutions" Hover="true" Dense="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Swap</MudTh>
+                <MudTh>When</MudTh>
+                <MudTh>Qty</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Swap">@context.Rule.ReplaceMaterialCode → @context.Rule.WithMaterialCode</MudTd>
+                <MudTd DataLabel="When">@WhenLabel(context.Rule.When)</MudTd>
+                <MudTd DataLabel="Qty">@(context.Rule.QuantityOverride?.ToString() ?? "-")</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudStack Row="true" Spacing="1">
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text"
+                                        Disabled="@(_state != TradeItemState.Draft)"
+                                        OnClick="@(() => EditSubstitutionAsync(context.Index))">
+                            Edit
+                        </ProgressButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                        Disabled="@(_state != TradeItemState.Draft)"
+                                        OnClick="@(() => DeleteSubstitutionAsync(context.Index))">
+                            Delete
+                        </ProgressButton>
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="No substitutions." />
+            </NoRecordsContent>
+        </MudTable>
     </MudPaper>
 }
 </MudContainer>

@@ -8,66 +8,68 @@
 <PageTitle>Users</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Users</MudText>
-        <MudSpacer />
-        @if (_users.Count > 0)
-        {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddUserAsync())">
-                Add user
-            </MudButton>
-        }
-    </MudStack>
+    <PageHeader Kicker="ADMIN" Title="Users">
+        <Actions>
+            @if (_users.Count > 0)
+            {
+                <ProgressButton StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddUserAsync())">
+                    Add user
+                </ProgressButton>
+            }
+        </Actions>
+    </PageHeader>
 
-    @if (_users.Count == 0)
-    {
-        <EmptyState Text="No users yet." ActionText="Add user" OnAction="@(() => AddUserAsync())" />
-    }
-    else
-    {
-    <MudTable Items="@_users" Hover="true" Dense="true" T="UserSummary">
-        <HeaderContent>
-            <MudTh>Name</MudTh>
-            <MudTh>Username</MudTh>
-            <MudTh>Roles</MudTh>
-            <MudTh>State</MudTh>
-            <MudTh>Actions</MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Name">@context.DisplayName</MudTd>
-            <MudTd DataLabel="Username">@context.UserName</MudTd>
-            <MudTd DataLabel="Roles">
-                <MudStack Row="true" Spacing="1">
-                    @foreach (var role in context.Roles)
-                    {
-                        <MudChip T="string" Size="Size.Small">@role</MudChip>
-                    }
-                </MudStack>
-            </MudTd>
-            <MudTd DataLabel="State">
-                <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForActive(!context.IsDeactivated)">@(context.IsDeactivated ? "Deactivated" : "Active")</MudChip>
-            </MudTd>
-            <MudTd DataLabel="Actions">
-                <MudStack Row="true" Spacing="1">
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditRolesAsync(context))">Edit roles</MudButton>
-                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ResetPasswordAsync(context))">Reset password</MudButton>
-                    @if (context.IsDeactivated)
-                    {
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" OnClick="@(() => ReactivateAsync(context))">Reactivate</MudButton>
-                    }
-                    else
-                    {
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeactivateAsync(context))">Deactivate</MudButton>
-                    }
-                </MudStack>
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
-    }
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTable Items="@_users" Hover="true" Dense="true" T="UserSummary" Loading="@_loading">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Username</MudTh>
+                <MudTh>Roles</MudTh>
+                <MudTh>State</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@context.DisplayName</MudTd>
+                <MudTd DataLabel="Username">@context.UserName</MudTd>
+                <MudTd DataLabel="Roles">
+                    <MudStack Row="true" Spacing="1">
+                        @foreach (var role in context.Roles)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@role</MudChip>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="State">
+                    <StatusChip Color="@StatusColors.ForActive(!context.IsDeactivated)" Value="@(context.IsDeactivated ? "Deactivated" : "Active")" />
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudStack Row="true" Spacing="1">
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditRolesAsync(context))">Edit roles</ProgressButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ResetPasswordAsync(context))">Reset password</ProgressButton>
+                        @if (context.IsDeactivated)
+                        {
+                            <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Success" OnClick="@(() => ReactivateAsync(context))">Reactivate</ProgressButton>
+                        }
+                        else
+                        {
+                            <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => DeactivateAsync(context))">Deactivate</ProgressButton>
+                        }
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="No users yet." ActionText="Add user" OnAction="@(() => AddUserAsync())" />
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </MudPaper>
 </MudContainer>
 
 @code {
     private List<UserSummary> _users = [];
+    private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -81,7 +83,18 @@
         }
     }
 
-    private async Task ReloadAsync() => _users = await UserAdminService.ListAsync();
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _users = await UserAdminService.ListAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
 
     private async Task AddUserAsync()
     {

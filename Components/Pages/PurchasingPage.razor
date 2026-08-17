@@ -13,21 +13,24 @@
 <PageTitle>Purchasing</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Purchasing</MudText>
-        <MudSpacer />
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Sync" OnClick="GenerateOrdersAsync">Generate orders</MudButton>
-    </MudStack>
+    <PageHeader Kicker="PURCHASING" Title="Purchasing">
+        <Actions>
+            @* Canon deviation (see EmptyState below): Generate is a recurring sweep action, always
+               available - not a genuine per-record "Add", so it stays visible regardless of whether
+               any purchase orders exist yet. *@
+            <ProgressButton OnClick="GenerateOrdersAsync" StartIcon="@Icons.Material.Filled.Sync">Generate orders</ProgressButton>
+        </Actions>
+    </PageHeader>
 
     @if (_unresolvedModelCodes.Count > 0)
     {
-        <MudAlert Severity="Severity.Warning" Class="mb-4">
+        <MudAlert Severity="Severity.Warning" Class="mb-6">
             <MudText Class="mb-2">Unresolved:</MudText>
             @foreach (var modelCode in _unresolvedModelCodes)
             {
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
                     <MudText>@modelCode</MudText>
-                    <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => MarkInHouseAsync(modelCode))">Mark in-house</MudButton>
+                    <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => MarkInHouseAsync(modelCode))">Mark in-house</ProgressButton>
                 </MudStack>
             }
         </MudAlert>
@@ -35,28 +38,20 @@
 
     @if (_inHouseModelCodes.Count > 0)
     {
-        <MudPaper Class="pa-4 mb-4">
-            <MudText Typo="Typo.subtitle1" Class="mb-2">In-house models</MudText>
+        <MudPaper Class="pa-6 mb-6" Elevation="0">
+            <MudText Typo="Typo.h6" Class="mb-2">In-house models</MudText>
             @foreach (var modelCode in _inHouseModelCodes)
             {
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
                     <MudText>@modelCode</MudText>
-                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => UnmarkInHouseAsync(modelCode))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Title="Unmark in-house" OnClick="@(() => UnmarkInHouseAsync(modelCode))" />
                 </MudStack>
             }
         </MudPaper>
     }
 
-    @if (_orders.Count == 0)
-    {
-        @* Canon deviation: EmptyState normally carries the page's own "Add" CTA, but a purchase
-           order is never hand-added - the sweep button above IS the action, for an empty list same
-           as a full one, so it stays visible and this EmptyState has no ActionText of its own. *@
-        <EmptyState Text="No purchase orders yet" />
-    }
-    else
-    {
-        <MudTable T="SupplierOrder" Items="_orders" Hover="true" Dense="true"
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTable T="SupplierOrder" Items="_orders" Hover="true" Dense="true" Loading="@_loading"
                   OnRowClick="@((TableRowClickEventArgs<SupplierOrder> args) => Navigation.NavigateTo($"/purchasing/{args.Item!.Id}"))">
             <HeaderContent>
                 <MudTh>PO number</MudTh>
@@ -68,18 +63,29 @@
             <RowTemplate>
                 <MudTd DataLabel="PO number">@context.PoNumber</MudTd>
                 <MudTd DataLabel="Supplier">@context.Supplier?.Name</MudTd>
-                <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip></MudTd>
+                <MudTd DataLabel="State"><StatusChip Color="@StatusColors.For(context.State)" Value="@context.State.ToString()" /></MudTd>
                 <MudTd DataLabel="Units (outstanding / total)">@Outstanding(context) / @context.Units.Count</MudTd>
                 <MudTd DataLabel="Created">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                @* Canon deviation: EmptyState normally carries the page's own "Add" CTA, but a purchase
+                   order is never hand-added - the sweep button above IS the action, for an empty list
+                   same as a full one, so it stays visible and this EmptyState has no ActionText of
+                   its own. *@
+                <EmptyState Text="No purchase orders yet" />
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
-    }
+    </MudPaper>
 </MudContainer>
 
 @code {
     private List<SupplierOrder> _orders = [];
     private List<string> _unresolvedModelCodes = [];
     private List<string> _inHouseModelCodes = [];
+    private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -95,9 +101,17 @@
 
     private async Task LoadAsync()
     {
-        _orders = await Purchasing.ListOrdersAsync();
-        _unresolvedModelCodes = await Purchasing.UnresolvedModelCodesAsync();
-        _inHouseModelCodes = await Parties.InHouseModelCodesAsync();
+        _loading = true;
+        try
+        {
+            _orders = await Purchasing.ListOrdersAsync();
+            _unresolvedModelCodes = await Purchasing.UnresolvedModelCodesAsync();
+            _inHouseModelCodes = await Parties.InHouseModelCodesAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private async Task MarkInHouseAsync(string modelCode)

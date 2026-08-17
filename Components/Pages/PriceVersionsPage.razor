@@ -11,62 +11,57 @@
 <PageTitle>Price versions</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Price versions</MudText>
-        <MudSpacer />
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Publish"
-                   OnClick="@PublishAsync">
-            Publish new version
-        </MudButton>
-    </MudStack>
+    <PageHeader Kicker="STUDIO" Title="Price versions">
+        <Actions>
+            <ProgressButton StartIcon="@Icons.Material.Filled.Publish" OnClick="@PublishAsync">
+                Publish new version
+            </ProgressButton>
+        </Actions>
+    </PageHeader>
     @if (_pending)
     {
         <MudAlert Severity="Severity.Warning" Class="mb-4">Unpublished price changes — publish a new version to apply them.</MudAlert>
     }
 
-@if (_versions is null)
-{
-    <MudProgressCircular Indeterminate="true" />
-}
-else if (_versions.Count == 0)
-{
-    <EmptyState Text="No price versions yet." ActionText="Publish new version" OnAction="@PublishAsync" />
-}
-else
-{
-    <MudTable Items="@_versions" Hover="true" Dense="true">
-        <HeaderContent>
-            <MudTh>Version</MudTh>
-            <MudTh>Effective</MudTh>
-            <MudTh>Published</MudTh>
-            <MudTh>Status</MudTh>
-            <MudTh>Hash</MudTh>
-            <MudTh />
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Version">@context.Version</MudTd>
-            <MudTd DataLabel="Effective">@context.EffectiveDate.ToString("yyyy-MM-dd")</MudTd>
-            <MudTd DataLabel="Published">@context.PublishedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
-            <MudTd DataLabel="Status">
-                <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.Status)">@context.Status</MudChip>
-            </MudTd>
-            <MudTd DataLabel="Hash">@ShortHash(context.ContentHash)</MudTd>
-            <MudTd>
-                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
-                    <MudButton Size="Size.Small" OnClick="@(() => ExportCsvAsync(context.Version))">Export CSV</MudButton>
-                    <MudButton Size="Size.Small" OnClick="@(() => ExportJsonAsync(context.Version))">Export JSON</MudButton>
-                </MudStack>
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
-}
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTable Items="@_versions" Hover="true" Dense="true" Loading="@_loading">
+            <HeaderContent>
+                <MudTh>Version</MudTh>
+                <MudTh>Effective</MudTh>
+                <MudTh>Published</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Hash</MudTh>
+                <MudTh />
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Version">@context.Version</MudTd>
+                <MudTd DataLabel="Effective">@context.EffectiveDate.ToString("yyyy-MM-dd")</MudTd>
+                <MudTd DataLabel="Published">@context.PublishedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                <MudTd DataLabel="Status">
+                    <StatusChip Color="@StatusColors.For(context.Status)" Value="@context.Status.ToString()" />
+                </MudTd>
+                <MudTd DataLabel="Hash">@ShortHash(context.ContentHash)</MudTd>
+                <MudTd>
+                    <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ExportCsvAsync(context.Version))">Export CSV</ProgressButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ExportJsonAsync(context.Version))">Export JSON</ProgressButton>
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="No price versions yet." ActionText="Publish new version" OnAction="@PublishAsync" />
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </MudPaper>
 </MudContainer>
 
 @code {
-    private IReadOnlyList<PriceVersionInfo>? _versions;
+    private List<PriceVersionInfo> _versions = [];
     private bool _pending;
+    private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -82,8 +77,16 @@ else
 
     private async Task ReloadAsync()
     {
-        _versions = await PriceVersionService.ListVersionsAsync();
-        _pending = await PriceVersionService.HasPendingChangesAsync();
+        _loading = true;
+        try
+        {
+            _versions = (await PriceVersionService.ListVersionsAsync()).ToList();
+            _pending = await PriceVersionService.HasPendingChangesAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private static string ShortHash(string hash) => hash.Length > 12 ? hash[..12] : hash;

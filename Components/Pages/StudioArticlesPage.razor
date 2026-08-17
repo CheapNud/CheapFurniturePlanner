@@ -14,93 +14,84 @@
 <PageTitle>Articles</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Articles</MudText>
-        <MudSpacer />
-    </MudStack>
+    <PageHeader Kicker="STUDIO" Title="Articles" />
 
-    <MudPaper Elevation="2" Class="pa-4 mb-4">
-        <MudStack Spacing="3">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                <MudText Typo="Typo.h6">Standalone articles</MudText>
-                @if (_standalone.Count > 0)
-                {
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
-                        Add article
-                    </MudButton>
-                }
-            </MudStack>
-            @if (_standalone.Count == 0)
+    <MudPaper Elevation="0" Class="pa-6 mb-6">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudText Typo="Typo.h6">Standalone articles</MudText>
+            @if (_standalone.Count > 0)
             {
-                <EmptyState Text="No standalone articles yet." ActionText="Add article" OnAction="@(() => AddAsync())" />
-            }
-            else
-            {
-                <MudTable Items="@_standalone" Hover="true" Dense="true" Elevation="0" T="Article">
-                    <HeaderContent>
-                        <MudTh>Code</MudTh>
-                        <MudTh>Name</MudTh>
-                        <MudTh>Manual price</MudTh>
-                        <MudTh>Supplier</MudTh>
-                        <MudTh>State</MudTh>
-                        <MudTh>Actions</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Code">@context.AssignedCode</MudTd>
-                        <MudTd DataLabel="Name">@context.Name</MudTd>
-                        <MudTd DataLabel="Manual price">@context.ManualPrice</MudTd>
-                        <MudTd DataLabel="Supplier">
-                            @context.SupplierRef
-                            @if (UnknownSupplier(context))
-                            {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Warning">unknown supplier code</MudChip>
-                            }
-                        </MudTd>
-                        <MudTd DataLabel="State">
-                            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip>
-                        </MudTd>
-                        <MudTd DataLabel="Actions">
-                            <MudStack Row="true" Spacing="1">
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
-                            </MudStack>
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
+                <ProgressButton StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
+                    Add article
+                </ProgressButton>
             }
         </MudStack>
+        <MudTable Items="@_standalone" Hover="true" Dense="true" Elevation="0" T="Article">
+            <HeaderContent>
+                <MudTh>Code</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Manual price</MudTh>
+                <MudTh>Supplier</MudTh>
+                <MudTh>State</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Code">@context.AssignedCode</MudTd>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Manual price">@context.ManualPrice</MudTd>
+                <MudTd DataLabel="Supplier">
+                    @context.SupplierRef
+                    @if (UnknownSupplier(context))
+                    {
+                        <StatusChip Color="Color.Warning" Value="Unknown supplier code" />
+                    }
+                </MudTd>
+                <MudTd DataLabel="State">
+                    <StatusChip Color="@StatusColors.For(context.State)" Value="@context.State.ToString()" />
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudStack Row="true" Spacing="1">
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditAsync(context))">Edit</ProgressButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</ProgressButton>
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="No standalone articles yet." ActionText="Add article" OnAction="@(() => AddAsync())" />
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
     </MudPaper>
 
-    <MudPaper Elevation="2" Class="pa-4 mb-4">
-        <MudStack Spacing="3">
-            <MudText Typo="Typo.h6">Catalogue articles</MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary">
-                Authored by naming variants in the Studio — edit through a model's naming page, not here.
-            </MudText>
-            @if (_catalogueBacked.Count == 0)
-            {
+    <MudPaper Elevation="0" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h6" Class="mb-2">Catalogue articles</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+            Authored by naming variants in the Studio — edit through a model's naming page, not here.
+        </MudText>
+        <MudTable Items="@_catalogueBacked" Hover="true" Dense="true" Elevation="0" T="Article">
+            <HeaderContent>
+                <MudTh>Code</MudTh>
+                <MudTh>Model</MudTh>
+                <MudTh>Element</MudTh>
+                <MudTh>Variant code</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Code">@context.AssignedCode</MudTd>
+                <MudTd DataLabel="Model">
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Href="@($"/studio/{context.ModelCode}")">@context.ModelCode</MudButton>
+                </MudTd>
+                <MudTd DataLabel="Element">@context.ElementCode</MudTd>
+                <MudTd DataLabel="Variant code">@context.VariantCode</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
                 <EmptyState Text="No catalogue articles yet." />
-            }
-            else
-            {
-                <MudTable Items="@_catalogueBacked" Hover="true" Dense="true" Elevation="0" T="Article">
-                    <HeaderContent>
-                        <MudTh>Code</MudTh>
-                        <MudTh>Model</MudTh>
-                        <MudTh>Element</MudTh>
-                        <MudTh>Variant code</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Code">@context.AssignedCode</MudTd>
-                        <MudTd DataLabel="Model">
-                            <MudButton Size="Size.Small" Variant="Variant.Text" Href="@($"/studio/{context.ModelCode}")">@context.ModelCode</MudButton>
-                        </MudTd>
-                        <MudTd DataLabel="Element">@context.ElementCode</MudTd>
-                        <MudTd DataLabel="Variant code">@context.VariantCode</MudTd>
-                    </RowTemplate>
-                </MudTable>
-            }
-        </MudStack>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
     </MudPaper>
 </MudContainer>
 

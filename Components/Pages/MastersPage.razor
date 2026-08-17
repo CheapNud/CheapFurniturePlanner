@@ -5,16 +5,15 @@
 <PageTitle>Masters</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Pricing masters</MudText>
-        <MudSpacer />
-        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PriceChange" Href="/studio/prices">
-            Publish a version
-        </MudButton>
-    </MudStack>
-    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">Edits apply to the working catalogue. Publish a new dated version on the Prices page to make them effective.</MudText>
+    <PageHeader Kicker="STUDIO" Title="Pricing masters" Subtitle="Edits apply to the working catalogue. Publish a new dated version on the Prices page to make them effective.">
+        <Actions>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PriceChange" Href="/studio/prices">
+                Publish a version
+            </MudButton>
+        </Actions>
+    </PageHeader>
 
-    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
         <MudTabPanel Text="Materials"><MaterialsMasterTab /></MudTabPanel>
         <MudTabPanel Text="Operations"><OperationsMasterTab /></MudTabPanel>
         <MudTabPanel Text="Frame bodies"><FrameBodiesMasterTab /></MudTabPanel>

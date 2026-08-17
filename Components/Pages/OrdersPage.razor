@@ -11,24 +11,19 @@
 <PageTitle>Orders</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Orders</MudText>
-        <MudSpacer />
-        @if (_orders.Count > 0)
-        {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => NewOrderAsync())">
-                New order
-            </MudButton>
-        }
-    </MudStack>
+    <PageHeader Kicker="ORDERS" Title="Manage orders">
+        <Actions>
+            @if (_orders.Count > 0)
+            {
+                <ProgressButton OnClick="NewOrderAsync" StartIcon="@Icons.Material.Filled.Add">New order</ProgressButton>
+            }
+        </Actions>
+    </PageHeader>
 
-    @if (_orders.Count == 0)
-    {
-        <EmptyState Text="No orders yet" ActionText="New order" OnAction="@(() => NewOrderAsync())" />
-    }
-    else
-    {
-        <MudTable Items="@_orders" Hover="true" Dense="true" T="Order"
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTextField T="string" Value="_search" ValueChanged="@((string v) => _search = v)" Label="Search"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Class="mb-4" />
+        <MudTable Items="@FilteredOrders" Hover="true" Dense="true" T="Order" Loading="@_loading"
                   OnRowClick="@((TableRowClickEventArgs<Order> args) => Navigation.NavigateTo($"/orders/{args.Item!.Id}"))">
             <HeaderContent>
                 <MudTh>Order number</MudTh>
@@ -45,25 +40,46 @@
                 <MudTd DataLabel="Seller">@context.Seller?.Name</MudTd>
                 <MudTd DataLabel="Consumer">@context.Consumer?.Name</MudTd>
                 <MudTd DataLabel="State">
-                    <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip>
+                    <StatusChip Color="@StatusColors.For(context.State)" Value="@context.State.ToString()" />
                 </MudTd>
                 <MudTd DataLabel="Production">
                     @if (_phases.GetValueOrDefault(context.Id) is ProductionPhase orderPhase)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(orderPhase)">@PhaseLabel(orderPhase)</MudChip>
+                        <StatusChip Color="@StatusColors.For(orderPhase)" Value="@orderPhase.ToString()" />
                     }
                 </MudTd>
                 <MudTd DataLabel="Lines">@context.Lines.Count</MudTd>
                 <MudTd DataLabel="Total">@OrderEntryService.OrderTotal(context).ToString("C2")</MudTd>
                 <MudTd DataLabel="Pinned version">@(context.PinnedCatalogueVersion ?? "—")</MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                @if (_orders.Count == 0)
+                {
+                    <EmptyState Text="No orders yet" ActionText="New order" OnAction="NewOrderAsync" />
+                }
+                else
+                {
+                    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Text="No orders match your search." />
+                }
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
-    }
+    </MudPaper>
 </MudContainer>
 
 @code {
     private List<Order> _orders = [];
     private Dictionary<int, ProductionPhase?> _phases = [];
+    private bool _loading;
+    private string _search = "";
+
+    private IEnumerable<Order> FilteredOrders => string.IsNullOrWhiteSpace(_search)
+        ? _orders
+        : _orders.Where(o => o.OrderNumber.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || (o.Seller?.Name ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || (o.Consumer?.Name ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {
@@ -79,16 +95,17 @@
 
     private async Task ReloadAsync()
     {
-        _orders = await OrderEntryService.ListOrdersAsync();
-        _phases = await Units.PhasesForOrdersAsync(_orders.Select(o => o.Id).ToList());
+        _loading = true;
+        try
+        {
+            _orders = await OrderEntryService.ListOrdersAsync();
+            _phases = await Units.PhasesForOrdersAsync(_orders.Select(o => o.Id).ToList());
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
-
-    private static string PhaseLabel(ProductionPhase orderPhase) => orderPhase switch
-    {
-        ProductionPhase.InProduction => "In production",
-        ProductionPhase.Ready => "Ready",
-        _ => "Delivered",
-    };
 
     private async Task NewOrderAsync()
     {

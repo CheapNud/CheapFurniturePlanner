@@ -16,8 +16,8 @@
 <PageTitle>New service ticket</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">New service ticket</MudText>
-    <MudPaper Class="pa-4">
+    <PageHeader Kicker="SERVICE" Title="New service ticket" />
+    <MudPaper Class="pa-6" Elevation="0">
         <MudStack Spacing="3">
             <MudSelect T="int?" Label="Consumer" Value="_consumerId" ValueChanged="OnConsumerChanged" Required="true">
                 @foreach (var consumer in _consumers)
@@ -70,7 +70,7 @@
 
             <MudFileUpload T="IReadOnlyList<IBrowserFile>" FilesChanged="OnFilesChanged" Accept=".jpg,.jpeg,.png,.webp">
                 <CustomContent Context="fileUpload">
-                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PhotoCamera"
+                    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.PhotoCamera"
                                OnClick="@fileUpload.OpenFilePickerAsync">Add photos</MudButton>
                 </CustomContent>
             </MudFileUpload>
@@ -79,9 +79,9 @@
                 <MudText Typo="Typo.body2">@_pendingPhotos.Count photo(s) attached</MudText>
             }
 
-            <MudStack Row="true" Justify="Justify.FlexEnd">
-                <MudButton OnClick="@(() => Navigation.NavigateTo("/service"))">Cancel</MudButton>
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Create ticket</MudButton>
+            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                <MudButton Variant="Variant.Text" OnClick="@(() => Navigation.NavigateTo("/service"))">Cancel</MudButton>
+                <ProgressButton OnClick="SaveAsync">Create ticket</ProgressButton>
             </MudStack>
         </MudStack>
     </MudPaper>

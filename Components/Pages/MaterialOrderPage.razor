@@ -20,23 +20,23 @@
     }
     else
     {
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to materials" OnClick="@(() => Navigation.NavigateTo("/materials"))" />
-            <MudText Typo="Typo.h4">@_order.Number</MudText>
-            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(_order.State)">@_order.State</MudChip>
-            <MudSpacer />
-            @if (_order.State == MaterialOrderState.Draft)
-            {
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SendAsync">Send</MudButton>
-            }
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</MudButton>
-            @if (_order.State == MaterialOrderState.Draft)
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Error" Title="Delete material order" OnClick="DeleteAsync">Delete</MudButton>
-            }
-        </MudStack>
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to materials" OnClick="@(() => Navigation.NavigateTo("/materials"))" Class="mb-2" />
+        <PageHeader Kicker="MATERIALS" Title="@_order.Number">
+            <Actions>
+                <StatusChip Color="@StatusColors.For(_order.State)" Value="@_order.State.ToString()" />
+                @if (_order.State == MaterialOrderState.Draft)
+                {
+                    <ProgressButton OnClick="SendAsync">Send</ProgressButton>
+                }
+                <ProgressButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</ProgressButton>
+                @if (_order.State == MaterialOrderState.Draft)
+                {
+                    <ProgressButton Variant="Variant.Text" Color="Color.Error" Title="Delete material order" OnClick="DeleteAsync">Delete</ProgressButton>
+                }
+            </Actions>
+        </PageHeader>
 
-        <MudPaper Class="pa-4 mb-4">
+        <MudPaper Class="pa-6 mb-6" Elevation="0">
             <MudText><b>Supplier:</b> @_order.Supplier?.Name</MudText>
             <MudText><b>Created:</b> @_order.CreatedAt.ToString("yyyy-MM-dd")</MudText>
             @if (_order.SentAt is DateTime sentAt)
@@ -49,12 +49,12 @@
             }
         </MudPaper>
 
-        <MudPaper Class="pa-4">
+        <MudPaper Class="pa-6" Elevation="0">
             <MudText Typo="Typo.h6" Class="mb-2">Lines</MudText>
 
             @if (_order.State == MaterialOrderState.Draft)
             {
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
                     <MudSelect T="MaterialKind" Label="Kind" @bind-Value="_newKind">
                         @foreach (var kind in Enum.GetValues<MaterialKind>())
                         {
@@ -65,59 +65,55 @@
                     <MudTextField T="string" Label="Hardness" @bind-Value="_newHardnessCode" />
                     <MudTextField T="string" Label="Name" @bind-Value="_newDisplayName" />
                     <MudNumericField T="decimal" Label="Quantity" @bind-Value="_newQuantity" Min="0" />
-                    <MudButton Variant="Variant.Outlined" Disabled="@string.IsNullOrWhiteSpace(_newCode)" OnClick="AddLineAsync">Add</MudButton>
+                    <ProgressButton Variant="Variant.Text" Disabled="@string.IsNullOrWhiteSpace(_newCode)" OnClick="AddLineAsync">Add</ProgressButton>
                 </MudStack>
             }
 
-            @if (_order.Lines.Count == 0)
-            {
-                <EmptyState Text="No lines on this order" />
-            }
-            else
-            {
-                <MudTable T="MaterialOrderLine" Items="_order.Lines" Dense="true">
-                    <HeaderContent>
-                        <MudTh>Kind</MudTh>
-                        <MudTh>Code</MudTh>
-                        <MudTh>Hardness</MudTh>
-                        <MudTh>Name</MudTh>
-                        <MudTh>Ordered</MudTh>
-                        <MudTh>Received</MudTh>
-                        <MudTh>Price</MudTh>
-                        <MudTh></MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Kind">@context.Kind</MudTd>
-                        <MudTd DataLabel="Code">@context.Code</MudTd>
-                        <MudTd DataLabel="Hardness">@context.HardnessCode</MudTd>
-                        <MudTd DataLabel="Name">@context.DisplayName</MudTd>
-                        <MudTd DataLabel="Ordered">@context.QuantityOrdered</MudTd>
-                        <MudTd DataLabel="Received">@context.QuantityReceived</MudTd>
-                        <MudTd DataLabel="Price">@(context.UnitPrice is decimal price ? price.ToString("C2") : "—")</MudTd>
-                        <MudTd>
-                            @if (_order.State == MaterialOrderState.Draft)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Title="Remove line" OnClick="@(() => RemoveLineAsync(context))" />
-                            }
-                            else if (_order.State == MaterialOrderState.Sent)
-                            {
-                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                    <MudNumericField T="decimal" Value="_receiveQuantities.GetValueOrDefault(context.Id)"
-                                                      ValueChanged="@((decimal v) => _receiveQuantities[context.Id] = v)" Dense="true" Min="0" />
-                                    <MudButton Size="Size.Small" OnClick="@(() => ReceiveLineAsync(context))">Receive</MudButton>
-                                </MudStack>
-                            }
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
+            <MudTable T="MaterialOrderLine" Items="_order.Lines" Dense="true" Loading="@_loading">
+                <HeaderContent>
+                    <MudTh>Kind</MudTh>
+                    <MudTh>Code</MudTh>
+                    <MudTh>Hardness</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Ordered</MudTh>
+                    <MudTh>Received</MudTh>
+                    <MudTh>Price</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Kind">@context.Kind</MudTd>
+                    <MudTd DataLabel="Code">@context.Code</MudTd>
+                    <MudTd DataLabel="Hardness">@context.HardnessCode</MudTd>
+                    <MudTd DataLabel="Name">@context.DisplayName</MudTd>
+                    <MudTd DataLabel="Ordered">@context.QuantityOrdered</MudTd>
+                    <MudTd DataLabel="Received">@context.QuantityReceived</MudTd>
+                    <MudTd DataLabel="Price">@(context.UnitPrice is decimal price ? price.ToString("C2") : "—")</MudTd>
+                    <MudTd>
+                        @if (_order.State == MaterialOrderState.Draft)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Title="Remove line" OnClick="@(() => RemoveLineAsync(context))" />
+                        }
+                        else if (_order.State == MaterialOrderState.Sent)
+                        {
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                <MudNumericField T="decimal" Value="_receiveQuantities.GetValueOrDefault(context.Id)"
+                                                  ValueChanged="@((decimal v) => _receiveQuantities[context.Id] = v)" Dense="true" Min="0" />
+                                <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ReceiveLineAsync(context))">Receive</ProgressButton>
+                            </MudStack>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <EmptyState Text="No lines on this order" />
+                </NoRecordsContent>
+            </MudTable>
 
-                @* Task 4's rule, mirrored here from MaterialOrderPdf: the total only renders when
-                   EVERY line carries a price - a total silently summing just the priced lines would
-                   understate the real cost while still looking authoritative. *@
-                @if (_order.Lines.Count > 0 && _order.Lines.All(line => line.UnitPrice is not null))
-                {
-                    <MudText Typo="Typo.subtitle1" Class="mt-2">Total: @(_order.Lines.Sum(line => line.UnitPrice!.Value * line.QuantityOrdered).ToString("C2"))</MudText>
-                }
+            @* Task 4's rule, mirrored here from MaterialOrderPdf: the total only renders when
+               EVERY line carries a price - a total silently summing just the priced lines would
+               understate the real cost while still looking authoritative. *@
+            @if (_order.Lines.Count > 0 && _order.Lines.All(line => line.UnitPrice is not null))
+            {
+                <MudText Typo="Typo.subtitle1" Class="mt-2">Total: @(_order.Lines.Sum(line => line.UnitPrice!.Value * line.QuantityOrdered).ToString("C2"))</MudText>
             }
         </MudPaper>
     }
@@ -134,6 +130,7 @@
     private string? _newDisplayName;
     private decimal _newQuantity;
     private Dictionary<int, decimal> _receiveQuantities = [];
+    private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -149,8 +146,16 @@
 
     private async Task ReloadAsync()
     {
-        _order = await MaterialOrders.GetAsync(Id);
-        if (_order is not null) { _theirReference = _order.TheirReference; }
+        _loading = true;
+        try
+        {
+            _order = await MaterialOrders.GetAsync(Id);
+            if (_order is not null) { _theirReference = _order.TheirReference; }
+        }
+        finally
+        {
+            _loading = false;
+        }
         StateHasChanged();
     }
 

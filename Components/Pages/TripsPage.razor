@@ -11,22 +11,20 @@
 <PageTitle>Trips</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Trips</MudText>
-        <MudSpacer />
-        @if (_trips.Count > 0)
-        {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="NewTripAsync">New trip</MudButton>
-        }
-    </MudStack>
+    @* TRIPS stays its own kicker rather than folding into DOCK - trips are warehouse-staff-scoped
+       expedition planning (region/truck/departure), a distinct module from the DOCK receiving/
+       finishing pages, not a sibling tab of the same screen the way Studio's prices/masters are. *@
+    <PageHeader Kicker="TRIPS" Title="Trips">
+        <Actions>
+            @if (_trips.Count > 0)
+            {
+                <ProgressButton OnClick="NewTripAsync" StartIcon="@Icons.Material.Filled.Add">New trip</ProgressButton>
+            }
+        </Actions>
+    </PageHeader>
 
-    @if (_trips.Count == 0)
-    {
-        <EmptyState Text="No trips planned" ActionText="New trip" OnAction="NewTripAsync" />
-    }
-    else
-    {
-        <MudTable T="Trip" Items="_trips" Hover="true" Dense="true"
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTable T="Trip" Items="_trips" Hover="true" Dense="true" Loading="@_loading"
                   OnRowClick="@((TableRowClickEventArgs<Trip> args) => Navigation.NavigateTo($"/trips/{args.Item!.Id}"))">
             <HeaderContent>
                 <MudTh>Trip</MudTh>
@@ -41,25 +39,45 @@
                 <MudTd DataLabel="Departure">@(context.DepartureDate?.ToString("yyyy-MM-dd") ?? "—")</MudTd>
                 <MudTd DataLabel="Truck">@context.TruckName</MudTd>
                 <MudTd DataLabel="Region">@context.Region?.Code</MudTd>
-                <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip></MudTd>
+                <MudTd DataLabel="State"><StatusChip Color="@StatusColors.For(context.State)" Value="@context.State.ToString()" /></MudTd>
                 <MudTd DataLabel="Units">@context.Units.Count</MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="No trips planned" ActionText="New trip" OnAction="NewTripAsync" />
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
-    }
+    </MudPaper>
 </MudContainer>
 
 @code {
     private List<Trip> _trips = [];
+    private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            _trips = await Units.ListTripsAsync();
+            await LoadAsync();
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Loading failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            _trips = await Units.ListTripsAsync();
+        }
+        finally
+        {
+            _loading = false;
         }
     }
 

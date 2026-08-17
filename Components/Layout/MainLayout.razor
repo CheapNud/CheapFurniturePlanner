@@ -1,3 +1,4 @@
+@using CheapFurniturePlanner.Ui
 @using MudBlazor
 
 @inherits LayoutComponentBase
@@ -5,17 +6,17 @@
 @inject ICurrentUser CurrentUser
 
 
-<MudThemeProvider Theme="@_theme" />
+<MudThemeProvider Theme="@AppTheme.Theme" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
     <!-- App Bar -->
-    <MudAppBar Elevation="1" Fixed="true">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" 
-                       Color="Color.Inherit" 
-                       Edge="Edge.Start" 
+    <MudAppBar Elevation="0" Fixed="true" Class="app-bar-hairline">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
                        OnClick="@ToggleDrawer" />
         
         <MudIconButton Icon="@Icons.Material.Filled.Weekend"
@@ -58,16 +59,16 @@
     </MudAppBar>
 
     <!-- Navigation Drawer -->
-    <MudDrawer @bind-Open="@_drawerOpen" 
-               ClipMode="DrawerClipMode.Always" 
-               Elevation="2"
+    <MudDrawer @bind-Open="@_drawerOpen"
+               ClipMode="DrawerClipMode.Always"
+               Elevation="0"
                Variant="@DrawerVariant.Mini">
         <NavMenu />
     </MudDrawer>
 
     <!-- Main Content -->
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+        <MudContainer MaxWidth="MaxWidth.False" Class="pt-16 px-6 pb-6">
             @Body
         </MudContainer>
     </MudMainContent>
@@ -79,7 +80,7 @@
         <MudText Typo="Typo.h6" Class="mb-4">Settings</MudText>
         
         <MudStack Spacing="3">
-            <MudSwitch T="bool" @bind-Checked="_isDarkMode" 
+            <MudSwitch T="bool" @bind-Value="_isDarkMode" 
                       Label="Dark Mode" 
                       Color="Color.Primary" />
             
@@ -109,15 +110,15 @@
             
             <MudText Typo="Typo.subtitle2">Planner Behavior</MudText>
             
-            <MudSwitch T="bool" @bind-Checked="_defaultShowGrid" 
+            <MudSwitch T="bool" @bind-Value="_defaultShowGrid" 
                       Label="Show Grid by Default" 
                       Color="Color.Primary" />
             
-            <MudSwitch T="bool" @bind-Checked="_defaultPreventOverlap"
+            <MudSwitch T="bool" @bind-Value="_defaultPreventOverlap"
                        Label="Prevent Overlap by Default" 
                       Color="Color.Primary" />
             
-            <MudSwitch T="bool" @bind-Checked="_defaultEnableSnapping"
+            <MudSwitch T="bool" @bind-Value="_defaultEnableSnapping"
                        Label="Enable Snapping by Default" 
                       Color="Color.Primary" />
         </MudStack>
@@ -145,28 +146,6 @@
     private bool _defaultShowGrid = true;
     private bool _defaultPreventOverlap = true;
     private bool _defaultEnableSnapping = true;
-
-    private readonly MudTheme _theme = new()
-    {
-        PaletteLight = new PaletteLight()
-        {
-            Primary = "#1976d2",
-            Secondary = "#424242",
-            AppbarBackground = "#1976d2",
-            Background = "#f5f5f5",
-            DrawerBackground = "#ffffff",
-            Surface = "#ffffff"
-        },
-        PaletteDark = new PaletteDark()
-        {
-            Primary = "#90caf9",
-            Secondary = "#f48fb1",
-            AppbarBackground = "#1565c0",
-            Background = "#121212",
-            DrawerBackground = "#1e1e1e",
-            Surface = "#1e1e1e"
-        }
-    };
 
     protected override async Task OnInitializedAsync()
     {

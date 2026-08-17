@@ -15,29 +15,21 @@
 <PageTitle>Elements - @ModelCode</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to models" Href="/studio" />
-        <MudText Typo="Typo.h4">Elements — @ModelCode</MudText>
-        <MudSpacer />
-        @if (_model is { Elements.Count: > 0 } && _state == TradeItemState.Draft)
-        {
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="@(() => AddElementAsync())">
-                Add element
-            </MudButton>
-        }
-    </MudStack>
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to models" Href="/studio" Class="mb-2" />
+    <PageHeader Kicker="STUDIO" Title="@($"Elements — {ModelCode}")" Subtitle="@_model?.Name">
+        <Actions>
+            @if (_model is { Elements.Count: > 0 } && _state == TradeItemState.Draft)
+            {
+                <ProgressButton StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddElementAsync())">
+                    Add element
+                </ProgressButton>
+            }
+        </Actions>
+    </PageHeader>
 
-    @if (_model is not null)
+    @if (_model is not null && _state != TradeItemState.Draft)
     {
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">@_model.Name</MudText>
-
-        @if (_state != TradeItemState.Draft)
-        {
-            <MudAlert Severity="Severity.Warning" Class="mb-4">frozen — model is @_state</MudAlert>
-        }
+        <MudAlert Severity="Severity.Warning" Class="mb-4">frozen — model is @_state</MudAlert>
     }
 
 @if (_notFound)
@@ -48,73 +40,73 @@ else if (_model is null)
 {
     <MudProgressCircular Indeterminate="true" />
 }
-else if (_model.Elements.Count == 0)
-{
-    <EmptyState Text="No elements on this model."
-                ActionText="@(_state == TradeItemState.Draft ? "Add element" : null)"
-                OnAction="@(() => AddElementAsync())" />
-}
 else
 {
-    <MudTable Items="@_model.Elements" Hover="true" Dense="true">
-        <HeaderContent>
-            <MudTh>Code</MudTh>
-            <MudTh>Name</MudTh>
-            <MudTh>Width</MudTh>
-            <MudTh>Depth</MudTh>
-            <MudTh>Height</MudTh>
-            <MudTh>Transport</MudTh>
-            <MudTh>Actions</MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Code">@context.Code</MudTd>
-            <MudTd DataLabel="Name">@context.Name</MudTd>
-            <MudTd DataLabel="Width">@context.Width</MudTd>
-            <MudTd DataLabel="Depth">@context.Depth</MudTd>
-            <MudTd DataLabel="Height">@context.Height</MudTd>
-            <MudTd DataLabel="Transport">@context.TransportUnits</MudTd>
-            <MudTd DataLabel="Actions">
-                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
-                                   Size="Size.Small"
-                                   Title="Move up"
-                                   Disabled="@(_state != TradeItemState.Draft || IsFirst(context))"
-                                   OnClick="@(() => MoveAsync(context.Code, -1))" />
-                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
-                                   Size="Size.Small"
-                                   Title="Move down"
-                                   Disabled="@(_state != TradeItemState.Draft || IsLast(context))"
-                                   OnClick="@(() => MoveAsync(context.Code, 1))" />
-                    <MudButton Size="Size.Small"
-                               Variant="Variant.Outlined"
-                               Color="Color.Default"
-                               Disabled="@(_state != TradeItemState.Draft)"
-                               OnClick="@(() => EditElementAsync(context))">
-                        Edit
-                    </MudButton>
-                    <MudButton Size="Size.Small"
-                               Variant="Variant.Outlined"
-                               Color="Color.Error"
-                               Disabled="@(_state != TradeItemState.Draft)"
-                               OnClick="@(() => DeleteElementAsync(context))">
-                        Delete
-                    </MudButton>
-                    <MudButton Size="Size.Small"
-                               Variant="Variant.Outlined"
-                               Color="Color.Info"
-                               OnClick="@(() => Navigation.NavigateTo($"/studio/{ModelCode}/elements/{context.Code}/options"))">
-                        Options
-                    </MudButton>
-                    <MudButton Size="Size.Small"
-                               Variant="Variant.Outlined"
-                               Color="Color.Info"
-                               OnClick="@(() => Navigation.NavigateTo($"/studio/{ModelCode}/elements/{context.Code}/bom"))">
-                        BOM
-                    </MudButton>
-                </MudStack>
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTable Items="@_model.Elements" Hover="true" Dense="true">
+            <HeaderContent>
+                <MudTh>Code</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Width</MudTh>
+                <MudTh>Depth</MudTh>
+                <MudTh>Height</MudTh>
+                <MudTh>Transport</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Code">@context.Code</MudTd>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Width">@context.Width</MudTd>
+                <MudTd DataLabel="Depth">@context.Depth</MudTd>
+                <MudTd DataLabel="Height">@context.Height</MudTd>
+                <MudTd DataLabel="Transport">@context.TransportUnits</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                       Size="Size.Small"
+                                       Title="Move up"
+                                       Disabled="@(_state != TradeItemState.Draft || IsFirst(context))"
+                                       OnClick="@(() => MoveAsync(context.Code, -1))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                       Size="Size.Small"
+                                       Title="Move down"
+                                       Disabled="@(_state != TradeItemState.Draft || IsLast(context))"
+                                       OnClick="@(() => MoveAsync(context.Code, 1))" />
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text"
+                                        Disabled="@(_state != TradeItemState.Draft)"
+                                        OnClick="@(() => EditElementAsync(context))">
+                            Edit
+                        </ProgressButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                        Disabled="@(_state != TradeItemState.Draft)"
+                                        OnClick="@(() => DeleteElementAsync(context))">
+                            Delete
+                        </ProgressButton>
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Text"
+                                   Color="Color.Info"
+                                   OnClick="@(() => Navigation.NavigateTo($"/studio/{ModelCode}/elements/{context.Code}/options"))">
+                            Options
+                        </MudButton>
+                        <MudButton Size="Size.Small"
+                                   Variant="Variant.Text"
+                                   Color="Color.Info"
+                                   OnClick="@(() => Navigation.NavigateTo($"/studio/{ModelCode}/elements/{context.Code}/bom"))">
+                            BOM
+                        </MudButton>
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="No elements on this model."
+                            ActionText="@(_state == TradeItemState.Draft ? "Add element" : null)"
+                            OnAction="@(() => AddElementAsync())" />
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    </MudPaper>
 }
 </MudContainer>
 

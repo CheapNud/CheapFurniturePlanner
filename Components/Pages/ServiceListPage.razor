@@ -12,29 +12,21 @@
 <PageTitle>Service</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Service</MudText>
-        <MudSpacer />
-        @if (_canManage)
-        {
-            <MudSwitch T="bool" Value="_onlyMine" ValueChanged="OnOnlyMineChanged" Color="Color.Primary" Label="My tickets only" />
-            @if (_tickets.Count > 0)
+    <PageHeader Kicker="SERVICE" Title="Service">
+        <Actions>
+            @if (_canManage)
             {
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-                           OnClick="@(() => Navigation.NavigateTo("/service/new"))">
-                    New ticket
-                </MudButton>
+                <MudSwitch T="bool" Value="_onlyMine" ValueChanged="OnOnlyMineChanged" Color="Color.Primary" Label="My tickets only" />
+                @if (_tickets.Count > 0)
+                {
+                    <ProgressButton OnClick="@(() => Navigation.NavigateTo("/service/new"))" StartIcon="@Icons.Material.Filled.Add">New ticket</ProgressButton>
+                }
             }
-        }
-    </MudStack>
+        </Actions>
+    </PageHeader>
 
-    @if (_tickets.Count == 0)
-    {
-        <EmptyState Text="No tickets yet" ActionText="@(_canManage ? "New ticket" : null)" OnAction="@(() => Navigation.NavigateTo("/service/new"))" />
-    }
-    else
-    {
-        <MudTable T="ServiceTicketSummary" Items="_tickets" Hover="true"
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTable T="ServiceTicketSummary" Items="_tickets" Hover="true" Dense="true" Loading="@_loading"
                   OnRowClick="@((TableRowClickEventArgs<ServiceTicketSummary> args) => Navigation.NavigateTo($"/service/{args.Item!.Id}"))">
             <HeaderContent>
                 <MudTh>Number</MudTh>
@@ -47,19 +39,26 @@
             <RowTemplate>
                 <MudTd DataLabel="Number">@context.TicketNumber</MudTd>
                 <MudTd DataLabel="Consumer">@context.ConsumerName</MudTd>
-                <MudTd DataLabel="Flow"><MudChip T="string" Size="Size.Small">@context.Flow</MudChip></MudTd>
-                <MudTd DataLabel="State"><MudChip T="string" Size="Size.Small" Color="@StatusColors.For(context.State)">@context.State</MudChip></MudTd>
+                <MudTd DataLabel="Flow"><MudChip T="string" Size="Size.Small" Variant="Variant.Text">@context.Flow</MudChip></MudTd>
+                <MudTd DataLabel="State"><StatusChip Color="@StatusColors.For(context.State)" Value="@context.State.ToString()" /></MudTd>
                 <MudTd DataLabel="Assigned">@context.AssignedUserName</MudTd>
                 <MudTd DataLabel="Created">@context.CreatedAt.ToString("yyyy-MM-dd")</MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="No tickets yet" ActionText="@(_canManage ? "New ticket" : null)" OnAction="@(() => Navigation.NavigateTo("/service/new"))" />
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
-    }
+    </MudPaper>
 </MudContainer>
 
 @code {
     private List<ServiceTicketSummary> _tickets = [];
     private bool _canManage;
     private bool _onlyMine;
+    private bool _loading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -87,7 +86,15 @@
 
     private async Task LoadAsync()
     {
-        var mineUserId = _onlyMine ? await CurrentUser.UserIdAsync() : null;
-        _tickets = await Tickets.ListAsync(mineUserId);
+        _loading = true;
+        try
+        {
+            var mineUserId = _onlyMine ? await CurrentUser.UserIdAsync() : null;
+            _tickets = await Tickets.ListAsync(mineUserId);
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 }

@@ -21,16 +21,17 @@
     }
     else
     {
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to service" OnClick="@(() => Navigation.NavigateTo("/service"))" />
-            <MudText Typo="Typo.h4">@_ticket.TicketNumber</MudText>
-            <MudChip T="string" Size="Size.Small">@_ticket.Flow</MudChip>
-            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(_ticket.State)">@_ticket.State</MudChip>
-        </MudStack>
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to service" OnClick="@(() => Navigation.NavigateTo("/service"))" Class="mb-2" />
+        <PageHeader Kicker="SERVICE" Title="@_ticket.TicketNumber">
+            <Actions>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_ticket.Flow</MudChip>
+                <StatusChip Color="@StatusColors.For(_ticket.State)" Value="@_ticket.State.ToString()" />
+            </Actions>
+        </PageHeader>
 
         <MudGrid>
             <MudItem xs="12" md="6">
-                <MudPaper Class="pa-4 mb-4">
+                <MudPaper Class="pa-6 mb-6" Elevation="0">
                     <MudText Typo="Typo.h6" Class="mb-2">Ticket</MudText>
                     <MudText><b>Consumer:</b> @_ticket.Consumer?.Name</MudText>
                     @if (_ticket.Order is not null)
@@ -62,14 +63,14 @@
                                 <MudRadio T="ServiceFlow" Value="ServiceFlow.External">Report to supplier</MudRadio>
                             </MudRadioGroup>
                         }
-                        <MudStack Row="true" Class="mt-3" AlignItems="AlignItems.Center">
+                        <MudStack Row="true" Class="mt-3" AlignItems="AlignItems.Center" Spacing="2">
                             <MudTextField T="string" @bind-Value="_cancelReason" Label="Cancel reason" />
-                            <MudButton Color="Color.Error" Variant="Variant.Outlined" OnClick="CancelTicketAsync">Cancel ticket</MudButton>
+                            <ProgressButton Variant="Variant.Text" Color="Color.Error" OnClick="CancelTicketAsync">Cancel ticket</ProgressButton>
                         </MudStack>
                     }
                 </MudPaper>
 
-                <MudPaper Class="pa-4">
+                <MudPaper Class="pa-6" Elevation="0">
                     <MudText Typo="Typo.h6" Class="mb-2">History</MudText>
                     @foreach (var entry in _ticket.Logs)
                     {
@@ -92,16 +93,16 @@
                     <MudAlert Severity="Severity.Info">No flow chosen yet.</MudAlert>
                 }
 
-                <MudPaper Class="pa-4 mt-4">
+                <MudPaper Class="pa-6 mt-6" Elevation="0">
                     <MudText Typo="Typo.h6" Class="mb-2">Photos</MudText>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Spacing="2">
                         <MudSelect T="PhotoKind" @bind-Value="_uploadKind" Label="Kind" Dense="true" Disabled="@(!IsOpen)">
                             <MudSelectItem T="PhotoKind" Value="PhotoKind.Before">Before</MudSelectItem>
                             <MudSelectItem T="PhotoKind" Value="PhotoKind.After">After</MudSelectItem>
                         </MudSelect>
                         <MudFileUpload T="IBrowserFile" FilesChanged="OnPhotoSelected" Accept=".jpg,.jpeg,.png,.webp">
                             <CustomContent Context="fileUpload">
-                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PhotoCamera"
+                                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.PhotoCamera"
                                            OnClick="@fileUpload.OpenFilePickerAsync" Disabled="@(!IsOpen)">Add photo</MudButton>
                             </CustomContent>
                         </MudFileUpload>

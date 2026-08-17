@@ -13,19 +13,16 @@
 <PageTitle>Invoices</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Invoices</MudText>
-        <MudSpacer />
-        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Code" OnClick="ExportNewAsync">Export new</MudButton>
-    </MudStack>
+    <PageHeader Kicker="INVOICES" Title="Manage invoices">
+        <Actions>
+            <ProgressButton StartIcon="@Icons.Material.Filled.Code" OnClick="ExportNewAsync">Export new</ProgressButton>
+        </Actions>
+    </PageHeader>
 
-    @if (_invoices.Count == 0)
-    {
-        <EmptyState Text="No invoices yet" />
-    }
-    else
-    {
-        <MudTable T="Invoice" Items="_invoices" Hover="true" Dense="true" Class="mb-4"
+    <MudPaper Class="pa-6 mb-6" Elevation="0">
+        <MudTextField T="string" Value="_search" ValueChanged="@((string v) => _search = v)" Label="Search"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Class="mb-4" />
+        <MudTable T="Invoice" Items="@FilteredInvoices" Hover="true" Dense="true" Loading="@_loading"
                   OnRowClick="@((TableRowClickEventArgs<Invoice> args) => Navigation.NavigateTo($"/invoices/{args.Item!.Id}"))">
             <HeaderContent>
                 <MudTh>Invoice</MudTh>
@@ -42,28 +39,41 @@
                 <MudTd DataLabel="Issued">@context.IssuedAt.ToString("yyyy-MM-dd")</MudTd>
                 <MudTd DataLabel="Gross">@context.GrossTotal.ToString("C2")</MudTd>
                 <MudTd DataLabel="Status">
-                    <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForPaid(context.IsPaid)">@(context.IsPaid ? "Paid" : "Open")</MudChip>
+                    <StatusChip Color="@StatusColors.ForPaid(context.IsPaid)" Value="@(context.IsPaid ? "Paid" : "Open")" />
                     @if (context.CreditNotes.Count > 0)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary">Credited</MudChip>
+                        <StatusChip Color="@StatusColors.ForCredited(true)" Value="Credited" />
                     }
                     @if (context.ExportedAt is not null)
                     {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Exported</MudChip>
+                        <StatusChip Color="@StatusColors.ForExported(true)" Value="Exported" />
                     }
                 </MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                @if (_invoices.Count == 0)
+                {
+                    <EmptyState Text="No invoices yet" />
+                }
+                else
+                {
+                    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Text="No invoices match your search." />
+                }
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
-    }
+    </MudPaper>
 
-    <MudPaper Class="pa-4">
+    <MudPaper Class="pa-6" Elevation="0">
         <MudText Typo="Typo.h6" Class="mb-2">VAT rates</MudText>
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
             <MudTextField T="string" @bind-Value="_newMarketCode" Label="Market" />
             <MudNumericField T="decimal" @bind-Value="_newRatePercent" Label="Rate %" Min="0" Max="100" />
-            <MudButton Variant="Variant.Outlined" OnClick="SaveRateAsync">Save</MudButton>
+            <ProgressButton Variant="Variant.Text" OnClick="SaveRateAsync">Save</ProgressButton>
         </MudStack>
-        <MudTable T="MarketVatRate" Items="_vatRates" Dense="true">
+        <MudTable T="MarketVatRate" Items="_vatRates" Dense="true" Loading="@_loading">
             <HeaderContent>
                 <MudTh>Market</MudTh>
                 <MudTh>Rate %</MudTh>
@@ -74,6 +84,9 @@
                 <MudTd DataLabel="Rate %">@context.RatePercent.ToString("0.##")</MudTd>
                 <MudTd><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Title="Delete rate" OnClick="@(() => DeleteRateAsync(context.Id))" /></MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="No VAT rates yet" />
+            </NoRecordsContent>
         </MudTable>
     </MudPaper>
 </MudContainer>
@@ -83,6 +96,14 @@
     private List<MarketVatRate> _vatRates = [];
     private string _newMarketCode = "";
     private decimal _newRatePercent = 21m;
+    private bool _loading;
+    private string _search = "";
+
+    private IEnumerable<Invoice> FilteredInvoices => string.IsNullOrWhiteSpace(_search)
+        ? _invoices
+        : _invoices.Where(i => i.InvoiceNumber.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || (i.Order?.OrderNumber ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || (i.Order?.Consumer?.Name ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {
@@ -98,8 +119,16 @@
 
     private async Task LoadAsync()
     {
-        _invoices = await Invoicing.ListInvoicesAsync();
-        _vatRates = await Invoicing.VatRatesAsync();
+        _loading = true;
+        try
+        {
+            _invoices = await Invoicing.ListInvoicesAsync();
+            _vatRates = await Invoicing.VatRatesAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private async Task SaveRateAsync()

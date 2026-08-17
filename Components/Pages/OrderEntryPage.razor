@@ -21,31 +21,31 @@
 }
 else
 {
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to orders" OnClick="@(() => Navigation.NavigateTo("/orders"))" />
-        <MudText Typo="Typo.h4">@_order.OrderNumber</MudText>
-        <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(_order.State)">@_order.State</MudChip>
-        @if (_phase is ProductionPhase orderPhase)
-        {
-            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(orderPhase)">@PhaseLabel(orderPhase)</MudChip>
-        }
-        <MudSpacer />
-        @if (_order.State == OrderState.Draft)
-        {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="PlaceAsync">Place order</MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="CancelAsync">Cancel order</MudButton>
-        }
-        @if (_order.State == OrderState.Placed && _invoice is null)
-        {
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="CreateInvoiceAsync">Create invoice</MudButton>
-        }
-        else if (_invoice is not null)
-        {
-            <MudLink Href="@($"/invoices/{_invoice.Id}")">@_invoice.InvoiceNumber</MudLink>
-        }
-    </MudStack>
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to orders" OnClick="@(() => Navigation.NavigateTo("/orders"))" Class="mb-2" />
+    <PageHeader Kicker="ORDERS" Title="@_order.OrderNumber">
+        <Actions>
+            <StatusChip Color="@StatusColors.For(_order.State)" Value="@_order.State.ToString()" />
+            @if (_phase is ProductionPhase orderPhase)
+            {
+                <StatusChip Color="@StatusColors.For(orderPhase)" Value="@orderPhase.ToString()" />
+            }
+            @if (_order.State == OrderState.Draft)
+            {
+                <ProgressButton OnClick="PlaceAsync">Place order</ProgressButton>
+                <ProgressButton Variant="Variant.Text" Color="Color.Error" OnClick="CancelAsync">Cancel order</ProgressButton>
+            }
+            @if (_order.State == OrderState.Placed && _invoice is null)
+            {
+                <ProgressButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ReceiptLong" OnClick="CreateInvoiceAsync">Create invoice</ProgressButton>
+            }
+            else if (_invoice is not null)
+            {
+                <MudLink Href="@($"/invoices/{_invoice.Id}")">@_invoice.InvoiceNumber</MudLink>
+            }
+        </Actions>
+    </PageHeader>
 
-    <MudPaper Class="pa-4 mb-4">
+    <MudPaper Class="pa-6 mb-6" Elevation="0">
         <MudStack Spacing="2">
             <MudText Typo="Typo.body2">Seller: @_order.Seller?.Name — Consumer: @_order.Consumer?.Name — Market: @_order.MarketCode</MudText>
             <MudSelect T="int?" Label="Delivery address" Value="@SelectedDeliveryAddressBookEntryId" ValueChanged="SetDeliveryAddressAsync"
@@ -68,7 +68,7 @@ else
             <MudDatePicker Label="Promised delivery" Date="@_order.PromisedDeliveryDate" DateChanged="SetPromisedDeliveryDateAsync"
                            Disabled="@(_order.State == OrderState.Cancelled)" Clearable="true" />
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                <MudChip T="string" Size="Size.Small">@(_order.PinnedCatalogueVersion ?? "not pinned yet")</MudChip>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@(_order.PinnedCatalogueVersion ?? "not pinned yet")</MudChip>
                 <MudText Typo="Typo.subtitle1">Total: @OrderEntryService.OrderTotal(_order).ToString("C2")</MudText>
                 @if (_order.State == OrderState.Draft)
                 {
@@ -86,7 +86,7 @@ else
 
     @if (_order.State == OrderState.Draft)
     {
-        <MudTabs @ref="_tabs" Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4" Class="mb-4">
+        <MudTabs @ref="_tabs" Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" Class="mb-6">
             <MudTabPanel Text="Element">
                 <ElementEntryTab @ref="_elementTab" Order="_order" OnChanged="ReloadAsync" />
             </MudTabPanel>
@@ -96,102 +96,103 @@ else
         </MudTabs>
     }
 
-    @if (_order.Lines.Count == 0)
-    {
-        <EmptyState Text="No lines yet - add one below" />
-    }
-    else
-    {
-    <MudTable Items="@_order.Lines" Hover="true" Dense="true" T="OrderLine">
-        <HeaderContent>
-            <MudTh>Code</MudTh>
-            <MudTh>Kind</MudTh>
-            <MudTh>Quantity</MudTh>
-            <MudTh>Unit price</MudTh>
-            <MudTh>Discount</MudTh>
-            <MudTh>Line total</MudTh>
-            <MudTh>Supplier ref</MudTh>
-            <MudTh>Production</MudTh>
-            <MudTh>Actions</MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Code">
-                @if (context.Kind == OrderLineKind.ConfiguredElement && context.AssignedCode is null)
-                {
-                    <MudTooltip Text="unnamed variant">
-                        <MudText>@(context.VariantCode ?? "")</MudText>
-                    </MudTooltip>
-                }
-                else
-                {
-                    @(context.AssignedCode ?? context.VariantCode ?? "")
-                }
-            </MudTd>
-            <MudTd DataLabel="Kind">@(context.Kind == OrderLineKind.StandaloneArticle ? "Standalone" : "Configured")</MudTd>
-            <MudTd DataLabel="Quantity">
-                @if (_order.State == OrderState.Draft)
-                {
-                    <MudNumericField T="int" Value="@context.Quantity" Min="1" ValueChanged="@(qty => UpdateQuantityAsync(context, qty))" />
-                }
-                else
-                {
-                    @context.Quantity
-                }
-            </MudTd>
-            <MudTd DataLabel="Unit price">@context.UnitPrice.ToString("C2")</MudTd>
-            <MudTd DataLabel="Discount">
-                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                    @if (_order.State == OrderState.Draft)
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTable Items="@_order.Lines" Hover="true" Dense="true" T="OrderLine" Loading="@_loading">
+            <HeaderContent>
+                <MudTh>Code</MudTh>
+                <MudTh>Kind</MudTh>
+                <MudTh>Quantity</MudTh>
+                <MudTh>Unit price</MudTh>
+                <MudTh>Discount</MudTh>
+                <MudTh>Line total</MudTh>
+                <MudTh>Supplier ref</MudTh>
+                <MudTh>Production</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Code">
+                    @if (context.Kind == OrderLineKind.ConfiguredElement && context.AssignedCode is null)
                     {
-                        <MudNumericField T="decimal" Min="0" Max="100"
-                                          Value="@context.DiscountPercent"
-                                          ValueChanged="@((decimal pct) => SetLineDiscountAsync(context, pct))" />
+                        <MudTooltip Text="unnamed variant">
+                            <MudText>@(context.VariantCode ?? "")</MudText>
+                        </MudTooltip>
                     }
                     else
                     {
-                        <MudText>@context.DiscountPercent.ToString("0.##")%</MudText>
+                        @(context.AssignedCode ?? context.VariantCode ?? "")
                     }
-                    @if (context.DiscountSource is not null)
+                </MudTd>
+                <MudTd DataLabel="Kind">@(context.Kind == OrderLineKind.StandaloneArticle ? "Standalone" : "Configured")</MudTd>
+                <MudTd DataLabel="Quantity">
+                    @if (_order.State == OrderState.Draft)
                     {
-                        <MudChip T="string" Size="Size.Small">@context.DiscountSource</MudChip>
+                        <MudNumericField T="int" Value="@context.Quantity" Min="1" ValueChanged="@(qty => UpdateQuantityAsync(context, qty))" />
                     }
-                    else if (context.DiscountIsManual)
+                    else
                     {
-                        <MudChip T="string" Size="Size.Small">manual</MudChip>
+                        @context.Quantity
                     }
-                </MudStack>
-            </MudTd>
-            <MudTd DataLabel="Line total">@context.LineTotal.ToString("C2")</MudTd>
-            <MudTd DataLabel="Supplier ref">@(context.Supplier is null ? "" : $"{context.Supplier.Code} - {context.Supplier.Name}")</MudTd>
-            <MudTd DataLabel="Production">
-                @if (_order.State == OrderState.Draft && context.Kind == OrderLineKind.StandaloneArticle && context.SupplierId is not null)
-                {
-                    <MudSwitch T="bool" Value="@context.DeliverToWarehouse" Color="Color.Primary" Label="Via warehouse"
-                               ValueChanged="@((bool viaWarehouse) => SetDeliverToWarehouseAsync(context.Id, viaWarehouse))" />
-                }
-                else if (_order.State == OrderState.Placed)
-                {
-                    @foreach (var unit in _units.Where(u => u.OrderLineId == context.Id))
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(unit.State)">@unit.SequenceNumber: @unit.State</MudChip>
-                    }
-                }
-            </MudTd>
-            <MudTd DataLabel="Actions">
-                @if (_order.State == OrderState.Draft)
-                {
-                    <MudStack Row="true" Spacing="1">
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => RemoveLineAsync(context))">Remove</MudButton>
-                        @if (context.Kind == OrderLineKind.ConfiguredElement)
+                </MudTd>
+                <MudTd DataLabel="Unit price">@context.UnitPrice.ToString("C2")</MudTd>
+                <MudTd DataLabel="Discount">
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        @if (_order.State == OrderState.Draft)
                         {
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => CopyToConfigurator(context))">Copy to configurator</MudButton>
+                            <MudNumericField T="decimal" Min="0" Max="100"
+                                              Value="@context.DiscountPercent"
+                                              ValueChanged="@((decimal pct) => SetLineDiscountAsync(context, pct))" />
+                        }
+                        else
+                        {
+                            <MudText>@context.DiscountPercent.ToString("0.##")%</MudText>
+                        }
+                        @if (context.DiscountSource is not null)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@context.DiscountSource</MudChip>
+                        }
+                        else if (context.DiscountIsManual)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text">manual</MudChip>
                         }
                     </MudStack>
-                }
-            </MudTd>
-        </RowTemplate>
-    </MudTable>
-    }
+                </MudTd>
+                <MudTd DataLabel="Line total">@context.LineTotal.ToString("C2")</MudTd>
+                <MudTd DataLabel="Supplier ref">@(context.Supplier is null ? "" : $"{context.Supplier.Code} - {context.Supplier.Name}")</MudTd>
+                <MudTd DataLabel="Production">
+                    @if (_order.State == OrderState.Draft && context.Kind == OrderLineKind.StandaloneArticle && context.SupplierId is not null)
+                    {
+                        <MudSwitch T="bool" Value="@context.DeliverToWarehouse" Color="Color.Primary" Label="Via warehouse"
+                                   ValueChanged="@((bool viaWarehouse) => SetDeliverToWarehouseAsync(context.Id, viaWarehouse))" />
+                    }
+                    else if (_order.State == OrderState.Placed)
+                    {
+                        @foreach (var unit in _units.Where(u => u.OrderLineId == context.Id))
+                        {
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="d-inline-flex mr-2">
+                                <MudText Typo="Typo.caption">@unit.SequenceNumber:</MudText>
+                                <StatusChip Color="@StatusColors.For(unit.State)" Value="@unit.State.ToString()" />
+                            </MudStack>
+                        }
+                    }
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    @if (_order.State == OrderState.Draft)
+                    {
+                        <MudStack Row="true" Spacing="1">
+                            <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => RemoveLineAsync(context))">Remove</ProgressButton>
+                            @if (context.Kind == OrderLineKind.ConfiguredElement)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => CopyToConfigurator(context))">Copy to configurator</MudButton>
+                            }
+                        </MudStack>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="No lines yet - add one below" />
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
 }
 </MudContainer>
 
@@ -207,6 +208,7 @@ else
     private List<Firm> _firmChoices = [];
     private MudTabs? _tabs;
     private ElementEntryTab? _elementTab;
+    private bool _loading;
 
     // The book entry whose Address matches the order's current DeliveryAddressId - the select
     // shows the label/entry, not the raw Address row.
@@ -227,12 +229,20 @@ else
 
     private async Task ReloadAsync()
     {
-        _order = await OrderEntryService.GetOrderAsync(OrderId);
-        _phase = await Units.PhaseForOrderAsync(OrderId);
-        _units = await Units.UnitsForOrderAsync(OrderId);
-        _invoice = await Invoicing.InvoiceForOrderAsync(OrderId);
-        _deliveryAddresses = _order is null ? [] : await Parties.DeliveryAddressesAsync(_order.ConsumerId);
-        _firmChoices = await Firms.FirmsAsync();
+        _loading = true;
+        try
+        {
+            _order = await OrderEntryService.GetOrderAsync(OrderId);
+            _phase = await Units.PhaseForOrderAsync(OrderId);
+            _units = await Units.UnitsForOrderAsync(OrderId);
+            _invoice = await Invoicing.InvoiceForOrderAsync(OrderId);
+            _deliveryAddresses = _order is null ? [] : await Parties.DeliveryAddressesAsync(_order.ConsumerId);
+            _firmChoices = await Firms.FirmsAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private async Task SetFirmAsync(int? firmId)
@@ -283,13 +293,6 @@ else
         }
         catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
-
-    private static string PhaseLabel(ProductionPhase orderPhase) => orderPhase switch
-    {
-        ProductionPhase.InProduction => "In production",
-        ProductionPhase.Ready => "Ready",
-        _ => "Delivered",
-    };
 
     private async Task PlaceAsync()
     {

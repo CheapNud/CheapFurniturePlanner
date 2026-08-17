@@ -124,10 +124,16 @@ public class OrderProductionIntegrationTests : TestContext
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("In production", cut.Markup);
-            var unitChips = cut.FindComponents<MudBlazor.MudChip<string>>()
-                .Where(c => c.Markup.Contains("1:") || c.Markup.Contains("2:"))
-                .ToList();
+            // UX-2: the sequence number ("1:"/"2:") renders as a MudText prefix next to the
+            // StatusChip, not inside the chip's own markup (StatusChip's Value humanizes to the
+            // state alone) - so scope the chip count to the "Production" cell specifically
+            // (there's an unrelated order-state chip and a phase chip elsewhere on the page that
+            // would otherwise also match on chip text alone).
+            var productionCells = cut.FindAll("td[data-label='Production']");
+            var unitChips = productionCells.SelectMany(cell => cell.QuerySelectorAll(".mud-chip")).ToList();
             Assert.Equal(2, unitChips.Count);
+            Assert.Contains(productionCells, c => c.TextContent.Contains("1:"));
+            Assert.Contains(productionCells, c => c.TextContent.Contains("2:"));
         });
     }
 

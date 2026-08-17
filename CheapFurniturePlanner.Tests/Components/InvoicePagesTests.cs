@@ -114,6 +114,20 @@ public class InvoicePagesTests : TestContext
     }
 
     [Fact]
+    public async Task EmptyStore_ShowsEmptyState_ForVatRates()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var office = new FakeCurrentUser("office-1", Roles.Office);
+        var invoicing = new InvoicingService(factory, office);
+        ConfigureServices(factory, invoicing);
+
+        var cut = Render<InvoicesPage>();
+
+        cut.WaitForAssertion(() => Assert.Contains("No VAT rates yet", cut.Markup));
+    }
+
+    [Fact]
     public async Task Detail_MarkPaid_And_FullCredit()
     {
         var (factory, conn) = await NewFactoryAsync();
