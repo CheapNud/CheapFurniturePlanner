@@ -1,0 +1,8 @@
+<MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@Color">@StatusText.Humanize(Value)</MudChip>
+
+@code {
+    // Thin render wrapper around StatusColors.For(...) callers - callers pick the Color via
+    // the central mapping, this just renders it consistently (Text variant, humanised label).
+    [Parameter, EditorRequired] public Color Color { get; set; }
+    [Parameter, EditorRequired] public string Value { get; set; } = "";
+}

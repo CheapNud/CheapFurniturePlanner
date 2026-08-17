@@ -1,0 +1,45 @@
+<MudButton Variant="Variant" Color="Color" Size="Size" Class="@Class" Disabled="@(Disabled || _running)" OnClick="HandleClickAsync">
+    @if (_running)
+    {
+        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+    }
+    else if (StartIcon is not null)
+    {
+        <MudIcon Icon="@StartIcon" Class="mr-2" Size="Size.Small" />
+    }
+    @ChildContent
+</MudButton>
+
+@code {
+    // EVERY awaited button action converts to this - self-disables while OnClick's task is in
+    // flight (StartIcon swaps for a spinner), a field guards against a second click landing
+    // mid-flight, and the running flag always resets in finally, exception or not.
+    [Parameter, EditorRequired] public Func<Task> OnClick { get; set; } = null!;
+    [Parameter] public Variant Variant { get; set; } = Variant.Filled;
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+    [Parameter] public Size Size { get; set; } = Size.Medium;
+    [Parameter] public string? StartIcon { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _running;
+
+    private async Task HandleClickAsync()
+    {
+        if (_running)
+        {
+            return;
+        }
+
+        _running = true;
+        try
+        {
+            await OnClick();
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+}
