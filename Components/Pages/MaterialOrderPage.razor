@@ -31,7 +31,7 @@
                 <ProgressButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</ProgressButton>
                 @if (_order.State == MaterialOrderState.Draft)
                 {
-                    <ProgressButton Variant="Variant.Text" Color="Color.Error" OnClick="DeleteAsync">Delete</ProgressButton>
+                    <ProgressButton Variant="Variant.Text" Color="Color.Error" Title="Delete material order" OnClick="DeleteAsync">Delete</ProgressButton>
                 }
             </Actions>
         </PageHeader>

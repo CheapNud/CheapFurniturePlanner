@@ -13,20 +13,12 @@
 <PageTitle>Name variants - @ModelCode</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to models" Href="/studio" />
-        <MudText Typo="Typo.h4">Name variants — @ModelCode</MudText>
-        <MudSpacer />
-    </MudStack>
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to models" Href="/studio" Class="mb-2" />
+    <PageHeader Kicker="STUDIO" Title="@($"Name variants — {ModelCode}")" Subtitle="@_model?.Name" />
 
-    @if (_model is not null)
+    @if (_model is not null && _state != TradeItemState.Draft)
     {
-        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">@_model.Name</MudText>
-
-        @if (_state != TradeItemState.Draft)
-        {
-            <MudAlert Severity="Severity.Warning" Class="mb-4">frozen — model is @_state</MudAlert>
-        }
+        <MudAlert Severity="Severity.Warning" Class="mb-4">frozen — model is @_state</MudAlert>
     }
 
 @if (_notFound)
@@ -41,37 +33,33 @@ else
 {
     @foreach (var elementRows in _rowsByElement)
     {
-        <MudPaper Elevation="1" Class="pa-4 mb-4">
+        <MudPaper Elevation="0" Class="pa-6 mb-6">
             <MudText Typo="Typo.h6" Class="mb-2">@elementRows.Element.Name (@elementRows.Element.Code)</MudText>
 
-            @if (elementRows.Rows.Count == 0)
-            {
-                <MudText Typo="Typo.body2" Color="Color.Secondary">No BOM-significant variants for this element.</MudText>
-            }
-            else
-            {
-                <MudTable Items="@elementRows.Rows" Hover="true" Dense="true" Elevation="0">
-                    <HeaderContent>
-                        <MudTh>Breakdown</MudTh>
-                        <MudTh>Variant code</MudTh>
-                        <MudTh>Assigned code</MudTh>
-                        <MudTh>Status</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Breakdown">@Decode(context)</MudTd>
-                        <MudTd DataLabel="Variant code">@context.VariantCode</MudTd>
-                        <MudTd DataLabel="Assigned code">
-                            <MudTextField T="string"
-                                          Value="@AssignedCodeFor(context.VariantCode)"
-                                          ValueChanged="@((string assigned) => AssignAsync(elementRows.Element.Code, context, assigned))"
-                                          Disabled="@(_state != TradeItemState.Draft)" />
-                        </MudTd>
-                        <MudTd DataLabel="Status">
-                            <MudChip T="string" Size="Size.Small" Color="@StatusColors.For(StatusFor(context.VariantCode))">@StatusFor(context.VariantCode)</MudChip>
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-            }
+            <MudTable Items="@elementRows.Rows" Hover="true" Dense="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Breakdown</MudTh>
+                    <MudTh>Variant code</MudTh>
+                    <MudTh>Assigned code</MudTh>
+                    <MudTh>Status</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Breakdown">@Decode(context)</MudTd>
+                    <MudTd DataLabel="Variant code">@context.VariantCode</MudTd>
+                    <MudTd DataLabel="Assigned code">
+                        <MudTextField T="string"
+                                      Value="@AssignedCodeFor(context.VariantCode)"
+                                      ValueChanged="@((string assigned) => AssignAsync(elementRows.Element.Code, context, assigned))"
+                                      Disabled="@(_state != TradeItemState.Draft)" />
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <StatusChip Color="@StatusColors.For(StatusFor(context.VariantCode))" Value="@StatusFor(context.VariantCode).ToString()" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <EmptyState Text="No BOM-significant variants for this element." />
+                </NoRecordsContent>
+            </MudTable>
         </MudPaper>
     }
 }

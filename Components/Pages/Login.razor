@@ -9,9 +9,11 @@
    Login.razor assumes localization + a JS submit helper this desktop app doesn't wire up,
    so a thin planner-owned page is the better fit here. *@
 
+@* Bare centered card, no PageHeader - a login screen has no module to name, and the native
+   form POST below has no Blazor OnClick to route through ProgressButton either. *@
 <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
     <form method="post" action="/Account/SignInForm">
-        <MudPaper Elevation="2" Class="pa-6">
+        <MudPaper Elevation="0" Class="pa-6">
             <MudStack Spacing="4">
                 <MudText Typo="Typo.h4">Log in</MudText>
                 <MudDivider />

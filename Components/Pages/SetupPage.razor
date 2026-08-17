@@ -6,8 +6,10 @@
 
 <PageTitle>First-run setup</PageTitle>
 
+@* Bare centered card, no PageHeader - first-run setup is a one-time unauthenticated flow, same
+   judgment as Login: a module kicker would name a section of an app the visitor can't reach yet. *@
 <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
-    <MudPaper Elevation="2" Class="pa-6">
+    <MudPaper Elevation="0" Class="pa-6">
         <MudText Typo="Typo.h4" Class="mb-4">Welcome - create the first Admin account</MudText>
 
         <MudStack Spacing="3">
@@ -22,17 +24,17 @@
                 <MudAlert Severity="Severity.Error">@_error</MudAlert>
             }
 
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="CreateAdminAsync" Disabled="@_busy">
+            <ProgressButton Color="Color.Primary" FullWidth="true" Disabled="@_busy" OnClick="CreateAdminAsync">
                 Create admin account
-            </MudButton>
+            </ProgressButton>
         </MudStack>
 
         <MudDivider Class="my-6" />
 
         <MudText Typo="Typo.body2" Class="mb-2">Just exploring? Create a throwaway demo admin instead.</MudText>
-        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true" OnClick="CreateDemoAdminAsync" Disabled="@_busy">
+        <ProgressButton Variant="Variant.Outlined" Color="Color.Secondary" FullWidth="true" Disabled="@_busy" OnClick="CreateDemoAdminAsync">
             Create demo admin
-        </MudButton>
+        </ProgressButton>
 
         @if (_demoPassword is not null)
         {

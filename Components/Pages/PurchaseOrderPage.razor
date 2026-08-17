@@ -33,7 +33,7 @@
                 <ProgressButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Code" OnClick="ExportXmlAsync">XML</ProgressButton>
                 @if (_order.State == SupplierOrderState.Draft && _order.Units.Count == 0)
                 {
-                    <ProgressButton Variant="Variant.Text" Color="Color.Error" OnClick="DeleteAsync">Delete</ProgressButton>
+                    <ProgressButton Variant="Variant.Text" Color="Color.Error" Title="Delete purchase order" OnClick="DeleteAsync">Delete</ProgressButton>
                 }
             </Actions>
         </PageHeader>
