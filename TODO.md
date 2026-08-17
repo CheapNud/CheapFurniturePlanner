@@ -43,6 +43,8 @@ _Nothing blocking._
 ## Future
 
 - [ ] (2026-08-17) materials: material order ubl export, receipt undo, time-phased mrp - deferred remainder of the reorder-point mrp phase [plan]
+  - forecast's movement scan loads all consumption history unwindowed - upgrade path: windowed grouped aggregate + per-identity existence flag
+  - multi-currency prices and automatic reorder are deliberate never-items, not deferred
 - [ ] (2026-08-16) auth: convert page/endpoint gating from direct role attributes to named authorization policies defined once in di (bootstrap admin gate stays a role attribute); keep the constants class, keep positive membership; one dedicated pass, gating tests updated alongside [user]
 - [x] (2026-08-12 → 2026-08-13) materials audit: forecast silently skips units without a pinned catalogue version where backflush throws (same seam, divergent honesty); unresolved standalone-article units appear in the purchasing feed but not the forecast's unresolved list; a supplier-linked unit marked in-house recovers via unmark (the finish error message points at receiving) [audit] — forecast now surfaces UnpinnedUnitCodes alongside UnresolvedModelCodes, page shows both plus a standalone-out-of-scope note, FinishAsync's error names unmark as the recovery
 - [x] (2026-08-12 → 2026-08-17) materials: supplier price registry, lead times/moq/reorder points (the mature legacy reorder-point model is the analog), stock audit log - shipped this phase [plan]

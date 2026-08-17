@@ -788,6 +788,80 @@ public class MaterialNeedsServiceTests
         Assert.True(foam.OrderByOverdue); // 25 days before pinnedNow
     }
 
+    // Final-review fix 2: rows previously only existed for positive gross need, so a profiled
+    // material drained below MinimumStock with zero current demand never fired its reorder point.
+    // No order/unit is seeded at all here - the row has to come purely from the profile+stock,
+    // not from any GrossNeed>0 candidate.
+    [Fact]
+    public async Task ComputeAsync_ZeroDemandBelowMinimum_StillSuggestsReorder()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        int supplierId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialProfiles.Add(new MaterialProfile { Kind = MaterialKind.Foam, Code = "FM-STD", MinimumStock = 10m });
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "FM-STD", Amount = 2m, UpdatedAt = DateTime.UtcNow });
+
+            // Second identity: same shape, plus an MOQ term - proves the rounding step still runs
+            // on the zero-demand path, not just the raw suggestion.
+            db.MaterialProfiles.Add(new MaterialProfile { Kind = MaterialKind.Cotton, Code = "COT-STD", MinimumStock = 10m });
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Cotton, Code = "COT-STD", Amount = 2m, UpdatedAt = DateTime.UtcNow });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            supplierId = supplier.Id;
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm
+            {
+                Kind = MaterialKind.Cotton, Code = "COT-STD", SupplierId = supplierId,
+                DeliveryTimeDays = 3, MinimumOrderQuantity = 20m, IsPreferred = true,
+            });
+            await db.SaveChangesAsync();
+        }
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam && r.Code == "FM-STD");
+        Assert.Equal(0m, foam.GrossNeed);
+        Assert.Equal(2m, foam.InStock);
+        Assert.Equal(8m, foam.SuggestedToOrder); // max(0, 0 + 10 - 2 - 0)
+        Assert.True(foam.BelowMinimum); // (2 InStock + 0 OnOrder - 0 GrossNeed) = 2, under MinimumStock 10
+        Assert.Null(foam.OrderByDate); // no demand - no promise dates to derive from
+
+        var cotton = forecast.Rows.Single(r => r.Kind == MaterialKind.Cotton && r.Code == "COT-STD");
+        Assert.Equal(0m, cotton.GrossNeed);
+        Assert.Equal(20m, cotton.SuggestedToOrder); // raw 8 rounded up to MOQ 20
+        Assert.True(cotton.BelowMinimum);
+    }
+
+    // SP-2/SP-3 parity: a term-only identity (no profile, so MinimumStock defaults to 0) with stock
+    // already on hand and no demand suggests ordering nothing - it must not appear as a noise row.
+    [Fact]
+    public async Task ComputeAsync_TermOnlyIdentityWithStockAndNoDemand_YieldsNoRow()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "FM-STD", Amount = 5m, UpdatedAt = DateTime.UtcNow });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm
+            {
+                Kind = MaterialKind.Foam, Code = "FM-STD", SupplierId = supplier.Id,
+                DeliveryTimeDays = 3, IsPreferred = true,
+            });
+            await db.SaveChangesAsync();
+        }
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        Assert.Empty(forecast.Rows);
+    }
+
     [Fact]
     public async Task ComputeAsync_PreferredSupplierPriceAndEstimatedCost_Surfaced()
     {

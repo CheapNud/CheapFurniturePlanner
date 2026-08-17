@@ -142,11 +142,21 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
         var windowStart = _now().AddDays(-56);
         var today = _now().Date;
 
-        var rows = needs.Where(kv => kv.Value > 0m).Select(kv =>
+        // Final-review fix: rows previously existed only for positive gross need, so a profiled or
+        // termed material drained below MinimumStock with zero current demand never fired its
+        // reorder point. Union in every identity carrying a profile or supplier term - the
+        // suggested>0 filter below (applied only to the zero-demand ones) keeps a term/profile alone
+        // from listing a material nobody needs and that's already stocked past its minimum (SP-2
+        // parity: an identity with neither stays out entirely, same as before).
+        var candidateKeys = new HashSet<(MaterialKind Kind, string Code, string? HardnessCode)>(
+            needs.Where(kv => kv.Value > 0m).Select(kv => kv.Key));
+        candidateKeys.UnionWith(profiles.Keys);
+        candidateKeys.UnionWith(preferredTerms.Keys);
+
+        var rows = candidateKeys.Select(key =>
         {
-            var key = kv.Key;
             var (kind, code, hardnessCode) = key;
-            var grossNeed = kv.Value;
+            var grossNeed = needs.GetValueOrDefault(key);
             var inStock = stocks.GetValueOrDefault(key);
             var onOrderQty = onOrder.GetValueOrDefault(key);
             var profile = profiles.GetValueOrDefault(key);
@@ -200,6 +210,7 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
                 orderByDate, orderByOverdue, preferredTerm?.SupplierId, preferredTerm?.Supplier?.Name,
                 unitPrice, estimatedCost);
         })
+        .Where(row => row.GrossNeed > 0m || row.SuggestedToOrder > 0m)
         .OrderBy(r => r.Kind).ThenBy(r => r.Code, StringComparer.Ordinal).ToList();
 
         return new MaterialForecast(rows, unresolvedModelCodes.ToList(), unpinnedUnitCodes.ToList());
