@@ -447,6 +447,62 @@ public class MaterialOrderServiceTests
         Assert.Equal(3.5m, Assert.Single(order!.Lines).UnitPrice);
     }
 
+    // Counts SaveChangesAsync calls per DbContext instance - pins the batch method's "one save for
+    // the whole group" contract instead of a per-supplier CreateDraftAsync loop (one save per
+    // supplier, and a mid-loop failure would lose the already-saved orders). Mirrors
+    // PurchasingServiceTests.ReleaseUnits_Group_OneSaveChanges_RetrySafe.
+    private sealed class SaveCountingContext(DbContextOptions<FurniturePlannerContext> options) : FurniturePlannerContext(options)
+    {
+        public int SaveCount;
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            SaveCount++;
+            return base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class SaveCountingContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public readonly List<SaveCountingContext> Created = [];
+        public FurniturePlannerContext CreateDbContext()
+        {
+            var context = new SaveCountingContext(options);
+            Created.Add(context);
+            return context;
+        }
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    [Fact]
+    public async Task CreateDraftsByPreferredSupplier_TwoSuppliers_OneSaveChanges_DistinctSequentialNumbers()
+    {
+        var (baseFactory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierA = await SeedSupplierAsync(baseFactory, "SUPA");
+        var supplierB = await SeedSupplierAsync(baseFactory, "SUPB");
+
+        var countingFactory = new SaveCountingContextFactory(new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options);
+        var materials = new MaterialOrderService(countingFactory, OfficeUser);
+
+        var rows = new[]
+        {
+            new MaterialOrderCandidate(MaterialKind.Foam, "F-100", "H35", "Foam H35", 20m, supplierA, 3.5m),
+            new MaterialOrderCandidate(MaterialKind.Cotton, "COT-1", null, "Cotton wadding", 5m, supplierB, 1.2m),
+        };
+
+        var result = await materials.CreateDraftsByPreferredSupplierAsync(rows);
+
+        Assert.Equal(1, countingFactory.Created.Sum(c => c.SaveCount));
+        Assert.Equal(2, result.CreatedOrderIds.Count);
+
+        var orderA = await materials.GetAsync(result.CreatedOrderIds[0]);
+        var orderB = await materials.GetAsync(result.CreatedOrderIds[1]);
+        Assert.NotEqual(orderA!.Number, orderB!.Number);
+        var suffixA = int.Parse(orderA.Number.Split('-')[^1]);
+        var suffixB = int.Parse(orderB.Number.Split('-')[^1]);
+        Assert.True(Math.Abs(suffixA - suffixB) == 1, $"expected sequential suffixes, got {orderA.Number} and {orderB.Number}");
+    }
+
     [Fact]
     public async Task CreateDraftsByPreferredSupplier_RejectsZeroOrNegativeQuantity_BeforeCreatingAnyDraft()
     {

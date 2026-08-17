@@ -32,14 +32,7 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
         await RequireAdminOrOfficeAsync();
         RequirePositiveQuantities(lines);
         await using var db = await factory.CreateDbContextAsync(ct);
-
-        var prefix = $"MPO-{DateTime.UtcNow.Year}-";
-        var numbersThisYear = await db.MaterialOrders.Where(o => o.Number.StartsWith(prefix)).Select(o => o.Number).ToListAsync(ct);
-        var maxSuffix = 0;
-        foreach (var number in numbersThisYear)
-        {
-            if (int.TryParse(number[prefix.Length..], out var suffix) && suffix > maxSuffix) { maxSuffix = suffix; }
-        }
+        var (prefix, maxSuffix) = await ReadMaxSuffixAsync(db, ct);
 
         var order = new MaterialOrder
         {
@@ -54,10 +47,14 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
         return order;
     }
 
-    // Groups the caller's selected forecast rows by preferred supplier and opens one fresh draft per
-    // supplier via CreateDraftAsync (same numbering, same role/quantity checks - no need to
-    // reimplement either here). Validated up front across the whole batch so a bad row in one
-    // supplier's group never leaves an earlier supplier's draft half-created.
+    // Groups the caller's selected forecast rows by preferred supplier and builds one fresh draft
+    // per supplier in this same unsaved context, then saves once - a mid-batch infra failure must
+    // never leave some suppliers drafted and others not (a retry after that would double-order the
+    // ones that already landed). Mirrors PurchasingService.GenerateOrdersAsync: maxSuffix is read
+    // once and bumped in memory per new draft, since a second MAX read inside the same unsaved
+    // context wouldn't see this batch's own not-yet-saved siblings and would collide. Validated up
+    // front across the whole batch so a bad row in one supplier's group never leaves an earlier
+    // supplier's draft half-created.
     public async Task<MaterialOrderDraftBatch> CreateDraftsByPreferredSupplierAsync(IReadOnlyList<MaterialOrderCandidate> rows, CancellationToken ct = default)
     {
         await RequireAdminOrOfficeAsync(); // fail auth before validation, same order as every other entry point
@@ -67,13 +64,42 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
 
         RequirePositiveQuantities(bySupplier.SelectMany(g => g).Select(ToLine).ToList());
 
-        var createdOrderIds = new List<int>();
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var (prefix, maxSuffix) = await ReadMaxSuffixAsync(db, ct);
+        var userId = await RequireUserIdAsync();
+
+        var createdOrders = new List<MaterialOrder>();
         foreach (var group in bySupplier)
         {
-            var order = await CreateDraftAsync(group.Key, group.Select(ToLine).ToList(), ct);
-            createdOrderIds.Add(order.Id);
+            maxSuffix++;
+            var order = new MaterialOrder
+            {
+                Number = $"{prefix}{maxSuffix:D4}",
+                SupplierId = group.Key,
+                CreatedByUserId = userId,
+                CreatedAt = DateTime.UtcNow,
+            };
+            order.Lines.AddRange(group.Select(ToLine));
+            db.MaterialOrders.Add(order);
+            createdOrders.Add(order);
         }
-        return new MaterialOrderDraftBatch(createdOrderIds, unassigned);
+        await db.SaveChangesAsync(ct);
+        return new MaterialOrderDraftBatch(createdOrders.Select(o => o.Id).ToList(), unassigned);
+    }
+
+    // Shared MPO-{yyyy}- max-suffix read: the same "read once, live orders only" numbering
+    // CreateDraftAsync and CreateDraftsByPreferredSupplierAsync both need - Drafts are deletable, so
+    // a count-based scheme would collide with a still-live order's suffix.
+    private static async Task<(string Prefix, int MaxSuffix)> ReadMaxSuffixAsync(FurniturePlannerContext db, CancellationToken ct)
+    {
+        var prefix = $"MPO-{DateTime.UtcNow.Year}-";
+        var numbersThisYear = await db.MaterialOrders.Where(o => o.Number.StartsWith(prefix)).Select(o => o.Number).ToListAsync(ct);
+        var maxSuffix = 0;
+        foreach (var number in numbersThisYear)
+        {
+            if (int.TryParse(number[prefix.Length..], out var suffix) && suffix > maxSuffix) { maxSuffix = suffix; }
+        }
+        return (prefix, maxSuffix);
     }
 
     private static MaterialOrderLine ToLine(MaterialOrderCandidate row) => new()
