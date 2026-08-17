@@ -1,6 +1,7 @@
 @using CheapFurniturePlanner.Domain.Production
 @using CheapFurniturePlanner.Models
 @using CheapFurniturePlanner.Services
+@using CheapFurniturePlanner.Ui
 @inject MaterialPlanningService MaterialPlanning
 @inject PartyService Parties
 @inject IDialogService DialogService
@@ -39,7 +40,7 @@
                         <MudTd DataLabel="Preferred">
                             @if (context.IsPreferred)
                             {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Primary">Preferred</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForActive(true)">Preferred</MudChip>
                             }
                             else
                             {
