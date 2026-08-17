@@ -83,6 +83,7 @@
                         <MudTh>Name</MudTh>
                         <MudTh>Ordered</MudTh>
                         <MudTh>Received</MudTh>
+                        <MudTh>Price</MudTh>
                         <MudTh></MudTh>
                     </HeaderContent>
                     <RowTemplate>
@@ -92,6 +93,7 @@
                         <MudTd DataLabel="Name">@context.DisplayName</MudTd>
                         <MudTd DataLabel="Ordered">@context.QuantityOrdered</MudTd>
                         <MudTd DataLabel="Received">@context.QuantityReceived</MudTd>
+                        <MudTd DataLabel="Price">@(context.UnitPrice is decimal price ? price.ToString("C2") : "—")</MudTd>
                         <MudTd>
                             @if (_order.State == MaterialOrderState.Draft)
                             {
@@ -108,6 +110,14 @@
                         </MudTd>
                     </RowTemplate>
                 </MudTable>
+
+                @* Task 4's rule, mirrored here from MaterialOrderPdf: the total only renders when
+                   EVERY line carries a price - a total silently summing just the priced lines would
+                   understate the real cost while still looking authoritative. *@
+                @if (_order.Lines.Count > 0 && _order.Lines.All(line => line.UnitPrice is not null))
+                {
+                    <MudText Typo="Typo.subtitle1" Class="mt-2">Total: @(_order.Lines.Sum(line => line.UnitPrice!.Value * line.QuantityOrdered).ToString("C2"))</MudText>
+                }
             }
         </MudPaper>
     }

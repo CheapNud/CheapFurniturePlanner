@@ -64,6 +64,10 @@
                         <MudTh>In stock</MudTh>
                         <MudTh>Stock after</MudTh>
                         <MudTh>On order</MudTh>
+                        <MudTh>Avg usage/wk</MudTh>
+                        <MudTh>Supplier</MudTh>
+                        <MudTh>Order by</MudTh>
+                        <MudTh>Est. cost</MudTh>
                         <MudTh>To order</MudTh>
                     </HeaderContent>
                     <RowTemplate>
@@ -74,8 +78,22 @@
                         <MudTd DataLabel="Name">@context.Row.DisplayName</MudTd>
                         <MudTd DataLabel="Gross need">@context.Row.GrossNeed</MudTd>
                         <MudTd DataLabel="In stock">@context.Row.InStock</MudTd>
-                        <MudTd DataLabel="Stock after">@context.Row.StockAfterNeeds</MudTd>
+                        <MudTd DataLabel="Stock after">
+                            @* Below-minimum flag: same HD-1 idiom the Stock tab uses (colored text, not a
+                               chip) - a text flag, not a page-local color. *@
+                            <MudText Color="@(context.Row.BelowMinimum ? Color.Error : Color.Default)">@context.Row.StockAfterNeeds</MudText>
+                        </MudTd>
                         <MudTd DataLabel="On order">@context.Row.OnOrder</MudTd>
+                        <MudTd DataLabel="Avg usage/wk">@AverageUsageText(context.Row)</MudTd>
+                        <MudTd DataLabel="Supplier">@(context.Row.PreferredSupplierName ?? "—")</MudTd>
+                        <MudTd DataLabel="Order by">
+                            <MudText Color="@(context.Row.OrderByOverdue ? Color.Error : Color.Default)">@(context.Row.OrderByDate?.ToString("yyyy-MM-dd") ?? "—")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Est. cost">
+                            @* Recomputed from the EDITED to-order quantity, not the frozen suggestion -
+                               the estimate must track what the user is about to actually order. *@
+                            @(context.Row.UnitPrice is decimal price ? (context.ToOrder * price).ToString("C2") : "—")
+                        </MudTd>
                         <MudTd DataLabel="To order">
                             <MudNumericField T="decimal" Value="context.ToOrder" ValueChanged="@((decimal v) => context.ToOrder = v)" Min="0" Dense="true" />
                         </MudTd>
@@ -248,26 +266,45 @@
         catch (IOException failure) { Snackbar.Add(failure.Message, Severity.Error); }
     }
 
+    // Selected rows auto-group by preferred supplier first (one draft per supplier, price
+    // snapshotted); only rows with no preferred term at all fall back to the manual supplier-pick
+    // dialog, and only for that remainder - a row that already resolved a supplier never revisits it.
     private async Task CreateOrderAsync()
     {
-        var lines = _forecastRows.Where(r => r.Selected && r.ToOrder > 0)
-            .Select(r => new MaterialOrderLine { Kind = r.Row.Kind, Code = r.Row.Code, HardnessCode = r.Row.HardnessCode, DisplayName = r.Row.DisplayName, QuantityOrdered = r.ToOrder })
+        var candidates = _forecastRows.Where(r => r.Selected && r.ToOrder > 0)
+            .Select(r => new MaterialOrderCandidate(r.Row.Kind, r.Row.Code, r.Row.HardnessCode, r.Row.DisplayName, r.ToOrder, r.Row.PreferredSupplierId, r.Row.UnitPrice))
             .ToList();
-        if (lines.Count == 0)
+        if (candidates.Count == 0)
         {
             Snackbar.Add("Select at least one row with a quantity to order.", Severity.Warning);
             return;
         }
 
-        var parameters = new DialogParameters<CreateOrderDialog> { { d => d.Lines, lines } };
-        var dialog = await DialogService.ShowAsync<CreateOrderDialog>("Create material order", parameters);
-        var result = await dialog.Result;
-        if (result is { Canceled: false })
+        MaterialOrderDraftBatch batch;
+        try { batch = await MaterialOrders.CreateDraftsByPreferredSupplierAsync(candidates); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); return; }
+
+        var createdCount = batch.CreatedOrderIds.Count;
+        var stillUnassigned = batch.Unassigned.Count;
+        if (stillUnassigned > 0)
         {
-            Snackbar.Add("Material order created.", Severity.Success);
-            _orders = await MaterialOrders.ListAsync();
+            var fallbackLines = batch.Unassigned
+                .Select(r => new MaterialOrderLine { Kind = r.Kind, Code = r.Code, HardnessCode = r.HardnessCode, DisplayName = r.DisplayName, QuantityOrdered = r.Quantity })
+                .ToList();
+            var parameters = new DialogParameters<CreateOrderDialog> { { d => d.Lines, fallbackLines } };
+            var dialog = await DialogService.ShowAsync<CreateOrderDialog>("Create material order", parameters);
+            var result = await dialog.Result;
+            if (result is { Canceled: false }) { createdCount++; stillUnassigned = 0; }
         }
+
+        _orders = await MaterialOrders.ListAsync();
+        Snackbar.Add(stillUnassigned > 0
+            ? $"Created {createdCount} order(s); {stillUnassigned} row(s) need a supplier."
+            : $"Created {createdCount} order(s).", stillUnassigned > 0 ? Severity.Warning : Severity.Success);
     }
+
+    private static string AverageUsageText(MaterialForecastRow row) =>
+        row.AverageUsagePerWeek is decimal avg ? $"{avg:0.0}/wk{(row.AverageUsageIsOverride ? " (manual)" : "")}" : "—";
 
     private async Task AdjustStockAsync(StockRowState row)
     {
