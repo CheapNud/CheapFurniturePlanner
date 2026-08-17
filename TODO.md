@@ -42,6 +42,7 @@ _Nothing blocking._
 
 ## Future
 
+- [ ] (2026-08-17) ui style: the UX-2 house-style canon (PageHeader/StatusChip/pa-6 Elevation=0 content cards/ProgressButton/table plumbing, enforced by UiConventionsTests) supersedes UX-1's PageTitle-only canon on every routed page; the font swap (AppDisplay=Sora, AppBody=Inter) is a drop-in revert - replace the two files under wwwroot/fonts/ only, no theme/CSS/page edit needed (see wwwroot/css/site.css's @font-face block); the Home/Planner room-dimension caption shows a `�` in place of `×` (pre-existing text-encoding artifact, not a style regression) - separate content-bug fix, not part of this phase [plan]
 - [ ] (2026-08-17) materials: material order ubl export, receipt undo, time-phased mrp - deferred remainder of the reorder-point mrp phase [plan]
   - forecast's movement scan loads all consumption history unwindowed - upgrade path: windowed grouped aggregate + per-identity existence flag
   - multi-currency prices and automatic reorder are deliberate never-items, not deferred

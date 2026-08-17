@@ -168,7 +168,10 @@ else
                     {
                         @foreach (var unit in _units.Where(u => u.OrderLineId == context.Id))
                         {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@StatusColors.For(unit.State)">@unit.SequenceNumber: @StatusText.Humanize(unit.State.ToString())</MudChip>
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="d-inline-flex mr-2">
+                                <MudText Typo="Typo.caption">@unit.SequenceNumber:</MudText>
+                                <StatusChip Color="@StatusColors.For(unit.State)" Value="@unit.State.ToString()" />
+                            </MudStack>
                         }
                     }
                 </MudTd>
