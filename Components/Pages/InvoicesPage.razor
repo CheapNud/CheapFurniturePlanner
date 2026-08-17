@@ -73,7 +73,7 @@
             <MudNumericField T="decimal" @bind-Value="_newRatePercent" Label="Rate %" Min="0" Max="100" />
             <ProgressButton Variant="Variant.Text" OnClick="SaveRateAsync">Save</ProgressButton>
         </MudStack>
-        <MudTable T="MarketVatRate" Items="_vatRates" Dense="true">
+        <MudTable T="MarketVatRate" Items="_vatRates" Dense="true" Loading="@_loading">
             <HeaderContent>
                 <MudTh>Market</MudTh>
                 <MudTh>Rate %</MudTh>
@@ -84,6 +84,9 @@
                 <MudTd DataLabel="Rate %">@context.RatePercent.ToString("0.##")</MudTd>
                 <MudTd><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Title="Delete rate" OnClick="@(() => DeleteRateAsync(context.Id))" /></MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                <EmptyState Text="No VAT rates yet" />
+            </NoRecordsContent>
         </MudTable>
     </MudPaper>
 </MudContainer>

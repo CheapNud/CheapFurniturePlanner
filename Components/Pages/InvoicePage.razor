@@ -39,7 +39,7 @@
         </MudPaper>
 
         <MudPaper Class="pa-6 mb-6" Elevation="0">
-            <MudTable T="InvoiceLine" Items="_invoice.Lines" Dense="true">
+            <MudTable T="InvoiceLine" Items="_invoice.Lines" Dense="true" Loading="@_loading">
                 <HeaderContent>
                     <MudTh>Description</MudTh>
                     <MudTh>Qty</MudTh>
@@ -56,6 +56,9 @@
                     <MudTd DataLabel="Line total">@Money(context.LineTotal)</MudTd>
                     <MudTd DataLabel="VAT">@Money(context.VatAmount)</MudTd>
                 </RowTemplate>
+                <NoRecordsContent>
+                    <EmptyState Text="No lines" />
+                </NoRecordsContent>
             </MudTable>
         </MudPaper>
 
@@ -127,6 +130,7 @@
     [Parameter] public int Id { get; set; }
 
     private Invoice? _invoice;
+    private bool _loading;
     private bool _showCreditForm;
     private CreditReason _creditReason = CreditReason.Return;
     private bool _fullCredit = true;
@@ -147,7 +151,15 @@
 
     private async Task ReloadAsync()
     {
-        _invoice = await Invoicing.GetInvoiceAsync(Id);
+        _loading = true;
+        try
+        {
+            _invoice = await Invoicing.GetInvoiceAsync(Id);
+        }
+        finally
+        {
+            _loading = false;
+        }
         StateHasChanged();
     }
 
