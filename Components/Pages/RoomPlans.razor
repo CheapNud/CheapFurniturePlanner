@@ -12,23 +12,20 @@
 <PageTitle>Room Plans</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <!-- Header -->
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Room Plans</MudText>
-        <MudSpacer />
-        @if (_roomPlans.Count > 0)
-        {
-            <MudButton Variant="Variant.Filled"
-                      Color="Color.Primary"
-                      StartIcon="@Icons.Material.Filled.Add"
-                      OnClick="OpenNewRoomPlanDialog">
-                New Room Plan
-            </MudButton>
-        }
-    </MudStack>
+    <PageHeader Kicker="PLANNER" Title="Room plans">
+        <Actions>
+            @if (_roomPlans.Count > 0)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="OpenNewRoomPlanDialog">
+                    New room plan
+                </MudButton>
+            }
+        </Actions>
+    </PageHeader>
 
     <!-- Search and Filter -->
-    <MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudPaper Elevation="0" Class="pa-6 mb-6">
         <MudGrid AlignItems="AlignItems.Center">
             <MudItem xs="12" sm="6" md="4">
                 <MudTextField @bind-Value="_searchTerm"
@@ -55,11 +52,9 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
                 <MudStack Row="true" Spacing="2">
-                    <MudButton Variant="Variant.Outlined" 
-                              StartIcon="@Icons.Material.Filled.Refresh"
-                              OnClick="LoadRoomPlans">
+                    <ProgressButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadRoomPlans">
                         Refresh
-                    </MudButton>
+                    </ProgressButton>
                     <MudButton Variant="Variant.Outlined" 
                               StartIcon="@Icons.Material.Filled.GridView"
                               OnClick="@(() => _viewMode = !_viewMode)">
@@ -71,20 +66,20 @@
     </MudPaper>
 
     <!-- Room Plans Display -->
-    @if (_loading)
+    @if (_viewMode)
     {
-        <MudProgressCircular Indeterminate="true" />
-    }
-    else if (!_filteredRoomPlans.Any())
-    {
-        <EmptyState Icon="@Icons.Material.Filled.SearchOff"
-                    Text="@(string.IsNullOrEmpty(_searchTerm) ? "You haven't created any room plans yet." : "No room plans match your search criteria.")"
-                    ActionText="Create Your First Room Plan"
-                    OnAction="OpenNewRoomPlanDialog" />
-    }
-    else
-    {
-        @if (_viewMode)
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else if (!_filteredRoomPlans.Any())
+        {
+            <EmptyState Icon="@Icons.Material.Filled.SearchOff"
+                        Text="@(string.IsNullOrEmpty(_searchTerm) ? "You haven't created any room plans yet." : "No room plans match your search criteria.")"
+                        ActionText="Create Your First Room Plan"
+                        OnAction="OpenNewRoomPlanDialog" />
+        }
+        else
         {
             <!-- Grid View -->
             <MudGrid>
@@ -159,12 +154,12 @@
                 }
             </MudGrid>
         }
-        else
-        {
-            <!-- Table View -->
-            <MudTable Items="@_filteredRoomPlans"
-                      Hover="true"
-                      Dense="true">
+    }
+    else
+    {
+        <!-- Table View -->
+        <MudPaper Class="pa-6" Elevation="0">
+            <MudTable Items="@_filteredRoomPlans" Hover="true" Dense="true" Loading="@_loading">
                 <HeaderContent>
                     <MudTh><MudTableSortLabel SortBy="new Func<RoomPlanViewModel, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
                     <MudTh>Description</MudTh>
@@ -225,8 +220,17 @@
                         </MudStack>
                     </MudTd>
                 </RowTemplate>
+                <NoRecordsContent>
+                    <EmptyState Icon="@Icons.Material.Filled.SearchOff"
+                                Text="@(string.IsNullOrEmpty(_searchTerm) ? "You haven't created any room plans yet." : "No room plans match your search criteria.")"
+                                ActionText="Create Your First Room Plan"
+                                OnAction="OpenNewRoomPlanDialog" />
+                </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
             </MudTable>
-        }
+        </MudPaper>
     }
 </MudContainer>
 
@@ -305,12 +309,9 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="CancelRoomPlanDialog">Cancel</MudButton>
-        <MudButton Variant="Variant.Filled" 
-                  Color="Color.Primary" 
-                  OnClick="SaveRoomPlan"
-                  Disabled="@string.IsNullOrWhiteSpace(_editingRoomPlan.Name)">
+        <ProgressButton OnClick="SaveRoomPlan" Disabled="@string.IsNullOrWhiteSpace(_editingRoomPlan.Name)">
             @(_editingRoomPlan.Id == 0 ? "Create" : "Save")
-        </MudButton>
+        </ProgressButton>
     </DialogActions>
 </MudDialog>
 

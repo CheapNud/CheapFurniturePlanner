@@ -12,23 +12,20 @@
 <PageTitle>Furniture Catalog</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <!-- Header -->
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Furniture Catalog</MudText>
-        <MudSpacer />
-        @if (_furnitureItems.Count > 0)
-        {
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Add"
-                       OnClick="OpenAddFurnitureDialog">
-                Add Furniture
-            </MudButton>
-        }
-    </MudStack>
+    <PageHeader Kicker="CATALOG" Title="Furniture catalog">
+        <Actions>
+            @if (_furnitureItems.Count > 0)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="OpenAddFurnitureDialog">
+                    Add furniture
+                </MudButton>
+            }
+        </Actions>
+    </PageHeader>
 
     <!-- Search and Filter -->
-    <MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudPaper Elevation="0" Class="pa-6 mb-6">
         <MudGrid AlignItems="AlignItems.Center">
             <MudItem xs="12" sm="6" md="4">
                 <MudTextField @bind-Value="_searchTerm"
@@ -65,11 +62,9 @@
                     <MudSwitch T="bool" @bind-Checked="_sortDescending"
                                Label="Descending"
                                Color="Color.Primary" />
-                    <MudButton Variant="Variant.Outlined"
-                               StartIcon="@Icons.Material.Filled.Refresh"
-                               OnClick="LoadFurniture">
+                    <ProgressButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadFurniture">
                         Refresh
-                    </MudButton>
+                    </ProgressButton>
                 </MudStack>
             </MudItem>
         </MudGrid>
@@ -369,12 +364,10 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="CancelFurnitureDialog">Cancel</MudButton>
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   OnClick="SaveFurniture"
-                   Disabled="@(string.IsNullOrWhiteSpace(_editingFurniture.Code) || string.IsNullOrWhiteSpace(_editingFurniture.Name))">
+        <ProgressButton OnClick="SaveFurniture"
+                        Disabled="@(string.IsNullOrWhiteSpace(_editingFurniture.Code) || string.IsNullOrWhiteSpace(_editingFurniture.Name))">
             @(_editingFurniture.Id == 0 ? "Add" : "Save")
-        </MudButton>
+        </ProgressButton>
     </DialogActions>
 </MudDialog>
 
