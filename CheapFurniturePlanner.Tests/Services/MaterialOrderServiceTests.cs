@@ -248,8 +248,22 @@ public class MaterialOrderServiceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, -1m));
         await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, 10.01m));
 
+        // Every rejected receipt above throws before the stock/movement mutation - no orphaned
+        // MaterialMovement row from a receipt that never actually landed.
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            Assert.Empty(await db.MaterialMovements.ToListAsync());
+        }
+
         await materials.ReceiveAsync(order.Id, line.Id, 6m);
         await Assert.ThrowsAsync<InvalidOperationException>(() => materials.ReceiveAsync(order.Id, line.Id, 5m)); // remainder is 4
+
+        // The rejected over-receipt above must not have appended a second movement onto the one
+        // real receipt.
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            Assert.Equal(1, await db.MaterialMovements.CountAsync());
+        }
     }
 
     [Fact]
@@ -272,6 +286,16 @@ public class MaterialOrderServiceTests
             var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "F-100" && s.HardnessCode == "H35");
             Assert.Equal(6m, stock.Amount);
             Assert.True(stock.UpdatedAt > DateTime.UtcNow.AddMinutes(-1));
+
+            // Same guarantee for the movement row: exactly one Receipt movement, same SaveChanges,
+            // referencing this order's number.
+            var movement = await db.MaterialMovements.SingleAsync();
+            Assert.Equal(MaterialKind.Foam, movement.Kind);
+            Assert.Equal("F-100", movement.Code);
+            Assert.Equal("H35", movement.HardnessCode);
+            Assert.Equal(6m, movement.Quantity);
+            Assert.Equal(MaterialMovementType.Receipt, movement.Type);
+            Assert.Equal(order.Number, movement.Reference);
         }
 
         await materials.ReceiveAsync(order.Id, line.Id, 4m);
@@ -280,6 +304,11 @@ public class MaterialOrderServiceTests
             var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "F-100" && s.HardnessCode == "H35");
             Assert.Equal(10m, stock.Amount); // upserted onto the same row, not a second one
             Assert.Equal(1, await db.MaterialStocks.CountAsync());
+
+            // Two receipts -> two movement rows (a log, unlike the upserted stock balance).
+            var movements = await db.MaterialMovements.OrderBy(m => m.Id).ToListAsync();
+            Assert.Equal(2, movements.Count);
+            Assert.Equal(4m, movements[1].Quantity);
         }
     }
 
@@ -318,5 +347,231 @@ public class MaterialOrderServiceTests
 
         Assert.Equal(2, list.Count);
         Assert.All(list, o => Assert.Equal("SUPA", o.Supplier!.Code));
+    }
+
+    // --- CreateDraftsByPreferredSupplierAsync (Task 4) ---
+
+    private static async Task<int> SeedPreferredTermAsync(IDbContextFactory<FurniturePlannerContext> factory,
+        MaterialKind kind, string code, string? hardnessCode, int supplierId, decimal unitPrice)
+    {
+        await using var db = await factory.CreateDbContextAsync();
+        var term = new MaterialSupplierTerm
+        {
+            Kind = kind, Code = code, HardnessCode = hardnessCode, SupplierId = supplierId,
+            UnitPrice = unitPrice, IsPreferred = true,
+        };
+        db.MaterialSupplierTerms.Add(term);
+        await db.SaveChangesAsync();
+        return term.Id;
+    }
+
+    [Fact]
+    public async Task CreateDraftsByPreferredSupplier_GroupsTwoMaterials_TwoPreferredSuppliers_IntoTwoDrafts()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierA = await SeedSupplierAsync(factory, "SUPA");
+        var supplierB = await SeedSupplierAsync(factory, "SUPB");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+
+        var rows = new[]
+        {
+            new MaterialOrderCandidate(MaterialKind.Foam, "F-100", "H35", "Foam H35", 20m, supplierA, 3.5m),
+            new MaterialOrderCandidate(MaterialKind.Cotton, "COT-1", null, "Cotton wadding", 5m, supplierB, 1.2m),
+        };
+
+        var result = await materials.CreateDraftsByPreferredSupplierAsync(rows);
+
+        Assert.Equal(2, result.CreatedOrderIds.Count);
+        Assert.Empty(result.Unassigned);
+        var orders = await materials.ListAsync();
+        Assert.Equal(2, orders.Count);
+        var orderA = orders.Single(o => o.Supplier!.Id == supplierA);
+        var lineA = Assert.Single(orderA.Lines);
+        Assert.Equal("F-100", lineA.Code);
+        Assert.Equal(20m, lineA.QuantityOrdered);
+        Assert.Equal(3.5m, lineA.UnitPrice);
+        var orderB = orders.Single(o => o.Supplier!.Id == supplierB);
+        var lineB = Assert.Single(orderB.Lines);
+        Assert.Equal("COT-1", lineB.Code);
+        Assert.Equal(1.2m, lineB.UnitPrice);
+    }
+
+    [Fact]
+    public async Task CreateDraftsByPreferredSupplier_NoPreferredRow_ReturnedAsUnassigned_NotDrafted()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierA = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+
+        var noPreferredRow = new MaterialOrderCandidate(MaterialKind.Frame, "FR-1", null, "Frame rail", 8m, null, null);
+        var rows = new[]
+        {
+            new MaterialOrderCandidate(MaterialKind.Foam, "F-100", "H35", "Foam H35", 20m, supplierA, 3.5m),
+            noPreferredRow,
+        };
+
+        var result = await materials.CreateDraftsByPreferredSupplierAsync(rows);
+
+        Assert.Single(result.CreatedOrderIds);
+        var unassigned = Assert.Single(result.Unassigned);
+        Assert.Equal("FR-1", unassigned.Code);
+        var orders = await materials.ListAsync();
+        var order = Assert.Single(orders);
+        Assert.Equal("F-100", Assert.Single(order.Lines).Code);
+    }
+
+    [Fact]
+    public async Task CreateDraftsByPreferredSupplier_PriceSnapshot_ImmuneToLaterTermPriceChange()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierA = await SeedSupplierAsync(factory, "SUPA");
+        var termId = await SeedPreferredTermAsync(factory, MaterialKind.Foam, "F-100", "H35", supplierA, 3.5m);
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var planning = new MaterialPlanningService(factory, OfficeUser);
+
+        var rows = new[] { new MaterialOrderCandidate(MaterialKind.Foam, "F-100", "H35", "Foam H35", 20m, supplierA, 3.5m) };
+        var result = await materials.CreateDraftsByPreferredSupplierAsync(rows);
+
+        // Term price changes after the draft was created - the already-created line must be unmoved.
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var term = await db.MaterialSupplierTerms.SingleAsync(t => t.Id == termId);
+            term.UnitPrice = 9.99m;
+            await db.SaveChangesAsync();
+        }
+
+        var order = await materials.GetAsync(result.CreatedOrderIds[0]);
+        Assert.Equal(3.5m, Assert.Single(order!.Lines).UnitPrice);
+    }
+
+    // Counts SaveChangesAsync calls per DbContext instance - pins the batch method's "one save for
+    // the whole group" contract instead of a per-supplier CreateDraftAsync loop (one save per
+    // supplier, and a mid-loop failure would lose the already-saved orders). Mirrors
+    // PurchasingServiceTests.ReleaseUnits_Group_OneSaveChanges_RetrySafe.
+    private sealed class SaveCountingContext(DbContextOptions<FurniturePlannerContext> options) : FurniturePlannerContext(options)
+    {
+        public int SaveCount;
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            SaveCount++;
+            return base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class SaveCountingContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public readonly List<SaveCountingContext> Created = [];
+        public FurniturePlannerContext CreateDbContext()
+        {
+            var context = new SaveCountingContext(options);
+            Created.Add(context);
+            return context;
+        }
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    [Fact]
+    public async Task CreateDraftsByPreferredSupplier_TwoSuppliers_OneSaveChanges_DistinctSequentialNumbers()
+    {
+        var (baseFactory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierA = await SeedSupplierAsync(baseFactory, "SUPA");
+        var supplierB = await SeedSupplierAsync(baseFactory, "SUPB");
+
+        var countingFactory = new SaveCountingContextFactory(new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options);
+        var materials = new MaterialOrderService(countingFactory, OfficeUser);
+
+        var rows = new[]
+        {
+            new MaterialOrderCandidate(MaterialKind.Foam, "F-100", "H35", "Foam H35", 20m, supplierA, 3.5m),
+            new MaterialOrderCandidate(MaterialKind.Cotton, "COT-1", null, "Cotton wadding", 5m, supplierB, 1.2m),
+        };
+
+        var result = await materials.CreateDraftsByPreferredSupplierAsync(rows);
+
+        Assert.Equal(1, countingFactory.Created.Sum(c => c.SaveCount));
+        Assert.Equal(2, result.CreatedOrderIds.Count);
+
+        var orderA = await materials.GetAsync(result.CreatedOrderIds[0]);
+        var orderB = await materials.GetAsync(result.CreatedOrderIds[1]);
+        Assert.NotEqual(orderA!.Number, orderB!.Number);
+        var suffixA = int.Parse(orderA.Number.Split('-')[^1]);
+        var suffixB = int.Parse(orderB.Number.Split('-')[^1]);
+        Assert.True(Math.Abs(suffixA - suffixB) == 1, $"expected sequential suffixes, got {orderA.Number} and {orderB.Number}");
+    }
+
+    [Fact]
+    public async Task CreateDraftsByPreferredSupplier_RejectsZeroOrNegativeQuantity_BeforeCreatingAnyDraft()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierA = await SeedSupplierAsync(factory, "SUPA");
+        var supplierB = await SeedSupplierAsync(factory, "SUPB");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+
+        var rows = new[]
+        {
+            new MaterialOrderCandidate(MaterialKind.Foam, "F-100", "H35", "Foam H35", 20m, supplierA, 3.5m),
+            new MaterialOrderCandidate(MaterialKind.Cotton, "COT-1", null, "Cotton wadding", 0m, supplierB, 1.2m),
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => materials.CreateDraftsByPreferredSupplierAsync(rows));
+
+        // Neither supplier's draft was created - the whole batch is rejected atomically.
+        Assert.Empty(await materials.ListAsync());
+    }
+
+    // --- AddLineAsync price snapshot (Task 4) ---
+
+    [Fact]
+    public async Task AddLine_SnapshotsPreferredTermPrice_WhenLineHasNoExplicitPrice()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierA = await SeedSupplierAsync(factory, "SUPA");
+        await SeedPreferredTermAsync(factory, MaterialKind.Foam, "F-100", "H35", supplierA, 4.25m);
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierA, []);
+
+        await materials.AddLineAsync(order.Id, FoamLine(10m));
+
+        var line = Assert.Single((await materials.GetAsync(order.Id))!.Lines);
+        Assert.Equal(4.25m, line.UnitPrice);
+    }
+
+    [Fact]
+    public async Task AddLine_KeepsExplicitPrice_DoesNotOverwriteWithPreferredTerm()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierA = await SeedSupplierAsync(factory, "SUPA");
+        await SeedPreferredTermAsync(factory, MaterialKind.Foam, "F-100", "H35", supplierA, 4.25m);
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierA, []);
+
+        var line = FoamLine(10m);
+        line.UnitPrice = 2.00m;
+        await materials.AddLineAsync(order.Id, line);
+
+        var stored = Assert.Single((await materials.GetAsync(order.Id))!.Lines);
+        Assert.Equal(2.00m, stored.UnitPrice);
+    }
+
+    [Fact]
+    public async Task AddLine_NoPreferredTerm_LeavesPriceNull()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierA = await SeedSupplierAsync(factory, "SUPA");
+        var materials = new MaterialOrderService(factory, OfficeUser);
+        var order = await materials.CreateDraftAsync(supplierA, []);
+
+        await materials.AddLineAsync(order.Id, FoamLine(10m));
+
+        var line = Assert.Single((await materials.GetAsync(order.Id))!.Lines);
+        Assert.Null(line.UnitPrice);
     }
 }

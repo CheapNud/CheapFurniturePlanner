@@ -65,7 +65,8 @@ public class MaterialNeedsServiceTests
     // Seeds a Seller/Consumer/Placed order pinned to the given catalogue version, with one
     // configured line - the minimal chain a material-needs candidate needs.
     private static async Task<(int OrderId, int LineId)> SeedOrderLineAsync(IDbContextFactory<FurniturePlannerContext> factory,
-        string modelCode, string elementCode, string? pinnedVersion, int? lineSupplierId = null, string fabricColorCode = "AQUA-BLUE")
+        string modelCode, string elementCode, string? pinnedVersion, int? lineSupplierId = null, string fabricColorCode = "AQUA-BLUE",
+        DateTime? promisedDeliveryDate = null)
     {
         await using var db = await factory.CreateDbContextAsync();
         var seller = new Seller { Name = "Shop", Multiplier = 1m };
@@ -81,6 +82,7 @@ public class MaterialNeedsServiceTests
             MarketCode = "BE",
             State = OrderState.Placed,
             PinnedCatalogueVersion = pinnedVersion,
+            PromisedDeliveryDate = promisedDeliveryDate,
         };
         order.Lines.Add(new OrderLine
         {
@@ -365,6 +367,13 @@ public class MaterialNeedsServiceTests
         {
             var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "FM-STD" && s.HardnessCode == "H35");
             Assert.Equal(12m, stock.Amount);
+
+            // First adjustment: old amount 0 (no prior row) -> new 12, delta +12 (raise). Same
+            // SaveChanges as the stock insert; reference null (an adjustment carries no order/unit).
+            var movement = await db.MaterialMovements.SingleAsync();
+            Assert.Equal(MaterialMovementType.Adjustment, movement.Type);
+            Assert.Equal(12m, movement.Quantity);
+            Assert.Null(movement.Reference);
         }
 
         // Second call on the same (Kind, Code, HardnessCode) upserts the existing row absolutely -
@@ -375,6 +384,12 @@ public class MaterialNeedsServiceTests
             var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "FM-STD" && s.HardnessCode == "H35");
             Assert.Equal(-4m, stock.Amount);
             Assert.Equal(1, await db.MaterialStocks.CountAsync());
+
+            // Second adjustment: old amount 12 -> new -4, delta -16 (lower). A second movement row
+            // is appended (unlike the stock balance, the log never upserts).
+            var movements = await db.MaterialMovements.OrderBy(m => m.Id).ToListAsync();
+            Assert.Equal(2, movements.Count);
+            Assert.Equal(-16m, movements[1].Quantity);
         }
     }
 
@@ -388,5 +403,493 @@ public class MaterialNeedsServiceTests
             var service = new MaterialNeedsService(factory, new FakeCurrentUser("intruder", role), new PinnedCatalogueProvider(factory), NewOutputRoot());
             await Assert.ThrowsAsync<InvalidOperationException>(() => service.AdjustStockAsync(MaterialKind.Foam, "FM-STD", null, 1m));
         }
+    }
+
+    // Task 3: planning math. A material with no MaterialProfile, no MaterialSupplierTerm and no
+    // MaterialMovement row is the SP-2 baseline row shape - this pins every new field's default so
+    // profile-less/term-less materials keep forecasting exactly as before.
+    [Fact]
+    public async Task ComputeAsync_NoProfileNoTermsNoMovements_NewFieldsDefaultToParityValues()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Equal(2m, foam.GrossNeed);
+        Assert.Equal(0m, foam.MinimumStock);
+        Assert.Null(foam.AverageUsagePerWeek);
+        Assert.False(foam.AverageUsageIsOverride);
+        Assert.True(foam.BelowMinimum); // (0 InStock + 0 OnOrder - 2 GrossNeed) = -2, under MinimumStock 0
+        Assert.Null(foam.OrderByDate);
+        Assert.False(foam.OrderByOverdue);
+        Assert.Null(foam.PreferredSupplierId);
+        Assert.Null(foam.PreferredSupplierName);
+        Assert.Null(foam.UnitPrice);
+        Assert.Null(foam.EstimatedCost);
+        Assert.Equal(2m, foam.SuggestedToOrder); // rounded == raw - no term to round against
+    }
+
+    [Fact]
+    public async Task ComputeAsync_MinimumStockToppedUp_IncreasesSuggestion()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            db.MaterialProfiles.Add(new MaterialProfile { Kind = MaterialKind.Foam, Code = "FM-STD", MinimumStock = 5m });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Equal(5m, foam.MinimumStock);
+        Assert.Equal(7m, foam.SuggestedToOrder); // max(0, 2 GrossNeed + 5 MinimumStock - 0 InStock - 0 OnOrder)
+        Assert.True(foam.BelowMinimum);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_MoqRounding_RoundsSuggestionUpToMoq()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        int supplierId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            supplierId = supplier.Id;
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm
+            {
+                Kind = MaterialKind.Foam, Code = "FM-STD", SupplierId = supplierId,
+                DeliveryTimeDays = 3, MinimumOrderQuantity = 10m, IsPreferred = true,
+            });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Equal(2m, foam.GrossNeed);
+        Assert.Equal(10m, foam.SuggestedToOrder); // raw 2 rounded up to MOQ 10
+        Assert.Equal(supplierId, foam.PreferredSupplierId);
+        Assert.Equal("Materials Co", foam.PreferredSupplierName);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PackageRounding_RoundsSuggestionUpToPackageMultiple()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm
+            {
+                Kind = MaterialKind.Foam, Code = "FM-STD", SupplierId = supplier.Id,
+                DeliveryTimeDays = 3, UnitsPerPackage = 3m, IsPreferred = true,
+            });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        await SeedUnitAsync(factory, orderId, lineId, 2);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Equal(4m, foam.GrossNeed); // two units x2 each
+        Assert.Equal(6m, foam.SuggestedToOrder); // raw 4 rounded up to a whole multiple of package 3
+    }
+
+    [Fact]
+    public async Task ComputeAsync_CombinedMoqAndPackageRounding_AppliesMoqThenPackage()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm
+            {
+                Kind = MaterialKind.Foam, Code = "FM-STD", SupplierId = supplier.Id,
+                DeliveryTimeDays = 3, MinimumOrderQuantity = 5m, UnitsPerPackage = 3m, IsPreferred = true,
+            });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Equal(2m, foam.GrossNeed);
+        Assert.Equal(6m, foam.SuggestedToOrder); // raw 2 -> MOQ 5 -> package-3 multiple 6
+    }
+
+    [Fact]
+    public async Task ComputeAsync_BelowMinimum_FlagsWhenProjectedUnderMinimumStock()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            db.MaterialProfiles.Add(new MaterialProfile { Kind = MaterialKind.Foam, Code = "FM-STD", MinimumStock = 1m });
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "FM-STD", Amount = 2m, UpdatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.True(foam.BelowMinimum); // (2 InStock + 0 OnOrder - 2 GrossNeed) = 0, under MinimumStock 1
+    }
+
+    [Fact]
+    public async Task ComputeAsync_BelowMinimum_NotFlaggedWhenProjectedMeetsMinimumStock()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            db.MaterialProfiles.Add(new MaterialProfile { Kind = MaterialKind.Foam, Code = "FM-STD", MinimumStock = 1m });
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "FM-STD", Amount = 3m, UpdatedAt = DateTime.UtcNow });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.False(foam.BelowMinimum); // (3 InStock + 0 OnOrder - 2 GrossNeed) = 1, meets MinimumStock 1
+    }
+
+    [Fact]
+    public async Task ComputeAsync_ComputedAverageUsage_SumsBackflushAndUndoWithinWindow_ExcludesOlderAndAdjustments()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        var pinnedNow = new DateTime(2026, 8, 15, 8, 0, 0, DateTimeKind.Utc);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            db.MaterialMovements.Add(new MaterialMovement { Kind = MaterialKind.Foam, Code = "FM-STD", Quantity = -3m, Type = MaterialMovementType.Backflush, OccurredAt = pinnedNow.AddDays(-10) });
+            db.MaterialMovements.Add(new MaterialMovement { Kind = MaterialKind.Foam, Code = "FM-STD", Quantity = 1m, Type = MaterialMovementType.BackflushUndo, OccurredAt = pinnedNow.AddDays(-5) });
+            db.MaterialMovements.Add(new MaterialMovement { Kind = MaterialKind.Foam, Code = "FM-STD", Quantity = -2m, Type = MaterialMovementType.Backflush, OccurredAt = pinnedNow.AddDays(-60) }); // outside the 56d window
+            db.MaterialMovements.Add(new MaterialMovement { Kind = MaterialKind.Foam, Code = "FM-STD", Quantity = -50m, Type = MaterialMovementType.Adjustment, OccurredAt = pinnedNow.AddDays(-1) }); // corrections excluded, not usage
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot(), () => pinnedNow);
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Equal(0.25m, foam.AverageUsagePerWeek); // -((-3) + 1) / 8 = -(-2)/8 = 2/8
+        Assert.False(foam.AverageUsageIsOverride);
+    }
+
+    // Proves the window genuinely excludes the old movement rather than treating "no data" and "no
+    // recent usage" the same way - a material with movement history, just none of it recent, reports
+    // a real computed 0, not the "never tracked" null the parity test pins.
+    [Fact]
+    public async Task ComputeAsync_MovementOutsideWindowOnly_YieldsZeroAverage_NotNull()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        var pinnedNow = new DateTime(2026, 8, 15, 8, 0, 0, DateTimeKind.Utc);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            db.MaterialMovements.Add(new MaterialMovement { Kind = MaterialKind.Foam, Code = "FM-STD", Quantity = -2m, Type = MaterialMovementType.Backflush, OccurredAt = pinnedNow.AddDays(-60) });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot(), () => pinnedNow);
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.NotNull(foam.AverageUsagePerWeek);
+        Assert.Equal(0m, foam.AverageUsagePerWeek);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_AverageUsageOverride_WinsOverComputed()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        var pinnedNow = new DateTime(2026, 8, 15, 8, 0, 0, DateTimeKind.Utc);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            db.MaterialProfiles.Add(new MaterialProfile { Kind = MaterialKind.Foam, Code = "FM-STD", AverageUsageOverride = 9.5m });
+            db.MaterialMovements.Add(new MaterialMovement { Kind = MaterialKind.Foam, Code = "FM-STD", Quantity = -10m, Type = MaterialMovementType.Backflush, OccurredAt = pinnedNow.AddDays(-1) });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot(), () => pinnedNow);
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Equal(9.5m, foam.AverageUsagePerWeek);
+        Assert.True(foam.AverageUsageIsOverride);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_OrderByDate_EarliestPromiseAmongDemandingOrders_MinusDeliveryTime()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        var pinnedNow = new DateTime(2026, 8, 15, 0, 0, 0, DateTimeKind.Utc);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm { Kind = MaterialKind.Foam, Code = "FM-STD", SupplierId = supplier.Id, DeliveryTimeDays = 7, IsPreferred = true });
+            await db.SaveChangesAsync();
+        }
+        var (order1Id, line1Id) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1", promisedDeliveryDate: pinnedNow.AddDays(20));
+        await SeedUnitAsync(factory, order1Id, line1Id, 1);
+        var (order2Id, line2Id) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1", promisedDeliveryDate: pinnedNow.AddDays(10));
+        await SeedUnitAsync(factory, order2Id, line2Id, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot(), () => pinnedNow);
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Equal(pinnedNow.AddDays(10).AddDays(-7), foam.OrderByDate); // earliest promise (10d), minus the 7d lead time
+        Assert.False(foam.OrderByOverdue);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_OrderByDate_NullWhenNoPromisedDates()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm { Kind = MaterialKind.Foam, Code = "FM-STD", SupplierId = supplier.Id, DeliveryTimeDays = 7, IsPreferred = true });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1"); // no PromisedDeliveryDate
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Null(foam.OrderByDate); // honest absence, no invented urgency
+        Assert.False(foam.OrderByOverdue);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_OrderByDate_NullWhenNoPreferredTerm()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        var pinnedNow = new DateTime(2026, 8, 15, 0, 0, 0, DateTimeKind.Utc);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1", promisedDeliveryDate: pinnedNow.AddDays(5));
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot(), () => pinnedNow);
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Null(foam.OrderByDate); // no term means no lead time to subtract from
+    }
+
+    [Fact]
+    public async Task ComputeAsync_OrderByDate_OverdueFlagTrue_WhenPastClockToday()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        var pinnedNow = new DateTime(2026, 8, 15, 0, 0, 0, DateTimeKind.Utc);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm { Kind = MaterialKind.Foam, Code = "FM-STD", SupplierId = supplier.Id, DeliveryTimeDays = 30, IsPreferred = true });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1", promisedDeliveryDate: pinnedNow.AddDays(5));
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot(), () => pinnedNow);
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Equal(pinnedNow.AddDays(5).AddDays(-30), foam.OrderByDate);
+        Assert.True(foam.OrderByOverdue); // 25 days before pinnedNow
+    }
+
+    // Final-review fix 2: rows previously only existed for positive gross need, so a profiled
+    // material drained below MinimumStock with zero current demand never fired its reorder point.
+    // No order/unit is seeded at all here - the row has to come purely from the profile+stock,
+    // not from any GrossNeed>0 candidate.
+    [Fact]
+    public async Task ComputeAsync_ZeroDemandBelowMinimum_StillSuggestsReorder()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        int supplierId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialProfiles.Add(new MaterialProfile { Kind = MaterialKind.Foam, Code = "FM-STD", MinimumStock = 10m });
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "FM-STD", Amount = 2m, UpdatedAt = DateTime.UtcNow });
+
+            // Second identity: same shape, plus an MOQ term - proves the rounding step still runs
+            // on the zero-demand path, not just the raw suggestion.
+            db.MaterialProfiles.Add(new MaterialProfile { Kind = MaterialKind.Cotton, Code = "COT-STD", MinimumStock = 10m });
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Cotton, Code = "COT-STD", Amount = 2m, UpdatedAt = DateTime.UtcNow });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            supplierId = supplier.Id;
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm
+            {
+                Kind = MaterialKind.Cotton, Code = "COT-STD", SupplierId = supplierId,
+                DeliveryTimeDays = 3, MinimumOrderQuantity = 20m, IsPreferred = true,
+            });
+            await db.SaveChangesAsync();
+        }
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam && r.Code == "FM-STD");
+        Assert.Equal(0m, foam.GrossNeed);
+        Assert.Equal(2m, foam.InStock);
+        Assert.Equal(8m, foam.SuggestedToOrder); // max(0, 0 + 10 - 2 - 0)
+        Assert.True(foam.BelowMinimum); // (2 InStock + 0 OnOrder - 0 GrossNeed) = 2, under MinimumStock 10
+        Assert.Null(foam.OrderByDate); // no demand - no promise dates to derive from
+
+        var cotton = forecast.Rows.Single(r => r.Kind == MaterialKind.Cotton && r.Code == "COT-STD");
+        Assert.Equal(0m, cotton.GrossNeed);
+        Assert.Equal(20m, cotton.SuggestedToOrder); // raw 8 rounded up to MOQ 20
+        Assert.True(cotton.BelowMinimum);
+    }
+
+    // SP-2/SP-3 parity: a term-only identity (no profile, so MinimumStock defaults to 0) with stock
+    // already on hand and no demand suggests ordering nothing - it must not appear as a noise row.
+    [Fact]
+    public async Task ComputeAsync_TermOnlyIdentityWithStockAndNoDemand_YieldsNoRow()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "FM-STD", Amount = 5m, UpdatedAt = DateTime.UtcNow });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm
+            {
+                Kind = MaterialKind.Foam, Code = "FM-STD", SupplierId = supplier.Id,
+                DeliveryTimeDays = 3, IsPreferred = true,
+            });
+            await db.SaveChangesAsync();
+        }
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        Assert.Empty(forecast.Rows);
+    }
+
+    [Fact]
+    public async Task ComputeAsync_PreferredSupplierPriceAndEstimatedCost_Surfaced()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogue(factory, "1");
+        int supplierId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.SupplierModelMaps.Add(new SupplierModelMap { SupplierId = null, ModelCode = "FJORD" });
+            var supplier = new Supplier { Code = "MATSUP", Name = "Materials Co" };
+            db.Suppliers.Add(supplier);
+            await db.SaveChangesAsync();
+            supplierId = supplier.Id;
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm { Kind = MaterialKind.Foam, Code = "FM-STD", SupplierId = supplierId, DeliveryTimeDays = 3, UnitPrice = 12.5m, IsPreferred = true });
+            await db.SaveChangesAsync();
+        }
+        var (orderId, lineId) = await SeedOrderLineAsync(factory, "FJORD", "FJ2", "1");
+        await SeedUnitAsync(factory, orderId, lineId, 1);
+        var service = new MaterialNeedsService(factory, OfficeUser, new PinnedCatalogueProvider(factory), NewOutputRoot());
+
+        var forecast = await service.ComputeAsync();
+
+        var foam = forecast.Rows.Single(r => r.Kind == MaterialKind.Foam);
+        Assert.Equal(2m, foam.SuggestedToOrder); // no MOQ/package - rounded == raw
+        Assert.Equal(12.5m, foam.UnitPrice);
+        Assert.Equal(25.0m, foam.EstimatedCost); // 2 x 12.5
+        Assert.Equal(supplierId, foam.PreferredSupplierId);
+        Assert.Equal("Materials Co", foam.PreferredSupplierName);
     }
 }

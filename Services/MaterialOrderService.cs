@@ -1,9 +1,23 @@
 using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Production;
 using CheapFurniturePlanner.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace CheapFurniturePlanner.Services;
+
+// One selected forecast row headed for a PO - trimmed down from MaterialForecastRow to just what a
+// line needs plus the identity a draft groups by. Quantity is the caller's (possibly hand-edited)
+// order quantity, not necessarily SuggestedToOrder verbatim. UnitPrice/PreferredSupplierId are
+// already resolved by the caller (MaterialNeedsService.ComputeAsync reads the preferred term once
+// per forecast row) - this service trusts them rather than re-querying MaterialSupplierTerm itself.
+public sealed record MaterialOrderCandidate(MaterialKind Kind, string Code, string? HardnessCode, string? DisplayName,
+    decimal Quantity, int? PreferredSupplierId, decimal? UnitPrice);
+
+// CreatedOrderIds: one draft per distinct PreferredSupplierId among the assigned rows. Unassigned:
+// rows with no preferred supplier at all - handed back rather than silently dropped, for the
+// caller's manual-pick fallback (pick a supplier by hand, AddLineAsync onto an existing/new draft).
+public sealed record MaterialOrderDraftBatch(IReadOnlyList<int> CreatedOrderIds, IReadOnlyList<MaterialOrderCandidate> Unassigned);
 
 // A purchase order for raw materials (foam, frame stock, cotton, fabric, misc) sent to one
 // supplier - MaterialOrder is SupplierOrder's counterpart for in-house material needs, but unlike
@@ -18,14 +32,7 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
         await RequireAdminOrOfficeAsync();
         RequirePositiveQuantities(lines);
         await using var db = await factory.CreateDbContextAsync(ct);
-
-        var prefix = $"MPO-{DateTime.UtcNow.Year}-";
-        var numbersThisYear = await db.MaterialOrders.Where(o => o.Number.StartsWith(prefix)).Select(o => o.Number).ToListAsync(ct);
-        var maxSuffix = 0;
-        foreach (var number in numbersThisYear)
-        {
-            if (int.TryParse(number[prefix.Length..], out var suffix) && suffix > maxSuffix) { maxSuffix = suffix; }
-        }
+        var (prefix, maxSuffix) = await ReadMaxSuffixAsync(db, ct);
 
         var order = new MaterialOrder
         {
@@ -39,6 +46,67 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
         await db.SaveChangesAsync(ct);
         return order;
     }
+
+    // Groups the caller's selected forecast rows by preferred supplier and builds one fresh draft
+    // per supplier in this same unsaved context, then saves once - a mid-batch infra failure must
+    // never leave some suppliers drafted and others not (a retry after that would double-order the
+    // ones that already landed). Mirrors PurchasingService.GenerateOrdersAsync: maxSuffix is read
+    // once and bumped in memory per new draft, since a second MAX read inside the same unsaved
+    // context wouldn't see this batch's own not-yet-saved siblings and would collide. Validated up
+    // front across the whole batch so a bad row in one supplier's group never leaves an earlier
+    // supplier's draft half-created.
+    public async Task<MaterialOrderDraftBatch> CreateDraftsByPreferredSupplierAsync(IReadOnlyList<MaterialOrderCandidate> rows, CancellationToken ct = default)
+    {
+        await RequireAdminOrOfficeAsync(); // fail auth before validation, same order as every other entry point
+        var unassigned = rows.Where(r => r.PreferredSupplierId is null).ToList();
+        var bySupplier = rows.Where(r => r.PreferredSupplierId is not null)
+            .GroupBy(r => r.PreferredSupplierId!.Value).ToList();
+
+        RequirePositiveQuantities(bySupplier.SelectMany(g => g).Select(ToLine).ToList());
+
+        await using var db = await factory.CreateDbContextAsync(ct);
+        var (prefix, maxSuffix) = await ReadMaxSuffixAsync(db, ct);
+        var userId = await RequireUserIdAsync();
+
+        var createdOrders = new List<MaterialOrder>();
+        foreach (var group in bySupplier)
+        {
+            maxSuffix++;
+            var order = new MaterialOrder
+            {
+                Number = $"{prefix}{maxSuffix:D4}",
+                SupplierId = group.Key,
+                CreatedByUserId = userId,
+                CreatedAt = DateTime.UtcNow,
+            };
+            order.Lines.AddRange(group.Select(ToLine));
+            db.MaterialOrders.Add(order);
+            createdOrders.Add(order);
+        }
+        await db.SaveChangesAsync(ct);
+        return new MaterialOrderDraftBatch(createdOrders.Select(o => o.Id).ToList(), unassigned);
+    }
+
+    // Shared MPO-{yyyy}- max-suffix read: the same "read once, live orders only" numbering
+    // CreateDraftAsync and CreateDraftsByPreferredSupplierAsync both need - Drafts are deletable, so
+    // a count-based scheme would collide with a still-live order's suffix.
+    private static async Task<(string Prefix, int MaxSuffix)> ReadMaxSuffixAsync(FurniturePlannerContext db, CancellationToken ct)
+    {
+        var prefix = $"MPO-{DateTime.UtcNow.Year}-";
+        var numbersThisYear = await db.MaterialOrders.Where(o => o.Number.StartsWith(prefix)).Select(o => o.Number).ToListAsync(ct);
+        var maxSuffix = 0;
+        foreach (var number in numbersThisYear)
+        {
+            if (int.TryParse(number[prefix.Length..], out var suffix) && suffix > maxSuffix) { maxSuffix = suffix; }
+        }
+        return (prefix, maxSuffix);
+    }
+
+    private static MaterialOrderLine ToLine(MaterialOrderCandidate row) => new()
+    {
+        Kind = row.Kind, Code = row.Code, HardnessCode = row.HardnessCode, DisplayName = row.DisplayName,
+        QuantityOrdered = row.Quantity, UnitPrice = row.UnitPrice,
+    };
 
     public async Task<List<MaterialOrder>> ListAsync(CancellationToken ct = default)
     {
@@ -58,12 +126,21 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
             .FirstOrDefaultAsync(o => o.Id == materialOrderId, ct);
     }
 
+    // A manually added line carries no forecast-resolved price the way CreateDraftsByPreferredSupplierAsync's
+    // rows do - snapshot the preferred term's price here instead, same "read once, never re-read"
+    // rule. Only fills a gap: a caller-supplied price (e.g. a one-off negotiated rate) is left alone.
     public async Task AddLineAsync(int materialOrderId, MaterialOrderLine line, CancellationToken ct = default)
     {
         await RequireAdminOrOfficeAsync();
         RequirePositiveQuantities([line]);
         await using var db = await factory.CreateDbContextAsync(ct);
         var order = await RequireDraftAsync(db, materialOrderId, ct);
+        if (line.UnitPrice is null)
+        {
+            var preferredTerm = await db.MaterialSupplierTerms.AsNoTracking().FirstOrDefaultAsync(
+                t => t.Kind == line.Kind && t.Code == line.Code && t.HardnessCode == line.HardnessCode && t.IsPreferred, ct);
+            line.UnitPrice = preferredTerm?.UnitPrice;
+        }
         order.Lines.Add(line);
         await db.SaveChangesAsync(ct);
     }
@@ -156,6 +233,18 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
         }
         stock.Amount += quantity;
         stock.UpdatedAt = DateTime.UtcNow;
+
+        db.MaterialMovements.Add(new MaterialMovement
+        {
+            Kind = line.Kind,
+            Code = line.Code,
+            HardnessCode = line.HardnessCode,
+            Quantity = quantity,
+            Type = MaterialMovementType.Receipt,
+            OccurredAt = DateTime.UtcNow,
+            Reference = order.Number,
+            UserId = await currentUser.UserIdAsync(),
+        });
 
         TryComplete(order);
         await db.SaveChangesAsync(ct);

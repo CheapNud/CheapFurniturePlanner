@@ -1,5 +1,7 @@
 using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Production;
+using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -95,5 +97,48 @@ public class PartyServiceTests
 
         Assert.Empty(await service.SellersAsync());
         Assert.Empty(await service.ConsumersAsync());
+    }
+
+    // Final-review fix 1: MaterialSupplierTerm carries a Restrict FK to Supplier - a supplier
+    // referenced only by a term (no orders/reports/model maps) previously escaped the guard and hit
+    // SaveChangesAsync as a raw DbUpdateException instead of the friendly snackbar message.
+    [Fact]
+    public async Task DeleteSupplierAsync_ReferencedByMaterialSupplierTerm_ThrowsInvalidOperation()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var service = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var supplier = await service.AddSupplierAsync("MATSUP", "Materials Co");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm
+            {
+                Kind = MaterialKind.Foam, Code = "FM-STD", SupplierId = supplier.Id,
+                DeliveryTimeDays = 3, IsPreferred = true,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteSupplierAsync(supplier.Id));
+    }
+
+    // Final-review fix 1: MaterialOrder is also a pre-existing Restrict FK the guard never checked.
+    [Fact]
+    public async Task DeleteSupplierAsync_ReferencedByMaterialOrder_ThrowsInvalidOperation()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var service = new PartyService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var supplier = await service.AddSupplierAsync("MATSUP", "Materials Co");
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialOrders.Add(new MaterialOrder
+            {
+                Number = "MO-2026-0001", SupplierId = supplier.Id, CreatedByUserId = "office-1", CreatedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteSupplierAsync(supplier.Id));
     }
 }

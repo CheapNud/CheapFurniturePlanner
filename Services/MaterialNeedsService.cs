@@ -10,8 +10,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CheapFurniturePlanner.Services;
 
+// SuggestedToOrder is the ROUNDED figure (raw need rounded up to the preferred term's
+// MinimumOrderQuantity, then up to a whole UnitsPerPackage multiple) - the manual edit a user makes
+// before PO creation starts from this rounded value, not the raw one (planning math task 3).
 public sealed record MaterialForecastRow(MaterialKind Kind, string Code, string? HardnessCode, string DisplayName,
-    decimal GrossNeed, decimal InStock, decimal StockAfterNeeds, decimal OnOrder, decimal SuggestedToOrder);
+    decimal GrossNeed, decimal InStock, decimal StockAfterNeeds, decimal OnOrder, decimal SuggestedToOrder,
+    decimal MinimumStock, decimal? AverageUsagePerWeek, bool AverageUsageIsOverride, bool BelowMinimum,
+    DateTime? OrderByDate, bool OrderByOverdue, int? PreferredSupplierId, string? PreferredSupplierName,
+    decimal? UnitPrice, decimal? EstimatedCost);
 
 // UnpinnedUnitCodes: in-house-resolved units whose order carries no PinnedCatalogueVersion, so
 // there's no snapshot to resolve MaterialRequirements against - skipped from Rows the same way
@@ -50,11 +56,13 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
             .ToListAsync(ct);
 
         var orderIds = candidates.Select(c => c.OrderId).Distinct().ToList();
-        var pinnedVersions = await db.Orders.AsNoTracking().Where(o => orderIds.Contains(o.Id))
-            .ToDictionaryAsync(o => o.Id, o => o.PinnedCatalogueVersion, ct);
+        // Carries PromisedDeliveryDate alongside the pinned version now - order-by date derivation
+        // (planning math task 3) needs the same orders this loop already fetches.
+        var orderInfo = await db.Orders.AsNoTracking().Where(o => orderIds.Contains(o.Id))
+            .ToDictionaryAsync(o => o.Id, o => (o.PinnedCatalogueVersion, o.PromisedDeliveryDate), ct);
 
         var unresolvedModelCodes = new SortedSet<string>(StringComparer.Ordinal);
-        var inHouse = new List<(string UnitCode, string ModelCode, string ElementCode, string SelectionsJson, string? FabricColorCode, string? PinnedVersion)>();
+        var inHouse = new List<(string UnitCode, string ModelCode, string ElementCode, string SelectionsJson, string? FabricColorCode, string? PinnedVersion, int OrderId)>();
         foreach (var candidate in candidates)
         {
             if (candidate.SupplierId is not null) { continue; } // dropship-pinned - someone else's problem
@@ -66,7 +74,7 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
             }
             if (mappedSupplierId is not null) { continue; } // mapped to an external supplier - excluded silently
             inHouse.Add((candidate.UnitCode, candidate.ModelCode, candidate.ElementCode!, candidate.SelectionsJson, candidate.FabricColorCode,
-                pinnedVersions.GetValueOrDefault(candidate.OrderId)));
+                orderInfo.GetValueOrDefault(candidate.OrderId).PinnedCatalogueVersion, candidate.OrderId));
         }
 
         // Materials 1: a unit whose order carries no pinned catalogue version has no snapshot to
@@ -76,6 +84,9 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
         var unpinnedUnitCodes = new SortedSet<string>(StringComparer.Ordinal);
         var needs = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), decimal>();
         var displayNames = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), string>();
+        // Orders whose units demand each material identity - feeds the order-by date (earliest
+        // PromisedDeliveryDate among these, minus the preferred term's lead time).
+        var demandingOrderIds = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), HashSet<int>>();
         foreach (var group in inHouse.GroupBy(c => c.PinnedVersion))
         {
             if (group.Key is null)
@@ -93,6 +104,8 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
                     var key = (line.Kind, line.Code, line.HardnessCode);
                     needs[key] = needs.GetValueOrDefault(key) + line.Quantity;
                     if (!displayNames.ContainsKey(key)) { displayNames[key] = ResolveDisplayName(snapshot, line.Kind, line.Code); }
+                    if (!demandingOrderIds.TryGetValue(key, out var orders)) { orders = []; demandingOrderIds[key] = orders; }
+                    orders.Add(unit.OrderId);
                 }
             }
         }
@@ -106,15 +119,98 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
             .Select(g => new { g.Key, Remainder = g.Sum(l => l.QuantityOrdered - l.QuantityReceived) })
             .ToDictionaryAsync(g => (g.Key.Kind, g.Key.Code, g.Key.HardnessCode), g => g.Remainder, ct);
 
-        var rows = needs.Where(kv => kv.Value > 0m).Select(kv =>
+        // Demand-side knobs (MinimumStock, AverageUsageOverride) - profile-less materials keep the
+        // SP-2 defaults (0, no override), so a material never authored in the Profile dialog forecasts
+        // exactly as it did before this task.
+        var profiles = await db.MaterialProfiles.AsNoTracking()
+            .ToDictionaryAsync(p => (p.Kind, p.Code, p.HardnessCode), p => p, ct);
+        // Exactly one preferred term per material identity (MaterialPlanningService's invariant) -
+        // supply-side knobs (lead time, MOQ, package, price, supplier) all read from it; a material
+        // with no terms at all has no preferred row and every one of these stays at its default.
+        var preferredTerms = await db.MaterialSupplierTerms.AsNoTracking().Include(t => t.Supplier)
+            .Where(t => t.IsPreferred)
+            .ToDictionaryAsync(t => (t.Kind, t.Code, t.HardnessCode), t => t, ct);
+        // Only consumption-typed movements ever feed the average (Receipt/Adjustment are excluded by
+        // construction, not filtered out below) - loaded once per material identity so the trailing
+        // window sum only has to slice a short in-memory list per row.
+        var consumptionMovements = await db.MaterialMovements.AsNoTracking()
+            .Where(m => m.Type == MaterialMovementType.Backflush || m.Type == MaterialMovementType.BackflushUndo)
+            .ToListAsync(ct);
+        var consumptionByMaterial = consumptionMovements
+            .GroupBy(m => (m.Kind, m.Code, m.HardnessCode))
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var windowStart = _now().AddDays(-56);
+        var today = _now().Date;
+
+        // Final-review fix: rows previously existed only for positive gross need, so a profiled or
+        // termed material drained below MinimumStock with zero current demand never fired its
+        // reorder point. Union in every identity carrying a profile or supplier term - the
+        // suggested>0 filter below (applied only to the zero-demand ones) keeps a term/profile alone
+        // from listing a material nobody needs and that's already stocked past its minimum (SP-2
+        // parity: an identity with neither stays out entirely, same as before).
+        var candidateKeys = new HashSet<(MaterialKind Kind, string Code, string? HardnessCode)>(
+            needs.Where(kv => kv.Value > 0m).Select(kv => kv.Key));
+        candidateKeys.UnionWith(profiles.Keys);
+        candidateKeys.UnionWith(preferredTerms.Keys);
+
+        var rows = candidateKeys.Select(key =>
         {
-            var (kind, code, hardnessCode) = kv.Key;
-            var grossNeed = kv.Value;
-            var inStock = stocks.GetValueOrDefault(kv.Key);
-            var onOrderQty = onOrder.GetValueOrDefault(kv.Key);
-            return new MaterialForecastRow(kind, code, hardnessCode, displayNames.GetValueOrDefault(kv.Key, code),
-                grossNeed, inStock, inStock - grossNeed, onOrderQty, Math.Max(0m, grossNeed - inStock - onOrderQty));
+            var (kind, code, hardnessCode) = key;
+            var grossNeed = needs.GetValueOrDefault(key);
+            var inStock = stocks.GetValueOrDefault(key);
+            var onOrderQty = onOrder.GetValueOrDefault(key);
+            var profile = profiles.GetValueOrDefault(key);
+            var minimumStock = profile?.MinimumStock ?? 0m;
+            var preferredTerm = preferredTerms.GetValueOrDefault(key);
+
+            // Computed average usage (per week): -(Backflush + BackflushUndo sums over the trailing
+            // 56 days) / 8. A material with no consumption movement AT ALL (ever, not just in the
+            // window) has never had its usage tracked - shown as null (no data) rather than a
+            // misleading computed 0. One that has history but nothing in the last 56 days genuinely
+            // is 0 (window correctly excludes the old rows). AverageUsageOverride always wins.
+            bool averageUsageIsOverride;
+            decimal? averageUsagePerWeek;
+            if (profile?.AverageUsageOverride is decimal overrideValue)
+            {
+                averageUsagePerWeek = overrideValue;
+                averageUsageIsOverride = true;
+            }
+            else
+            {
+                averageUsageIsOverride = false;
+                averageUsagePerWeek = consumptionByMaterial.TryGetValue(key, out var movementsForMaterial)
+                    ? -movementsForMaterial.Where(m => m.OccurredAt >= windowStart).Sum(m => m.Quantity) / 8m
+                    : null;
+            }
+
+            var belowMinimum = inStock + onOrderQty - grossNeed < minimumStock;
+
+            var rawSuggestion = Math.Max(0m, grossNeed + minimumStock - inStock - onOrderQty);
+            var afterMoq = preferredTerm?.MinimumOrderQuantity is decimal moq ? Math.Ceiling(rawSuggestion / moq) * moq : rawSuggestion;
+            var suggested = preferredTerm?.UnitsPerPackage is decimal package ? Math.Ceiling(afterMoq / package) * package : afterMoq;
+
+            // Earliest promise among the demanding orders, minus the preferred term's lead time - no
+            // term means no lead time to subtract, so no order-by date at all (not even an unadjusted
+            // promise date - that would invent an urgency the material's supply side never committed to).
+            DateTime? orderByDate = null;
+            if (preferredTerm is not null && demandingOrderIds.TryGetValue(key, out var orderIds))
+            {
+                var promisedDates = orderIds.Select(id => orderInfo.GetValueOrDefault(id).PromisedDeliveryDate)
+                    .Where(d => d.HasValue).Select(d => d!.Value).ToList();
+                if (promisedDates.Count > 0) { orderByDate = promisedDates.Min().AddDays(-preferredTerm.DeliveryTimeDays); }
+            }
+            var orderByOverdue = orderByDate is DateTime orderBy && orderBy.Date < today;
+
+            var unitPrice = preferredTerm?.UnitPrice;
+            var estimatedCost = unitPrice is decimal price ? suggested * price : (decimal?)null;
+
+            return new MaterialForecastRow(kind, code, hardnessCode, displayNames.GetValueOrDefault(key, code),
+                grossNeed, inStock, inStock - grossNeed, onOrderQty, suggested,
+                minimumStock, averageUsagePerWeek, averageUsageIsOverride, belowMinimum,
+                orderByDate, orderByOverdue, preferredTerm?.SupplierId, preferredTerm?.Supplier?.Name,
+                unitPrice, estimatedCost);
         })
+        .Where(row => row.GrossNeed > 0m || row.SuggestedToOrder > 0m)
         .OrderBy(r => r.Kind).ThenBy(r => r.Code, StringComparer.Ordinal).ToList();
 
         return new MaterialForecast(rows, unresolvedModelCodes.ToList(), unpinnedUnitCodes.ToList());
@@ -137,6 +233,7 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
         await RequireAdminOrOfficeAsync();
         await using var db = await factory.CreateDbContextAsync(ct);
         var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == kind && s.Code == code && s.HardnessCode == hardnessCode, ct);
+        var oldAmount = stock?.Amount ?? 0m;
         if (stock is null)
         {
             stock = new MaterialStock { Kind = kind, Code = code, HardnessCode = hardnessCode, Amount = newAmount, UpdatedAt = DateTime.UtcNow };
@@ -147,6 +244,19 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
             stock.Amount = newAmount;
             stock.UpdatedAt = DateTime.UtcNow;
         }
+
+        db.MaterialMovements.Add(new MaterialMovement
+        {
+            Kind = kind,
+            Code = code,
+            HardnessCode = hardnessCode,
+            Quantity = newAmount - oldAmount,
+            Type = MaterialMovementType.Adjustment,
+            OccurredAt = _now(),
+            Reference = null,
+            UserId = await currentUser.UserIdAsync(),
+        });
+
         await db.SaveChangesAsync(ct);
     }
 

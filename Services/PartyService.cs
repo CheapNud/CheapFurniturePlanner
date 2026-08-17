@@ -204,9 +204,11 @@ public sealed class PartyService(IDbContextFactory<FurniturePlannerContext> fact
         if (await db.OrderLines.AnyAsync(l => l.SupplierId == supplierId, ct)
             || await db.SupplierReports.AnyAsync(r => r.SupplierId == supplierId, ct)
             || await db.SupplierModelMaps.AnyAsync(m => m.SupplierId == supplierId, ct)
-            || await db.SupplierOrders.AnyAsync(o => o.SupplierId == supplierId, ct))
+            || await db.SupplierOrders.AnyAsync(o => o.SupplierId == supplierId, ct)
+            || await db.MaterialSupplierTerms.AnyAsync(t => t.SupplierId == supplierId, ct)
+            || await db.MaterialOrders.AnyAsync(o => o.SupplierId == supplierId, ct))
         {
-            throw new InvalidOperationException($"Supplier '{supplier.Code}' is referenced by orders, service reports, model maps or purchase orders.");
+            throw new InvalidOperationException($"Supplier '{supplier.Code}' is referenced by orders, service reports, model maps, purchase orders, material terms or material orders.");
         }
         db.Suppliers.Remove(supplier);
         await db.SaveChangesAsync(ct);

@@ -1,0 +1,55 @@
+@using CheapFurniturePlanner.Domain.Production
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@inject MaterialPlanningService MaterialPlanning
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2"><b>@Kind</b> @Code@(string.IsNullOrEmpty(HardnessCode) ? "" : $" / {HardnessCode}")</MudText>
+            @if (_movements.Count == 0)
+            {
+                <MudText Typo="Typo.body2">No movements recorded yet.</MudText>
+            }
+            else
+            {
+                <MudTable Items="_movements" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Date</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>Quantity</MudTh>
+                        <MudTh>Reference</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Date">@context.OccurredAt.ToString("yyyy-MM-dd")</MudTd>
+                        <MudTd DataLabel="Type">@context.Type</MudTd>
+                        <MudTd DataLabel="Quantity">@(context.Quantity > 0 ? $"+{context.Quantity}" : context.Quantity.ToString())</MudTd>
+                        <MudTd DataLabel="Reference">@context.Reference</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Close())">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public MaterialKind Kind { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Code { get; set; } = default!;
+
+    [Parameter]
+    public string? HardnessCode { get; set; }
+
+    private List<MaterialMovement> _movements = [];
+
+    protected override async Task OnInitializedAsync() =>
+        _movements = await MaterialPlanning.MovementsAsync(Kind, Code, HardnessCode);
+}
