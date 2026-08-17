@@ -156,15 +156,15 @@
 
                     <MudText Typo="Typo.subtitle2">Default Behavior</MudText>
 
-                    <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.ShowGrid"
+                    <MudSwitch T="bool" @bind-Value="_editingRoomPlan.ShowGrid"
                                Label="Show Grid"
                                Color="Color.Primary" />
 
-                    <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.PreventOverlap"
+                    <MudSwitch T="bool" @bind-Value="_editingRoomPlan.PreventOverlap"
                                Label="Prevent Furniture Overlap"
                                Color="Color.Primary" />
 
-                    <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.EnableSnapping"
+                    <MudSwitch T="bool" @bind-Value="_editingRoomPlan.EnableSnapping"
                                Label="Enable Grid Snapping"
                                Color="Color.Primary" />
                 </MudStack>

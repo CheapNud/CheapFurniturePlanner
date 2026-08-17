@@ -46,7 +46,7 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="6" md="2">
-                <MudSwitch T=bool @bind-Checked="_sortDescending"
+                <MudSwitch T=bool @bind-Value="_sortDescending"
                            Label="Descending" 
                           Color="Color.Primary" />
             </MudItem>
@@ -294,16 +294,16 @@
             
             <MudText Typo="Typo.subtitle2">Default Settings</MudText>
             
-            <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.ShowGrid"
-                       Label="Show Grid by Default" 
+            <MudSwitch T="bool" @bind-Value="_editingRoomPlan.ShowGrid"
+                       Label="Show Grid by Default"
                       Color="Color.Primary" />
-            
-            <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.PreventOverlap"
-                       Label="Prevent Furniture Overlap" 
+
+            <MudSwitch T="bool" @bind-Value="_editingRoomPlan.PreventOverlap"
+                       Label="Prevent Furniture Overlap"
                       Color="Color.Primary" />
-            
-            <MudSwitch T="bool" @bind-Checked="_editingRoomPlan.EnableSnapping"
-                       Label="Enable Grid Snapping" 
+
+            <MudSwitch T="bool" @bind-Value="_editingRoomPlan.EnableSnapping"
+                       Label="Enable Grid Snapping"
                       Color="Color.Primary" />
         </MudStack>
     </DialogContent>

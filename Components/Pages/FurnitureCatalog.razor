@@ -59,7 +59,7 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="3">
                 <MudStack Row="true" Spacing="2">
-                    <MudSwitch T="bool" @bind-Checked="_sortDescending"
+                    <MudSwitch T="bool" @bind-Value="_sortDescending"
                                Label="Descending"
                                Color="Color.Primary" />
                     <ProgressButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadFurniture">
@@ -340,7 +340,7 @@
                                   Label="Image URL"
                                   HelperText="URL to an image of this furniture item" />
 
-                    <MudSwitch T="bool" @bind-Checked="_editingFurniture.IsActive"
+                    <MudSwitch T="bool" @bind-Value="_editingFurniture.IsActive"
                                Label="Active in Catalog"
                                Color="Color.Primary" />
                 </MudStack>

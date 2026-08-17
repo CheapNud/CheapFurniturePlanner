@@ -47,8 +47,7 @@ public class UiConventionsTests
 
     // Judgment pages that deliberately have no PageHeader at all - both documented inline (in the
     // page itself) as well as here. Login/Setup are pre-authentication, single-purpose screens; a
-    // module kicker would name a section of the app the visitor can't reach yet (see task-6-report.md
-    // "Login"/"SetupPage" notes).
+    // module kicker would name a section of the app the visitor can't reach yet.
     private static readonly HashSet<string> PagesWithoutPageHeader = new(StringComparer.OrdinalIgnoreCase)
     {
         "Login.razor",
@@ -111,8 +110,8 @@ public class UiConventionsTests
     // outside StatusChip - the one shared home for "color + humanized label" (see StatusChip.razor).
     // Widened (final-review fix 6) from a Pages-only walk to all of Components/: the original
     // Pages-only scoping let MaterialProfileDialog.razor's raw "Preferred" chip through as a
-    // documented, known non-page instance (see task-7-report.md) - now converted to StatusChip and
-    // caught the same as a page-level offender would be. No allowlist entries exist today: both
+    // documented, known non-page instance - now converted to StatusChip and caught the same as a
+    // page-level offender would be. No allowlist entries exist today: both
     // known offenders (OrderEntryPage's per-unit "seq: state" chip, MaterialProfileDialog's
     // "Preferred" chip) were converted to StatusChip rather than exempted. A plain informational
     // MudChip that never touches StatusColors (e.g. a count badge) is unaffected by this rule by
@@ -199,6 +198,31 @@ public class UiConventionsTests
             var count = System.Text.RegularExpressions.Regex.Matches(source, @"Variant\.Filled").Count;
             var allowed = PagesWithAllowedExtraFilledButtons.GetValueOrDefault(fileName, 1);
             if (count > allowed) { failures.Add($"{fileName}: {count} Variant.Filled buttons (allowed {allowed})"); }
+        }
+        Assert.True(failures.Count == 0, string.Join("; ", failures));
+    }
+
+    // UX-2 final-review fix (second wave): MudSwitch<bool> is a MudBooleanInput<T> - it only ever
+    // declares Value/ValueChanged, never Checked/CheckedChanged. Blazor still compiles @bind-Checked
+    // against it (MudComponentBase captures unmatched attributes into a catch-all bag instead of
+    // rejecting them at compile time), so the binding silently no-ops: the switch renders and toggles
+    // its own internal DOM state, but nothing ever flows back to the bound field. Nine of these were
+    // found and converted to @bind-Value across PlannerPage/RoomPlans/FurnitureCatalog; this rule is
+    // the regression guard so a tenth one doesn't creep back in unnoticed. No allowlist - there is no
+    // legitimate reason for @bind-Checked to appear anywhere under Components/.
+    private static readonly System.Text.RegularExpressions.Regex BindCheckedPattern =
+        new(@"@bind-Checked", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    [Fact]
+    public void NoComponent_UsesBindCheckedOnASwitch()
+    {
+        var componentsDir = Path.Combine(FindRepoRoot(), "Components");
+        var failures = new List<string>();
+        foreach (var path in Directory.EnumerateFiles(componentsDir, "*.razor", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(componentsDir, path);
+            var source = File.ReadAllText(path);
+            if (BindCheckedPattern.IsMatch(source)) { failures.Add($"{relative}: uses @bind-Checked - MudSwitch<bool> has no Checked/CheckedChanged pair, use @bind-Value instead"); }
         }
         Assert.True(failures.Count == 0, string.Join("; ", failures));
     }
