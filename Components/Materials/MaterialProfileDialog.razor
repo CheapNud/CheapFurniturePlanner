@@ -1,0 +1,198 @@
+@using CheapFurniturePlanner.Domain.Production
+@using CheapFurniturePlanner.Models
+@using CheapFurniturePlanner.Services
+@inject MaterialPlanningService MaterialPlanning
+@inject PartyService Parties
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2"><b>@Kind</b> @Code@(string.IsNullOrEmpty(HardnessCode) ? "" : $" / {HardnessCode}")</MudText>
+            <MudNumericField T="decimal" Label="Minimum stock" @bind-Value="_minimumStock" Min="0" />
+            <MudNumericField T="decimal?" Label="Average usage override (per week)" @bind-Value="_averageUsageOverride" />
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Supplier terms</MudText>
+            @if (_terms.Count == 0)
+            {
+                <MudText Typo="Typo.body2">No supplier terms recorded yet.</MudText>
+            }
+            else
+            {
+                <MudTable Items="_terms" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Supplier</MudTh>
+                        <MudTh>Lead time</MudTh>
+                        <MudTh>MOQ</MudTh>
+                        <MudTh>Package</MudTh>
+                        <MudTh>Price</MudTh>
+                        <MudTh>Preferred</MudTh>
+                        <MudTh />
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Supplier">@context.Supplier?.Name</MudTd>
+                        <MudTd DataLabel="Lead time">@context.DeliveryTimeDays d</MudTd>
+                        <MudTd DataLabel="MOQ">@context.MinimumOrderQuantity</MudTd>
+                        <MudTd DataLabel="Package">@context.UnitsPerPackage</MudTd>
+                        <MudTd DataLabel="Price">@context.UnitPrice</MudTd>
+                        <MudTd DataLabel="Preferred">
+                            @if (context.IsPreferred)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary">Preferred</MudChip>
+                            }
+                            else
+                            {
+                                <MudButton Size="Size.Small" OnClick="@(() => SetPreferredAsync(context))">Make preferred</MudButton>
+                            }
+                        </MudTd>
+                        <MudTd>
+                            <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Title="Edit term" OnClick="@(() => EditTerm(context))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Title="Remove term" OnClick="@(() => RemoveTermAsync(context))" />
+                            </MudStack>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+
+            <MudText Typo="Typo.body2">@(_editingTermId is null ? "Add a term" : "Editing term")</MudText>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudSelect T="int?" Label="Supplier" @bind-Value="_termSupplierId" Disabled="@(_editingTermId is not null)">
+                    @foreach (var supplier in _suppliers)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)supplier.Id)">@supplier.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudNumericField T="int" Label="Lead time (days)" @bind-Value="_termDeliveryTimeDays" Min="0" />
+                <MudNumericField T="decimal?" Label="MOQ" @bind-Value="_termMoq" />
+                <MudNumericField T="decimal?" Label="Units/package" @bind-Value="_termUnitsPerPackage" />
+                <MudNumericField T="decimal?" Label="Unit price" @bind-Value="_termUnitPrice" />
+                <MudButton Color="Color.Primary" Disabled="@(_termSupplierId is null)" OnClick="SaveTermAsync">@(_editingTermId is null ? "Add" : "Save")</MudButton>
+                @if (_editingTermId is not null)
+                {
+                    <MudButton OnClick="CancelEditTerm">Cancel</MudButton>
+                }
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveProfileAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public MaterialKind Kind { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Code { get; set; } = default!;
+
+    [Parameter]
+    public string? HardnessCode { get; set; }
+
+    private decimal _minimumStock;
+    private decimal? _averageUsageOverride;
+    private List<MaterialSupplierTerm> _terms = [];
+    private List<Supplier> _suppliers = [];
+
+    // Add/edit share one row of fields (the CollectionsDialog rename idiom) - editing loads the
+    // selected term's values in, Save re-upserts by the same (identity, supplier) key so the
+    // supplier field is locked while editing (changing it would create a second term, not rename this one).
+    private int? _editingTermId;
+    private int? _termSupplierId;
+    private int _termDeliveryTimeDays;
+    private decimal? _termMoq;
+    private decimal? _termUnitsPerPackage;
+    private decimal? _termUnitPrice;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var profiles = await MaterialPlanning.ProfilesAsync();
+        var profile = profiles.FirstOrDefault(p => p.Kind == Kind && p.Code == Code && p.HardnessCode == HardnessCode);
+        if (profile is not null)
+        {
+            _minimumStock = profile.MinimumStock;
+            _averageUsageOverride = profile.AverageUsageOverride;
+        }
+        _suppliers = await Parties.SuppliersAsync();
+        await ReloadTermsAsync();
+    }
+
+    private async Task ReloadTermsAsync() => _terms = await MaterialPlanning.TermsAsync(Kind, Code, HardnessCode);
+
+    private async Task SaveProfileAsync()
+    {
+        try
+        {
+            await MaterialPlanning.UpsertProfileAsync(new MaterialProfile
+            {
+                Kind = Kind, Code = Code, HardnessCode = HardnessCode,
+                MinimumStock = _minimumStock, AverageUsageOverride = _averageUsageOverride,
+            });
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+    }
+
+    private void EditTerm(MaterialSupplierTerm term)
+    {
+        _editingTermId = term.Id;
+        _termSupplierId = term.SupplierId;
+        _termDeliveryTimeDays = term.DeliveryTimeDays;
+        _termMoq = term.MinimumOrderQuantity;
+        _termUnitsPerPackage = term.UnitsPerPackage;
+        _termUnitPrice = term.UnitPrice;
+    }
+
+    private void CancelEditTerm()
+    {
+        _editingTermId = null;
+        _termSupplierId = null;
+        _termDeliveryTimeDays = 0;
+        _termMoq = null;
+        _termUnitsPerPackage = null;
+        _termUnitPrice = null;
+    }
+
+    private async Task SaveTermAsync()
+    {
+        if (_termSupplierId is not int supplierId) { return; }
+        try
+        {
+            await MaterialPlanning.UpsertTermAsync(new MaterialSupplierTerm
+            {
+                Kind = Kind, Code = Code, HardnessCode = HardnessCode, SupplierId = supplierId,
+                DeliveryTimeDays = _termDeliveryTimeDays, MinimumOrderQuantity = _termMoq,
+                UnitsPerPackage = _termUnitsPerPackage, UnitPrice = _termUnitPrice,
+            });
+            CancelEditTerm();
+        }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        await ReloadTermsAsync();
+    }
+
+    private async Task SetPreferredAsync(MaterialSupplierTerm term)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Make preferred",
+            $"Make '{term.Supplier?.Name}' the preferred supplier for this material?", yesText: "Make preferred", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MaterialPlanning.SetPreferredAsync(term.Id); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        await ReloadTermsAsync();
+    }
+
+    private async Task RemoveTermAsync(MaterialSupplierTerm term)
+    {
+        var confirmed = await DialogService.ShowMessageBoxAsync("Remove term",
+            $"Remove the term for '{term.Supplier?.Name}'?", yesText: "Remove", cancelText: "Cancel");
+        if (confirmed != true) { return; }
+        try { await MaterialPlanning.DeleteTermAsync(term.Id); }
+        catch (InvalidOperationException failure) { Snackbar.Add(failure.Message, Severity.Error); }
+        await ReloadTermsAsync();
+    }
+}

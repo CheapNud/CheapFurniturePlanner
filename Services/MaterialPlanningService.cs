@@ -153,6 +153,21 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
         await db.SaveChangesAsync(ct);
     }
 
+    // --- Movements ---
+
+    // Read-only, like MaterialNeedsService.StockAsync - /materials is already Admin-or-Office gated,
+    // no separate role check needed. Newest first, capped (the Movements dialog's "recent history"
+    // view, not a full ledger export) - Id as a tie-break keeps ordering stable across same-instant rows.
+    public async Task<List<MaterialMovement>> MovementsAsync(MaterialKind kind, string code, string? hardnessCode, int take = 50, CancellationToken ct = default)
+    {
+        var normalizedHardness = NormalizeHardness(hardnessCode);
+        await using var db = await factory.CreateDbContextAsync(ct);
+        return await db.MaterialMovements.AsNoTracking()
+            .Where(m => m.Kind == kind && m.Code == code && m.HardnessCode == normalizedHardness)
+            .OrderByDescending(m => m.OccurredAt).ThenByDescending(m => m.Id)
+            .Take(take).ToListAsync(ct);
+    }
+
     private static string? NormalizeHardness(string? hardnessCode) =>
         string.IsNullOrWhiteSpace(hardnessCode) ? null : hardnessCode.Trim();
 

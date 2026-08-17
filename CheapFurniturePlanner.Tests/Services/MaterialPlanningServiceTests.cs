@@ -265,4 +265,38 @@ public class MaterialPlanningServiceTests
 
         Assert.Equal(2, all.Count);
     }
+
+    // --- Movements ---
+
+    [Fact]
+    public async Task MovementsAsync_ReturnsNewestFirst_CappedAtTake_ScopedToIdentity()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var service = new MaterialPlanningService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                db.MaterialMovements.Add(new MaterialMovement
+                {
+                    Kind = MaterialKind.Foam, Code = "F-20", Quantity = i + 1,
+                    Type = MaterialMovementType.Receipt, OccurredAt = new DateTime(2026, 8, 1, 0, i, 0, DateTimeKind.Utc), Reference = $"MPO-{i}",
+                });
+            }
+            // A different material identity's movement must never leak into the scoped read.
+            db.MaterialMovements.Add(new MaterialMovement
+            {
+                Kind = MaterialKind.Frame, Code = "FR-1", Quantity = 9,
+                Type = MaterialMovementType.Receipt, OccurredAt = new DateTime(2026, 8, 1, 0, 9, 0, DateTimeKind.Utc), Reference = "MPO-OTHER",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var movements = await service.MovementsAsync(MaterialKind.Foam, "F-20", null, take: 2);
+
+        Assert.Equal(2, movements.Count);
+        Assert.Equal("MPO-2", movements[0].Reference); // newest first
+        Assert.Equal("MPO-1", movements[1].Reference);
+    }
 }

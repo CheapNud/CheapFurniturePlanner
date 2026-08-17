@@ -1,11 +1,13 @@
 @page "/materials"
 @using CheapFurniturePlanner.Auth
 @using CheapFurniturePlanner.Components.Materials
+@using CheapFurniturePlanner.Domain.Production
 @using CheapFurniturePlanner.Models
 @using CheapFurniturePlanner.Services
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize(Roles = Roles.AdminOrOffice)]
 @inject MaterialNeedsService MaterialNeeds
+@inject MaterialPlanningService MaterialPlanning
 @inject MaterialOrderService MaterialOrders
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
@@ -89,20 +91,32 @@
             }
             else
             {
-                <MudTable T="MaterialStock" Items="_stock" Hover="true" Dense="true" Class="mt-4">
+                @* Union listing (spec 5): a material authored with a profile or supplier term but
+                   never yet received shows here too, amount blank rather than a misleading "0". *@
+                <MudTable T="StockRowState" Items="_stock" Hover="true" Dense="true" Class="mt-4">
                     <HeaderContent>
                         <MudTh>Kind</MudTh>
                         <MudTh>Code</MudTh>
                         <MudTh>Hardness</MudTh>
                         <MudTh>Amount</MudTh>
+                        <MudTh>Min</MudTh>
                         <MudTh></MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Kind">@context.Kind</MudTd>
                         <MudTd DataLabel="Code">@context.Code</MudTd>
                         <MudTd DataLabel="Hardness">@context.HardnessCode</MudTd>
-                        <MudTd DataLabel="Amount"><MudText Color="@(context.Amount < 0 ? Color.Error : Color.Default)">@context.Amount</MudText></MudTd>
-                        <MudTd><MudButton Size="Size.Small" OnClick="@(() => AdjustStockAsync(context))">Adjust</MudButton></MudTd>
+                        <MudTd DataLabel="Amount">
+                            <MudText Color="@(IsBelowMin(context) ? Color.Error : Color.Default)">@(context.HasStockRow ? context.Amount.ToString() : "—")</MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Min">@(context.Profile is not null ? context.Profile.MinimumStock.ToString() : "")</MudTd>
+                        <MudTd>
+                            <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                                <MudButton Size="Size.Small" OnClick="@(() => AdjustStockAsync(context))">Adjust</MudButton>
+                                <MudButton Size="Size.Small" OnClick="@(() => OpenProfileAsync(context))">Profile</MudButton>
+                                <MudButton Size="Size.Small" OnClick="@(() => OpenMovementsAsync(context))">Movements</MudButton>
+                            </MudStack>
+                        </MudTd>
                     </RowTemplate>
                 </MudTable>
             }
@@ -143,11 +157,24 @@
         public bool Selected { get; set; }
     }
 
+    // Stock tab row: unions MaterialStock (the running balance) with profiled/termed material
+    // identities that have never had a receipt - HasStockRow tells the template whether Amount is
+    // a real balance (0 is possible and meaningful) or just the union default (rendered blank).
+    private sealed class StockRowState
+    {
+        public required MaterialKind Kind { get; init; }
+        public required string Code { get; init; }
+        public string? HardnessCode { get; init; }
+        public decimal Amount { get; init; }
+        public bool HasStockRow { get; init; }
+        public MaterialProfile? Profile { get; init; }
+    }
+
     private MaterialForecast? _forecast;
     private List<ForecastRowState> _forecastRows = [];
     private List<string> _unresolvedModelCodes = [];
     private List<string> _unpinnedUnitCodes = [];
-    private List<MaterialStock> _stock = [];
+    private List<StockRowState> _stock = [];
     private List<MaterialOrder> _orders = [];
 
     protected override async Task OnInitializedAsync()
@@ -164,9 +191,39 @@
 
     private async Task ReloadStockAndOrdersAsync()
     {
-        _stock = await MaterialNeeds.StockAsync();
+        var stock = await MaterialNeeds.StockAsync();
+        var profiles = await MaterialPlanning.ProfilesAsync();
+        var terms = await MaterialPlanning.AllTermsAsync();
         _orders = await MaterialOrders.ListAsync();
+
+        var rows = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), StockRowState>();
+        foreach (var s in stock)
+        {
+            var key = (s.Kind, s.Code, s.HardnessCode);
+            rows[key] = new StockRowState
+            {
+                Kind = s.Kind, Code = s.Code, HardnessCode = s.HardnessCode, Amount = s.Amount, HasStockRow = true,
+                Profile = profiles.FirstOrDefault(p => p.Kind == s.Kind && p.Code == s.Code && p.HardnessCode == s.HardnessCode),
+            };
+        }
+        foreach (var identity in profiles.Select(p => (p.Kind, p.Code, p.HardnessCode))
+                     .Concat(terms.Select(t => (t.Kind, t.Code, t.HardnessCode))).Distinct())
+        {
+            if (rows.ContainsKey(identity)) { continue; }
+            rows[identity] = new StockRowState
+            {
+                Kind = identity.Kind, Code = identity.Code, HardnessCode = identity.HardnessCode, HasStockRow = false,
+                Profile = profiles.FirstOrDefault(p => p.Kind == identity.Kind && p.Code == identity.Code && p.HardnessCode == identity.HardnessCode),
+            };
+        }
+        _stock = rows.Values.OrderBy(r => r.Kind).ThenBy(r => r.Code, StringComparer.Ordinal).ToList();
     }
+
+    // HD-1 idiom (negative amount -> Color.Error) extended with the below-minimum trigger, which
+    // only fires when a profile exists - a material never authored in the Profile dialog has no
+    // minimum to fall below.
+    private static bool IsBelowMin(StockRowState row) =>
+        row.Amount < 0 || (row.Profile is not null && row.Amount < row.Profile.MinimumStock);
 
     private async Task ComputeAsync()
     {
@@ -212,14 +269,38 @@
         }
     }
 
-    private async Task AdjustStockAsync(MaterialStock stock)
+    private async Task AdjustStockAsync(StockRowState row)
     {
+        var stock = new MaterialStock { Kind = row.Kind, Code = row.Code, HardnessCode = row.HardnessCode, Amount = row.Amount };
         var parameters = new DialogParameters<StockAdjustDialog> { { d => d.Stock, stock } };
         var dialog = await DialogService.ShowAsync<StockAdjustDialog>("Adjust stock", parameters);
         var result = await dialog.Result;
         if (result is { Canceled: false })
         {
-            _stock = await MaterialNeeds.StockAsync();
+            await ReloadStockAndOrdersAsync();
         }
+    }
+
+    private async Task OpenProfileAsync(StockRowState row)
+    {
+        var parameters = new DialogParameters<MaterialProfileDialog>
+        {
+            { d => d.Kind, row.Kind }, { d => d.Code, row.Code }, { d => d.HardnessCode, row.HardnessCode },
+        };
+        var dialog = await DialogService.ShowAsync<MaterialProfileDialog>("Material profile", parameters);
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            await ReloadStockAndOrdersAsync();
+        }
+    }
+
+    private async Task OpenMovementsAsync(StockRowState row)
+    {
+        var parameters = new DialogParameters<MaterialMovementsDialog>
+        {
+            { d => d.Kind, row.Kind }, { d => d.Code, row.Code }, { d => d.HardnessCode, row.HardnessCode },
+        };
+        await DialogService.ShowAsync<MaterialMovementsDialog>("Movements", parameters);
     }
 }
