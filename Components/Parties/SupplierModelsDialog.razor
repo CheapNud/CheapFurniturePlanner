@@ -15,7 +15,7 @@
                 <RowTemplate>
                     <MudTd DataLabel="Model code">@context.ModelCode</MudTd>
                     <MudTd DataLabel="Actions">
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => RemoveAsync(context))">Remove</MudButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => RemoveAsync(context))">Remove</ProgressButton>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -28,7 +28,7 @@
                         <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" />
                     </MudTooltip>
                 }
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="@string.IsNullOrWhiteSpace(_newCode)" OnClick="@AddAsync">Add</MudButton>
+                <ProgressButton Disabled="@string.IsNullOrWhiteSpace(_newCode)" OnClick="AddAsync">Add</ProgressButton>
             </MudStack>
         </MudStack>
     </DialogContent>

@@ -9,170 +9,181 @@
 <PageTitle>Parties</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Parties</MudText>
-        <MudSpacer />
-    </MudStack>
+    <PageHeader Kicker="PARTIES" Title="Manage parties" />
 
-    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
-        <MudTabPanel Text="Sellers">
-            <MudStack Spacing="3">
-                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.h6">Sellers</MudText>
-                    @if (_sellers.Count > 0)
-                    {
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddSellerAsync())">
-                            Add seller
-                        </MudButton>
-                    }
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-4">
+            <MudTabPanel Text="Sellers">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudText Typo="Typo.h6">Sellers</MudText>
+                        @if (_sellers.Count > 0)
+                        {
+                            <ProgressButton OnClick="AddSellerAsync" StartIcon="@Icons.Material.Filled.Add">Add seller</ProgressButton>
+                        }
+                    </MudStack>
+                    <MudTextField T="string" Value="_sellerSearch" ValueChanged="@((string v) => _sellerSearch = v)" Label="Search"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Class="mb-4" />
+                    <MudTable Items="@FilteredSellers" Hover="true" Dense="true" T="Seller" Loading="@_loading">
+                        <HeaderContent>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Multiplier</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Name">@context.Name</MudTd>
+                            <MudTd DataLabel="Multiplier">@context.Multiplier</MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudStack Row="true" Spacing="1">
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditSellerAsync(context))">Edit</ProgressButton>
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditSellerAddressAsync(context))">Address</ProgressButton>
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => DeleteSellerAsync(context))">Delete</ProgressButton>
+                                    <MudButton Size="Size.Small" Href="@($"/parties/{context.Id}/discounts")">Discounts</MudButton>
+                                </MudStack>
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            @if (_sellers.Count == 0)
+                            {
+                                <EmptyState Text="No sellers yet." ActionText="Add seller" OnAction="AddSellerAsync" />
+                            }
+                            else
+                            {
+                                <EmptyState Icon="@Icons.Material.Filled.SearchOff" Text="No sellers match your search." />
+                            }
+                        </NoRecordsContent>
+                    </MudTable>
                 </MudStack>
-                @if (_sellers.Count == 0)
-                {
-                    <EmptyState Text="No sellers yet." ActionText="Add seller" OnAction="@(() => AddSellerAsync())" />
-                }
-                else
-                {
-                <MudTable Items="@_sellers" Hover="true" Dense="true" T="Seller">
-                    <HeaderContent>
-                        <MudTh>Name</MudTh>
-                        <MudTh>Multiplier</MudTh>
-                        <MudTh>Actions</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Name">@context.Name</MudTd>
-                        <MudTd DataLabel="Multiplier">@context.Multiplier</MudTd>
-                        <MudTd DataLabel="Actions">
-                            <MudStack Row="true" Spacing="1">
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAsync(context))">Edit</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSellerAddressAsync(context))">Address</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSellerAsync(context))">Delete</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Href="@($"/parties/{context.Id}/discounts")">Discounts</MudButton>
-                            </MudStack>
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-                }
-            </MudStack>
-        </MudTabPanel>
+            </MudTabPanel>
 
-        <MudTabPanel Text="Consumers">
-            <MudStack Spacing="3">
-                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.h6">Consumers</MudText>
-                    @if (_consumers.Count > 0)
-                    {
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddConsumerAsync())">
-                            Add consumer
-                        </MudButton>
-                    }
+            <MudTabPanel Text="Consumers">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudText Typo="Typo.h6">Consumers</MudText>
+                        @if (_consumers.Count > 0)
+                        {
+                            <ProgressButton OnClick="AddConsumerAsync" StartIcon="@Icons.Material.Filled.Add">Add consumer</ProgressButton>
+                        }
+                    </MudStack>
+                    <MudTextField T="string" Value="_consumerSearch" ValueChanged="@((string v) => _consumerSearch = v)" Label="Search"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Class="mb-4" />
+                    <MudTable Items="@FilteredConsumers" Hover="true" Dense="true" T="Consumer" Loading="@_loading">
+                        <HeaderContent>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Contact</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Name">@context.Name</MudTd>
+                            <MudTd DataLabel="Contact">@context.Contact</MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudStack Row="true" Spacing="1">
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditConsumerAsync(context))">Edit</ProgressButton>
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditConsumerAddressesAsync(context))">Addresses</ProgressButton>
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => DeleteConsumerAsync(context))">Delete</ProgressButton>
+                                </MudStack>
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            @if (_consumers.Count == 0)
+                            {
+                                <EmptyState Text="No consumers yet." ActionText="Add consumer" OnAction="AddConsumerAsync" />
+                            }
+                            else
+                            {
+                                <EmptyState Icon="@Icons.Material.Filled.SearchOff" Text="No consumers match your search." />
+                            }
+                        </NoRecordsContent>
+                    </MudTable>
                 </MudStack>
-                @if (_consumers.Count == 0)
-                {
-                    <EmptyState Text="No consumers yet." ActionText="Add consumer" OnAction="@(() => AddConsumerAsync())" />
-                }
-                else
-                {
-                <MudTable Items="@_consumers" Hover="true" Dense="true" T="Consumer">
-                    <HeaderContent>
-                        <MudTh>Name</MudTh>
-                        <MudTh>Contact</MudTh>
-                        <MudTh>Actions</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Name">@context.Name</MudTd>
-                        <MudTd DataLabel="Contact">@context.Contact</MudTd>
-                        <MudTd DataLabel="Actions">
-                            <MudStack Row="true" Spacing="1">
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditConsumerAsync(context))">Edit</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditConsumerAddressesAsync(context))">Addresses</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteConsumerAsync(context))">Delete</MudButton>
-                            </MudStack>
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-                }
-            </MudStack>
-        </MudTabPanel>
+            </MudTabPanel>
 
-        <MudTabPanel Text="Suppliers">
-            <MudStack Spacing="3">
-                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.h6">Suppliers</MudText>
-                    @if (_suppliers.Count > 0)
-                    {
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddSupplierAsync())">
-                            Add supplier
-                        </MudButton>
-                    }
+            <MudTabPanel Text="Suppliers">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudText Typo="Typo.h6">Suppliers</MudText>
+                        @if (_suppliers.Count > 0)
+                        {
+                            <ProgressButton OnClick="AddSupplierAsync" StartIcon="@Icons.Material.Filled.Add">Add supplier</ProgressButton>
+                        }
+                    </MudStack>
+                    <MudTextField T="string" Value="_supplierSearch" ValueChanged="@((string v) => _supplierSearch = v)" Label="Search"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Class="mb-4" />
+                    <MudTable Items="@FilteredSuppliers" Hover="true" Dense="true" T="Supplier" Loading="@_loading">
+                        <HeaderContent>
+                            <MudTh>Code</MudTh>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Address</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Code">@context.Code</MudTd>
+                            <MudTd DataLabel="Name">@context.Name</MudTd>
+                            <MudTd DataLabel="Address">@context.Address?.ToOneLine()</MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudStack Row="true" Spacing="1">
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditSupplierAsync(context))">Edit</ProgressButton>
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditSupplierModelsAsync(context))">Models</ProgressButton>
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => DeleteSupplierAsync(context))">Delete</ProgressButton>
+                                </MudStack>
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            @if (_suppliers.Count == 0)
+                            {
+                                <EmptyState Text="No suppliers yet." ActionText="Add supplier" OnAction="AddSupplierAsync" />
+                            }
+                            else
+                            {
+                                <EmptyState Icon="@Icons.Material.Filled.SearchOff" Text="No suppliers match your search." />
+                            }
+                        </NoRecordsContent>
+                    </MudTable>
                 </MudStack>
-                @if (_suppliers.Count == 0)
-                {
-                    <EmptyState Text="No suppliers yet." ActionText="Add supplier" OnAction="@(() => AddSupplierAsync())" />
-                }
-                else
-                {
-                <MudTable Items="@_suppliers" Hover="true" Dense="true" T="Supplier">
-                    <HeaderContent>
-                        <MudTh>Code</MudTh>
-                        <MudTh>Name</MudTh>
-                        <MudTh>Address</MudTh>
-                        <MudTh>Actions</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Code">@context.Code</MudTd>
-                        <MudTd DataLabel="Name">@context.Name</MudTd>
-                        <MudTd DataLabel="Address">@context.Address?.ToOneLine()</MudTd>
-                        <MudTd DataLabel="Actions">
-                            <MudStack Row="true" Spacing="1">
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSupplierAsync(context))">Edit</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditSupplierModelsAsync(context))">Models</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteSupplierAsync(context))">Delete</MudButton>
-                            </MudStack>
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-                }
-            </MudStack>
-        </MudTabPanel>
+            </MudTabPanel>
 
-        <MudTabPanel Text="Regions">
-            <MudStack Spacing="3">
-                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.h6">Regions</MudText>
-                    @if (_regions.Count > 0)
-                    {
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddRegionAsync())">
-                            Add region
-                        </MudButton>
-                    }
+            <MudTabPanel Text="Regions">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudText Typo="Typo.h6">Regions</MudText>
+                        @if (_regions.Count > 0)
+                        {
+                            <ProgressButton OnClick="AddRegionAsync" StartIcon="@Icons.Material.Filled.Add">Add region</ProgressButton>
+                        }
+                    </MudStack>
+                    <MudTextField T="string" Value="_regionSearch" ValueChanged="@((string v) => _regionSearch = v)" Label="Search"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Class="mb-4" />
+                    <MudTable Items="@FilteredRegions" Hover="true" Dense="true" T="Region" Loading="@_loading">
+                        <HeaderContent>
+                            <MudTh>Code</MudTh>
+                            <MudTh>Name</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Code">@context.Code</MudTd>
+                            <MudTd DataLabel="Name">@context.Name</MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudStack Row="true" Spacing="1">
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditRegionAsync(context))">Edit</ProgressButton>
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => DeleteRegionAsync(context))">Delete</ProgressButton>
+                                </MudStack>
+                            </MudTd>
+                        </RowTemplate>
+                        <NoRecordsContent>
+                            @if (_regions.Count == 0)
+                            {
+                                <EmptyState Text="No regions yet." ActionText="Add region" OnAction="AddRegionAsync" />
+                            }
+                            else
+                            {
+                                <EmptyState Icon="@Icons.Material.Filled.SearchOff" Text="No regions match your search." />
+                            }
+                        </NoRecordsContent>
+                    </MudTable>
                 </MudStack>
-                @if (_regions.Count == 0)
-                {
-                    <EmptyState Text="No regions yet." ActionText="Add region" OnAction="@(() => AddRegionAsync())" />
-                }
-                else
-                {
-                <MudTable Items="@_regions" Hover="true" Dense="true" T="Region">
-                    <HeaderContent>
-                        <MudTh>Code</MudTh>
-                        <MudTh>Name</MudTh>
-                        <MudTh>Actions</MudTh>
-                    </HeaderContent>
-                    <RowTemplate>
-                        <MudTd DataLabel="Code">@context.Code</MudTd>
-                        <MudTd DataLabel="Name">@context.Name</MudTd>
-                        <MudTd DataLabel="Actions">
-                            <MudStack Row="true" Spacing="1">
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditRegionAsync(context))">Edit</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteRegionAsync(context))">Delete</MudButton>
-                            </MudStack>
-                        </MudTd>
-                    </RowTemplate>
-                </MudTable>
-                }
-            </MudStack>
-        </MudTabPanel>
-    </MudTabs>
+            </MudTabPanel>
+        </MudTabs>
+    </MudPaper>
 </MudContainer>
 
 @code {
@@ -180,6 +191,31 @@
     private List<Consumer> _consumers = [];
     private List<Supplier> _suppliers = [];
     private List<Region> _regions = [];
+    private bool _loading;
+
+    private string _sellerSearch = "";
+    private string _consumerSearch = "";
+    private string _supplierSearch = "";
+    private string _regionSearch = "";
+
+    private IEnumerable<Seller> FilteredSellers => string.IsNullOrWhiteSpace(_sellerSearch)
+        ? _sellers
+        : _sellers.Where(s => s.Name.Contains(_sellerSearch, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<Consumer> FilteredConsumers => string.IsNullOrWhiteSpace(_consumerSearch)
+        ? _consumers
+        : _consumers.Where(c => c.Name.Contains(_consumerSearch, StringComparison.OrdinalIgnoreCase)
+            || (c.Contact ?? "").Contains(_consumerSearch, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<Supplier> FilteredSuppliers => string.IsNullOrWhiteSpace(_supplierSearch)
+        ? _suppliers
+        : _suppliers.Where(s => s.Code.Contains(_supplierSearch, StringComparison.OrdinalIgnoreCase)
+            || s.Name.Contains(_supplierSearch, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<Region> FilteredRegions => string.IsNullOrWhiteSpace(_regionSearch)
+        ? _regions
+        : _regions.Where(r => r.Code.Contains(_regionSearch, StringComparison.OrdinalIgnoreCase)
+            || r.Name.Contains(_regionSearch, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {
@@ -195,10 +231,18 @@
 
     private async Task ReloadAsync()
     {
-        _sellers = await PartyService.SellersAsync();
-        _consumers = await PartyService.ConsumersAsync();
-        _suppliers = await PartyService.SuppliersAsync();
-        _regions = await PartyService.RegionsAsync();
+        _loading = true;
+        try
+        {
+            _sellers = await PartyService.SellersAsync();
+            _consumers = await PartyService.ConsumersAsync();
+            _suppliers = await PartyService.SuppliersAsync();
+            _regions = await PartyService.RegionsAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     // --- Sellers ---

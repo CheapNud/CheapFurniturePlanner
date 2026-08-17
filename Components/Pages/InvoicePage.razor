@@ -15,49 +15,51 @@
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     @if (_invoice is null)
     {
-        <MudText>Loading…</MudText>
+        <MudProgressLinear Indeterminate="true" />
     }
     else
     {
-        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to invoices" OnClick="@(() => Navigation.NavigateTo("/invoices"))" />
-            <MudText Typo="Typo.h4">@_invoice.InvoiceNumber</MudText>
-            <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForPaid(_invoice.IsPaid)">@(_invoice.IsPaid ? "Paid" : "Open")</MudChip>
-            <MudSpacer />
-            @if (!_invoice.IsPaid)
-            {
-                <MudButton Variant="Variant.Outlined" Color="Color.Success" OnClick="MarkPaidAsync">Mark paid</MudButton>
-            }
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</MudButton>
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Code" OnClick="ExportXmlAsync">Export XML</MudButton>
-        </MudStack>
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to invoices" OnClick="@(() => Navigation.NavigateTo("/invoices"))" Class="mb-2" />
+        <PageHeader Kicker="INVOICES" Title="@_invoice.InvoiceNumber">
+            <Actions>
+                <StatusChip Color="@StatusColors.ForPaid(_invoice.IsPaid)" Value="@(_invoice.IsPaid ? "Paid" : "Open")" />
+                @if (!_invoice.IsPaid)
+                {
+                    <ProgressButton Variant="Variant.Text" Color="Color.Success" OnClick="MarkPaidAsync">Mark paid</ProgressButton>
+                }
+                <ProgressButton StartIcon="@Icons.Material.Filled.PictureAsPdf" OnClick="GeneratePdfAsync">PDF</ProgressButton>
+                <ProgressButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Code" OnClick="ExportXmlAsync">Export XML</ProgressButton>
+            </Actions>
+        </PageHeader>
 
-        <MudPaper Class="pa-4 mb-4">
+        <MudPaper Class="pa-6 mb-6" Elevation="0">
             <MudText><b>Order:</b> <MudLink Href="@($"/orders/{_invoice.OrderId}")">@_invoice.Order?.OrderNumber</MudLink></MudText>
             <MudText><b>Consumer:</b> @_invoice.Order?.Consumer?.Name @(_invoice.Order?.Consumer?.VatNumber is string vatNumber ? $"({vatNumber})" : "")</MudText>
             <MudText><b>Issued:</b> @_invoice.IssuedAt.ToString("yyyy-MM-dd") — <b>Due:</b> @_invoice.DueDate.ToString("yyyy-MM-dd")</MudText>
         </MudPaper>
 
-        <MudTable T="InvoiceLine" Items="_invoice.Lines" Dense="true" Class="mb-4">
-            <HeaderContent>
-                <MudTh>Description</MudTh>
-                <MudTh>Qty</MudTh>
-                <MudTh>Unit</MudTh>
-                <MudTh>Disc %</MudTh>
-                <MudTh>Line total</MudTh>
-                <MudTh>VAT</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Description">@context.Description</MudTd>
-                <MudTd DataLabel="Qty">@context.Quantity</MudTd>
-                <MudTd DataLabel="Unit">@Money(context.UnitPrice)</MudTd>
-                <MudTd DataLabel="Disc %">@(context.DiscountPercent == 0 ? "—" : Money(context.DiscountPercent))</MudTd>
-                <MudTd DataLabel="Line total">@Money(context.LineTotal)</MudTd>
-                <MudTd DataLabel="VAT">@Money(context.VatAmount)</MudTd>
-            </RowTemplate>
-        </MudTable>
+        <MudPaper Class="pa-6 mb-6" Elevation="0">
+            <MudTable T="InvoiceLine" Items="_invoice.Lines" Dense="true">
+                <HeaderContent>
+                    <MudTh>Description</MudTh>
+                    <MudTh>Qty</MudTh>
+                    <MudTh>Unit</MudTh>
+                    <MudTh>Disc %</MudTh>
+                    <MudTh>Line total</MudTh>
+                    <MudTh>VAT</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Description">@context.Description</MudTd>
+                    <MudTd DataLabel="Qty">@context.Quantity</MudTd>
+                    <MudTd DataLabel="Unit">@Money(context.UnitPrice)</MudTd>
+                    <MudTd DataLabel="Disc %">@(context.DiscountPercent == 0 ? "—" : Money(context.DiscountPercent))</MudTd>
+                    <MudTd DataLabel="Line total">@Money(context.LineTotal)</MudTd>
+                    <MudTd DataLabel="VAT">@Money(context.VatAmount)</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
 
-        <MudPaper Class="pa-4 mb-4">
+        <MudPaper Class="pa-6 mb-6" Elevation="0">
             @if (_invoice.OrderDiscountPercent != 0)
             {
                 <MudText>Order discount: @Money(_invoice.OrderDiscountPercent)%</MudText>
@@ -71,15 +73,15 @@
             }
         </MudPaper>
 
-        <MudPaper Class="pa-4">
+        <MudPaper Class="pa-6" Elevation="0">
             <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.h6">Credit notes</MudText>
                 <MudSpacer />
-                <MudButton Variant="Variant.Outlined" OnClick="@(() => _showCreditForm = !_showCreditForm)">New credit note</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="@(() => _showCreditForm = !_showCreditForm)">New credit note</MudButton>
             </MudStack>
             @if (_showCreditForm)
             {
-                <MudStack Spacing="2" Class="mb-3">
+                <MudStack Spacing="2" Class="mb-4">
                     <MudSelect T="CreditReason" @bind-Value="_creditReason" Label="Reason">
                         <MudSelectItem T="CreditReason" Value="CreditReason.Return">Return</MudSelectItem>
                         <MudSelectItem T="CreditReason" Value="CreditReason.Goodwill">Goodwill</MudSelectItem>
@@ -93,7 +95,7 @@
                         }
                     </MudStack>
                     <MudTextField T="string" @bind-Value="_creditNoteText" Label="Note (optional)" />
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateCreditAsync">Create</MudButton>
+                    <ProgressButton Variant="Variant.Text" Color="Color.Primary" OnClick="CreateCreditAsync">Create</ProgressButton>
                 </MudStack>
             }
             @if (_invoice.CreditNotes.Count == 0)
@@ -106,13 +108,13 @@
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-1">
                         <MudText>@creditNote.CreditNoteNumber — @creditNote.Reason — @Money(creditNote.GrossAmount)</MudText>
-                        <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForSettled(creditNote.IsSettled)">@(creditNote.IsSettled ? "Settled" : "Open")</MudChip>
+                        <StatusChip Color="@StatusColors.ForSettled(creditNote.IsSettled)" Value="@(creditNote.IsSettled ? "Settled" : "Open")" />
                         <MudSpacer />
-                        <MudButton Size="Size.Small" OnClick="@(() => CreditPdfAsync(creditNote.Id))">PDF</MudButton>
-                        <MudButton Size="Size.Small" OnClick="@(() => ExportCreditXmlAsync(creditNote.Id))">Export XML</MudButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => CreditPdfAsync(creditNote.Id))">PDF</ProgressButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => ExportCreditXmlAsync(creditNote.Id))">Export XML</ProgressButton>
                         @if (!creditNote.IsSettled)
                         {
-                            <MudButton Size="Size.Small" OnClick="@(() => SettleAsync(creditNote.Id))">Mark settled</MudButton>
+                            <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => SettleAsync(creditNote.Id))">Mark settled</ProgressButton>
                         }
                     </MudStack>
                 }

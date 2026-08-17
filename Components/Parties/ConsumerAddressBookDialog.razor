@@ -7,7 +7,7 @@
             <MudStack Spacing="2">
                 <MudText Typo="Typo.subtitle1">Primary address</MudText>
                 <AddressEditor Value="_primaryAddress" ValueChanged="@(a => _primaryAddress = a)" Regions="Regions" />
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@SavePrimaryAsync">Save primary address</MudButton>
+                <ProgressButton Variant="Variant.Text" OnClick="SavePrimaryAsync">Save primary address</ProgressButton>
             </MudStack>
 
             <MudStack Spacing="2">
@@ -27,10 +27,10 @@
                             <MudStack Row="true" Spacing="1">
                                 @if (!context.IsDefault)
                                 {
-                                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => SetDefaultAsync(context))">Set default</MudButton>
+                                    <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => SetDefaultAsync(context))">Set default</ProgressButton>
                                 }
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => StartEdit(context))">Edit</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => RemoveAsync(context))">Remove</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => StartEdit(context))">Edit</MudButton>
+                                <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => RemoveAsync(context))">Remove</ProgressButton>
                             </MudStack>
                         </MudTd>
                     </RowTemplate>

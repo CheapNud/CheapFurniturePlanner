@@ -16,25 +16,20 @@
 }
 else
 {
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to parties" Href="/parties" />
-        <MudText Typo="Typo.h4">Discounts — @_seller.Name</MudText>
-        <MudSpacer />
-        @if (_rules.Count > 0)
-        {
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => AddAsync())">
-                Add discount rule
-            </MudButton>
-        }
-    </MudStack>
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Title="Back to parties" Href="/parties" Class="mb-2" />
+    <PageHeader Kicker="PARTIES" Title="@($"Discounts — {_seller.Name}")">
+        <Actions>
+            @if (_rules.Count > 0)
+            {
+                <ProgressButton OnClick="AddAsync" StartIcon="@Icons.Material.Filled.Add">Add discount rule</ProgressButton>
+            }
+        </Actions>
+    </PageHeader>
 
-    @if (_rules.Count == 0)
-    {
-        <EmptyState Text="No discount rules yet." ActionText="Add discount rule" OnAction="@(() => AddAsync())" />
-    }
-    else
-    {
-        <MudTable Items="@_rules" Hover="true" Dense="true" T="DiscountRule">
+    <MudPaper Class="pa-6" Elevation="0">
+        <MudTextField T="string" Value="_search" ValueChanged="@((string v) => _search = v)" Label="Search"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Clearable="true" Class="mb-4" />
+        <MudTable Items="@FilteredRules" Hover="true" Dense="true" T="DiscountRule" Loading="@_loading">
             <HeaderContent>
                 <MudTh>Scope</MudTh>
                 <MudTh>Collection</MudTh>
@@ -49,13 +44,23 @@ else
                 <MudTd DataLabel="Value">@FormatValue(context)</MudTd>
                 <MudTd DataLabel="Actions">
                     <MudStack Row="true" Spacing="1">
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => EditAsync(context))">Edit</MudButton>
-                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</MudButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditAsync(context))">Edit</ProgressButton>
+                        <ProgressButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => DeleteAsync(context))">Delete</ProgressButton>
                     </MudStack>
                 </MudTd>
             </RowTemplate>
+            <NoRecordsContent>
+                @if (_rules.Count == 0)
+                {
+                    <EmptyState Text="No discount rules yet." ActionText="Add discount rule" OnAction="AddAsync" />
+                }
+                else
+                {
+                    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Text="No rules match your search." />
+                }
+            </NoRecordsContent>
         </MudTable>
-    }
+    </MudPaper>
 }
 </MudContainer>
 
@@ -65,6 +70,14 @@ else
 
     private Seller? _seller;
     private List<DiscountRule> _rules = [];
+    private bool _loading;
+    private string _search = "";
+
+    private IEnumerable<DiscountRule> FilteredRules => string.IsNullOrWhiteSpace(_search)
+        ? _rules
+        : _rules.Where(r => r.Scope.ToString().Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || (r.CollectionCode ?? "").Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || Keys(r).Contains(_search, StringComparison.OrdinalIgnoreCase));
 
     protected override async Task OnInitializedAsync()
     {
@@ -80,8 +93,16 @@ else
 
     private async Task ReloadAsync()
     {
-        _seller = (await PartyService.SellersAsync()).FirstOrDefault(s => s.Id == SellerId);
-        _rules = await DiscountService.RulesForSellerAsync(SellerId);
+        _loading = true;
+        try
+        {
+            _seller = (await PartyService.SellersAsync()).FirstOrDefault(s => s.Id == SellerId);
+            _rules = await DiscountService.RulesForSellerAsync(SellerId);
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     // ponytail: SQLite round-trips decimal through TEXT with a forced ".0" scale (10m -> 10.0m),

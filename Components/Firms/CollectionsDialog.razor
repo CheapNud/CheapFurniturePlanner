@@ -30,8 +30,8 @@
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                 <MudTextField T="string" Label="Code" @bind-Value="_newCode" Immediate="true" />
                 <MudTextField T="string" Label="Name" @bind-Value="_newName" Immediate="true" />
-                <MudButton Color="Color.Primary" Disabled="@(string.IsNullOrWhiteSpace(_newCode) || string.IsNullOrWhiteSpace(_newName))"
-                           OnClick="AddAsync">Add</MudButton>
+                <ProgressButton Disabled="@(string.IsNullOrWhiteSpace(_newCode) || string.IsNullOrWhiteSpace(_newName))"
+                           OnClick="AddAsync">Add</ProgressButton>
             </MudStack>
         </MudStack>
     </DialogContent>
