@@ -11,6 +11,9 @@
 <PageTitle>Trips</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    @* TRIPS stays its own kicker rather than folding into DOCK - trips are warehouse-staff-scoped
+       expedition planning (region/truck/departure), a distinct module from the DOCK receiving/
+       finishing pages, not a sibling tab of the same screen the way Studio's prices/masters are. *@
     <PageHeader Kicker="TRIPS" Title="Trips">
         <Actions>
             @if (_trips.Count > 0)

@@ -1,7 +1,7 @@
 <MudButton Variant="Variant" Color="Color" Size="Size" FullWidth="FullWidth" Class="@Class" Disabled="@(Disabled || _running)" Title="@Title" OnClick="HandleClickAsync">
     @if (_running)
     {
-        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+        <MudProgressCircular Color="Color.Inherit" Size="Size.Small" Indeterminate="true" Class="mr-2" />
     }
     else if (StartIcon is not null)
     {

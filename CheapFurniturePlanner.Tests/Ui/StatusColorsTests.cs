@@ -102,4 +102,16 @@ public class StatusColorsTests
     [InlineData(false, Color.Default)]
     public void ForActive_MapsToExpectedColor(bool isActive, Color expected) =>
         Assert.Equal(expected, StatusColors.ForActive(isActive));
+
+    [Theory]
+    [InlineData(true, Color.Secondary)]
+    [InlineData(false, Color.Default)]
+    public void ForCredited_MapsToExpectedColor(bool isCredited, Color expected) =>
+        Assert.Equal(expected, StatusColors.ForCredited(isCredited));
+
+    [Theory]
+    [InlineData(true, Color.Info)]
+    [InlineData(false, Color.Default)]
+    public void ForExported_MapsToExpectedColor(bool isExported, Color expected) =>
+        Assert.Equal(expected, StatusColors.ForExported(isExported));
 }

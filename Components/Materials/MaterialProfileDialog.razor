@@ -40,7 +40,7 @@
                         <MudTd DataLabel="Preferred">
                             @if (context.IsPreferred)
                             {
-                                <MudChip T="string" Size="Size.Small" Color="@StatusColors.ForActive(true)">Preferred</MudChip>
+                                <StatusChip Color="@StatusColors.ForActive(true)" Value="Preferred" />
                             }
                             else
                             {

@@ -109,26 +109,30 @@ public class UiConventionsTests
 
     // A raw MudChip paired with a StatusColors.* call on the same line IS a status chip rendered
     // outside StatusChip - the one shared home for "color + humanized label" (see StatusChip.razor).
-    // No allowlist entries exist today: the one page-level offender found by this sweep
-    // (OrderEntryPage's per-unit "seq: state" chip) was converted to StatusChip (wrapped with a
-    // MudText prefix for the sequence number) rather than exempted. A plain informational MudChip that
-    // never touches StatusColors (e.g. a count badge) is unaffected by this rule by construction - it
-    // never matches the same-line pairing the regex looks for.
+    // Widened (final-review fix 6) from a Pages-only walk to all of Components/: the original
+    // Pages-only scoping let MaterialProfileDialog.razor's raw "Preferred" chip through as a
+    // documented, known non-page instance (see task-7-report.md) - now converted to StatusChip and
+    // caught the same as a page-level offender would be. No allowlist entries exist today: both
+    // known offenders (OrderEntryPage's per-unit "seq: state" chip, MaterialProfileDialog's
+    // "Preferred" chip) were converted to StatusChip rather than exempted. A plain informational
+    // MudChip that never touches StatusColors (e.g. a count badge) is unaffected by this rule by
+    // construction - it never matches the same-line pairing the regex looks for.
     private static readonly System.Text.RegularExpressions.Regex RawStatusChipPattern =
         new(@"MudChip.*StatusColors\.", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     [Fact]
-    public void NoRoutablePage_RendersARawStatusMudChip_OutsideStatusChip()
+    public void NoComponent_RendersARawStatusMudChip_OutsideStatusChip()
     {
-        var pagesDir = Path.Combine(FindRepoRoot(), "Components", "Pages");
+        var componentsDir = Path.Combine(FindRepoRoot(), "Components");
         var failures = new List<string>();
-        foreach (var pagePath in Directory.EnumerateFiles(pagesDir, "*.razor"))
+        foreach (var path in Directory.EnumerateFiles(componentsDir, "*.razor", SearchOption.AllDirectories))
         {
-            foreach (var line in File.ReadLines(pagePath))
+            var relative = Path.GetRelativePath(componentsDir, path);
+            foreach (var line in File.ReadLines(path))
             {
                 if (RawStatusChipPattern.IsMatch(line))
                 {
-                    failures.Add($"{Path.GetFileName(pagePath)}: raw MudChip+StatusColors - use StatusChip instead");
+                    failures.Add($"{relative}: raw MudChip+StatusColors - use StatusChip instead");
                 }
             }
         }

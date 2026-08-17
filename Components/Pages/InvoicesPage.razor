@@ -42,11 +42,11 @@
                     <StatusChip Color="@StatusColors.ForPaid(context.IsPaid)" Value="@(context.IsPaid ? "Paid" : "Open")" />
                     @if (context.CreditNotes.Count > 0)
                     {
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary">Credited</MudChip>
+                        <StatusChip Color="@StatusColors.ForCredited(true)" Value="Credited" />
                     }
                     @if (context.ExportedAt is not null)
                     {
-                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Info">Exported</MudChip>
+                        <StatusChip Color="@StatusColors.ForExported(true)" Value="Exported" />
                     }
                 </MudTd>
             </RowTemplate>

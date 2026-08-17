@@ -67,6 +67,10 @@ public class ProgressButtonTests : TestContext
 
         Assert.True(cut.Find("button").HasAttribute("disabled"));
 
+        // Color.Inherit, not the component default (Primary) - on a filled button (e.g. white-on-blue)
+        // an un-inherited spinner renders gray instead of matching the button's foreground/background.
+        Assert.Contains("mud-inherit-text", cut.Find(".mud-progress-circular").ClassList);
+
         tcs.SetResult();
         await pendingClick;
 

@@ -9,9 +9,9 @@ namespace CheapFurniturePlanner.Ui;
 // The one place chip colors live. UX-2 Task 3 semantic scheme, context-free across every enum:
 // Secondary at-rest (not yet started/moving) - Primary in-progress (currently active/moving) -
 // Success completed (the good terminal state) - Error terminal-bad (cancelled/failed-terminal) -
-// Warning remediation (needs attention before it can proceed) - Info recovered (unused by any
-// mapping below; reserved for a future "back on track after remediation" state) - Default unknown
-// (an enum value with no defined mapping, or a deliberately muted historical record).
+// Warning remediation (needs attention before it can proceed) - Info a secondary, non-blocking
+// fact about an otherwise-normal record (e.g. "already exported") - Default unknown (an enum
+// value with no defined mapping, or a deliberately muted historical record).
 // Two screens once showed the SAME unit state in opposite colors because every page kept its own
 // switch - never again.
 public static class StatusColors
@@ -114,4 +114,9 @@ public static class StatusColors
     // they are not a completion state but flagging one still reads as the "good" color; false is
     // simply unmarked (Default), not an error (documented decision).
     public static Color ForActive(bool isActive) => isActive ? Color.Success : Color.Default;
+    // A credit note doesn't undo the invoice or flag a problem with it - Secondary (a neutral,
+    // at-rest marker) rather than Warning/Error.
+    public static Color ForCredited(bool isCredited) => isCredited ? Color.Secondary : Color.Default;
+    // Already-exported is informational, not a completion state of the invoice itself - Info.
+    public static Color ForExported(bool isExported) => isExported ? Color.Info : Color.Default;
 }

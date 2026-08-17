@@ -41,7 +41,7 @@ else
         <MudPaper Elevation="0" Class="pa-6 mb-6">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.h6">@kind</MudText>
-                <ProgressButton Size="Size.Small"
+                <ProgressButton Size="Size.Small" Variant="Variant.Text"
                                 Disabled="@(_state != TradeItemState.Draft)"
                                 StartIcon="@Icons.Material.Filled.Add"
                                 OnClick="@(() => AddAsync(kind))">
@@ -100,7 +100,7 @@ else
     <MudPaper Elevation="0" Class="pa-6 mb-6">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
             <MudText Typo="Typo.h6">Substitutions</MudText>
-            <ProgressButton Size="Size.Small"
+            <ProgressButton Size="Size.Small" Variant="Variant.Text"
                             Disabled="@(_state != TradeItemState.Draft)"
                             StartIcon="@Icons.Material.Filled.Add"
                             OnClick="@AddSubstitutionAsync">

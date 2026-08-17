@@ -80,7 +80,7 @@
         <MudText Typo="Typo.h6" Class="mb-4">Settings</MudText>
         
         <MudStack Spacing="3">
-            <MudSwitch T="bool" @bind-Checked="_isDarkMode" 
+            <MudSwitch T="bool" @bind-Value="_isDarkMode" 
                       Label="Dark Mode" 
                       Color="Color.Primary" />
             
@@ -110,15 +110,15 @@
             
             <MudText Typo="Typo.subtitle2">Planner Behavior</MudText>
             
-            <MudSwitch T="bool" @bind-Checked="_defaultShowGrid" 
+            <MudSwitch T="bool" @bind-Value="_defaultShowGrid" 
                       Label="Show Grid by Default" 
                       Color="Color.Primary" />
             
-            <MudSwitch T="bool" @bind-Checked="_defaultPreventOverlap"
+            <MudSwitch T="bool" @bind-Value="_defaultPreventOverlap"
                        Label="Prevent Overlap by Default" 
                       Color="Color.Primary" />
             
-            <MudSwitch T="bool" @bind-Checked="_defaultEnableSnapping"
+            <MudSwitch T="bool" @bind-Value="_defaultEnableSnapping"
                        Label="Enable Snapping by Default" 
                       Color="Color.Primary" />
         </MudStack>
