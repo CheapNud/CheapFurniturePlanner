@@ -1,9 +1,12 @@
+@using CheapAvaloniaBlazor.Services
 @using CheapFurniturePlanner.Ui
 @using MudBlazor
 
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject NavigationManager Navigation
 @inject ICurrentUser CurrentUser
+@inject IUpdateService Updates
 
 
 <MudThemeProvider Theme="@AppTheme.Theme" @bind-IsDarkMode="_isDarkMode" />
@@ -27,6 +30,17 @@
         <MudText Typo="Typo.h6">Cheap Furniture Planner</MudText>
 
         <MudSpacer />
+
+        @if (_updateReady)
+        {
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Inherit"
+                       StartIcon="@Icons.Material.Filled.SystemUpdate"
+                       OnClick="@(() => Updates.ApplyAndRestart())"
+                       Class="mr-2">
+                Update ready
+            </MudButton>
+        }
 
         <!-- Current user + sign out (hidden when unauthenticated) -->
         <AuthorizeView>
@@ -138,6 +152,7 @@
     private bool _isDarkMode = false;
     private bool _settingsOpen = false;
     private string _displayName = string.Empty;
+    private bool _updateReady;
 
     // Default settings
     private double _defaultRoomWidth = 500;
@@ -156,6 +171,43 @@
         // fresh circuit via AccountController's redirect (see HttpContextAuthenticationStateProvider),
         // so loading this once here already reflects the current session throughout.
         _displayName = await CurrentUser.DisplayNameAsync();
+    }
+
+    // The host already runs a background update check on startup (WithVelopackUpdates'
+    // autoCheck defaults to true) and no-ops harmlessly outside a Velopack install - so this
+    // only needs to observe IUpdateService, not trigger the check itself. Reading UpdateReady
+    // on first render covers the race where the check already finished before this component
+    // subscribed; StateChanged covers it finishing afterwards.
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                Updates.StateChanged += OnUpdateStateChanged;
+                if (Updates.UpdateReady)
+                {
+                    _updateReady = true;
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"MainLayout: update check failed: {ex.Message}");
+            }
+        }
+        return Task.CompletedTask;
+    }
+
+    private void OnUpdateStateChanged()
+    {
+        _updateReady = Updates.UpdateReady;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Updates.StateChanged -= OnUpdateStateChanged;
     }
 
     private void ToggleDrawer()

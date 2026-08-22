@@ -39,6 +39,7 @@ class Program
             .WithSize(1200, 800)
             .UseContentRoot(Directory.GetCurrentDirectory())
             .AddMudBlazor()
+            .WithVelopackUpdates("http://192.168.1.15:3000/cheapnud/CheapFurniturePlanner")
             // Identity middleware + the Account controller endpoints. The host only exposes
             // these two hook points into its pipeline (ConfigurePipeline runs after UseRouting,
             // before endpoints are mapped; ConfigureEndpoints runs after MapRazorComponents).
