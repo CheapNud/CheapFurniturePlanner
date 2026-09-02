@@ -20,7 +20,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CheapAvaloniaBlazor" Version="3.3.0" />
+    <PackageReference Include="CheapAvaloniaBlazor" Version="3.4.1" />
+    <!-- Direct reference (also transitive via CheapAvaloniaBlazor): the Velopack startup
+         hook must be called from THIS assembly's Main - vpk pack verifies the entry
+         assembly and fails the release build otherwise. Keep the version in lock-step
+         with the framework's Velopack and the vpk tool pin in deploy/release.ps1. -->
+    <PackageReference Include="Velopack" Version="1.2.0" />
     <PackageReference Include="CheapHelpers" Version="3.8.0" />
     <PackageReference Include="CheapHelpers.Blazor" Version="3.8.0" />
     <PackageReference Include="CheapHelpers.EF" Version="3.8.0" />

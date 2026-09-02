@@ -31,6 +31,13 @@ class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // FIRST thing in Main, before any other code: Velopack's install/update/uninstall
+        // lifecycle events re-launch the exe with --veloapp-* args and this hook handles
+        // them (exiting the process). It must also live in THIS assembly - vpk pack
+        // verifies the entry assembly calls it and refuses to package otherwise. On a
+        // normal launch it's a pass-through no-op (as is the framework's own later call).
+        Velopack.VelopackApp.Build().Run();
+
         var builder = new CheapAvaloniaBlazor.Hosting.HostBuilder()
             .WithTitle("Cheap Furniture Planner")
             .WithDiagnostics()
@@ -39,7 +46,8 @@ class Program
             .WithSize(1200, 800)
             .UseContentRoot(Directory.GetCurrentDirectory())
             .AddMudBlazor()
-            .WithVelopackUpdates("http://192.168.1.15:3000/cheapnud/CheapFurniturePlanner")
+            // Public https so updates work off-lan and the feed is not spoofable.
+            .WithVelopackUpdates("https://git.cheapludes.be/cheapnud/CheapFurniturePlanner")
             // Identity middleware + the Account controller endpoints. The host only exposes
             // these two hook points into its pipeline (ConfigurePipeline runs after UseRouting,
             // before endpoints are mapped; ConfigureEndpoints runs after MapRazorComponents).
