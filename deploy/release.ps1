@@ -38,7 +38,8 @@ if (Test-Path $vpkOut) { Remove-Item $vpkOut -Recurse -Force }
 & $vpk pack --packId CheapFurniturePlanner --packVersion $ver --packDir deploy\out\CheapFurniturePlanner --mainExe CheapFurniturePlanner.exe --outputDir $vpkOut
 if ($LASTEXITCODE -ne 0) { throw "vpk pack failed ($LASTEXITCODE)" }
 
-$api = "http://192.168.1.40:3000/api/v1/repos/$repository"
+# public https so the token never travels in the clear
+$api = "https://git.cheapludes.be/api/v1/repos/$repository"
 $body = @{
   tag_name = $refName
   name     = "CheapFurniturePlanner $ver"
