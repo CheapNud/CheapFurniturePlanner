@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: windows
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build, package, and publish to Forgejo
+        # cmd + an explicit -File Bypass invocation: the runner executes as SYSTEM,
+        # whose Restricted policy blocks inline .ps1 step scripts. The logic lives
+        # in deploy/release.ps1; inputs travel as environment variables.
+        shell: cmd
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+          RELEASE_REPO: ${{ github.repository }}
+          RELEASE_TOKEN: ${{ github.token }}
+        run: powershell -ExecutionPolicy Bypass -File deploy\release.ps1

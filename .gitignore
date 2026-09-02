@@ -320,3 +320,7 @@ MigrationBackup/
 .claude/
 CLAUDE.md
 /wwwroot/cheap-blazor-interop.js
+
+# Release pipeline build output
+deploy/out/
+deploy/velopack/
