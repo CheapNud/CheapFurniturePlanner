@@ -69,9 +69,9 @@ release_response=$(curl -sS --fail -X POST \
   -H "Content-Type: application/json" \
   -d "$body" \
   "$api/releases")
-# top-level "id" is the first field Forgejo serializes, ahead of any nested
+# parse the release id as json rather than trusting field ordering
 # author/publisher id — grep avoids a jq/python3 dependency for one field.
-release_id=$(grep -o '"id":[0-9]*' <<< "$release_response" | head -1 | grep -o '[0-9]*')
+release_id=$(python3 -c "import json,sys; print(json.load(sys.stdin)['id'])" <<< "$release_response")
 if [[ -z "$release_id" ]]; then
   echo "could not parse release id from response: $release_response" >&2
   exit 1
