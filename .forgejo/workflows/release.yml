@@ -37,4 +37,4 @@ jobs:
           RELEASE_REF: ${{ github.ref_name }}
           RELEASE_REPO: ${{ github.repository }}
           RELEASE_TOKEN: ${{ github.token }}
-        run: deploy/release.sh
+        run: bash deploy/release.sh
