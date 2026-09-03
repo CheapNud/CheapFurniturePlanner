@@ -1,3 +1,5 @@
+# Retained as the windows-runner fallback path; the release workflow now runs
+# deploy/release.sh on ubuntu-latest instead (see .forgejo/workflows/release.yml).
 # Builds, packages, and publishes a tagged release to the Forgejo repo.
 # Invoked by the release workflow via `powershell -ExecutionPolicy Bypass -File` —
 # the runner executes as SYSTEM, whose effective policy blocks inline .ps1 steps,

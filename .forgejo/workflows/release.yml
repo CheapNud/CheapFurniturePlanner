@@ -11,20 +11,30 @@ permissions:
 jobs:
   release:
     name: Build and publish
-    runs-on: windows
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup .NET 11
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: preview
+
       - name: Build, package, and publish to Forgejo
-        # cmd + an explicit -File Bypass invocation: the runner executes as SYSTEM,
-        # whose Restricted policy blocks inline .ps1 step scripts. The logic lives
-        # in deploy/release.ps1; inputs travel as environment variables.
-        shell: cmd
+        # Runs on the only proven runner pool (ubuntu-latest act_runner
+        # containers) instead of the windows label, which nothing here has
+        # ever actually built on. vpk 1.2.0 cross-packs Windows releases from
+        # Linux natively (the `[win]` directive), so a Windows exe still comes
+        # out the other end. The logic lives in deploy/release.sh; inputs
+        # travel as environment variables. If cross-packing ever breaks,
+        # deploy/release.ps1 is kept as the windows-runner fallback path.
+        shell: bash
         env:
           RELEASE_REF: ${{ github.ref_name }}
           RELEASE_REPO: ${{ github.repository }}
           RELEASE_TOKEN: ${{ github.token }}
-        run: powershell -ExecutionPolicy Bypass -File deploy\release.ps1
+        run: deploy/release.sh
