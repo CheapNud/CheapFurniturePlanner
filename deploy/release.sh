@@ -70,7 +70,6 @@ release_response=$(curl -sS --fail -X POST \
   -d "$body" \
   "$api/releases")
 # parse the release id as json rather than trusting field ordering
-# author/publisher id — grep avoids a jq/python3 dependency for one field.
 release_id=$(python3 -c "import json,sys; print(json.load(sys.stdin)['id'])" <<< "$release_response")
 if [[ -z "$release_id" ]]; then
   echo "could not parse release id from response: $release_response" >&2
