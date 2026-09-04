@@ -52,7 +52,8 @@ public class NpgsqlTimestampPinTests
 
     // Review fix: PublishedCatalogue.EffectiveDate and Invoice.DueDate look like calendar dates but
     // are Utc-kinded at every write site, so they were moved off the pinned list above and must
-    // keep the default timestamptz mapping like any other instant - see task-2-report.md.
+    // keep the default timestamptz mapping like any other instant - see the DateTime
+    // classification block in FurniturePlannerContext.OnModelCreating for the write-site evidence.
     private static readonly (Type Entity, string Property)[] InstantProperties =
     [
         (typeof(Order), nameof(Order.CreatedAt)),

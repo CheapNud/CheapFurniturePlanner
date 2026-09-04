@@ -13,11 +13,12 @@ namespace CheapFurniturePlanner.Tests.Data;
 // unaffected). This test walks the live EF model (mirrors UiConventionsTests' file-walk approach,
 // but over the model instead of the file system) so a NEW mapped DateTime property that nobody
 // classified fails loudly here instead of silently defaulting to timestamptz and breaking under
-// Postgres - see task-2-report.md for the full audit with write-site evidence per property.
+// Postgres - see the DateTime classification block in FurniturePlannerContext.OnModelCreating
+// (the Npgsql-only branch near the end) for the full audit with write-site evidence per property.
 //
 // RULE: classify by the DateTimeKind the write sites actually produce, never by semantic
 // day-ness. A property named like a "day" (DueDate, EffectiveDate) is still an INSTANT if every
-// write site carries Kind=Utc - see the review-fixes section of task-2-report.md for the
+// write site carries Kind=Utc - see the same block in FurniturePlannerContext for the
 // Invoice.DueDate / PublishedCatalogue.EffectiveDate correction that this rule caught.
 public class DateTimeClassificationTests
 {
