@@ -490,12 +490,17 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         var userId = await currentUser.UserIdAsync();
         foreach (var need in needLines)
         {
-            var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == need.Kind && s.Code == need.Code && s.HardnessCode == need.HardnessCode, ct);
+            // Task 4b: "" sentinel for the MaterialStock row only (FurniturePlannerContext's comment
+            // on its unique index) - the movement below keeps need.HardnessCode as Resolve() gave it
+            // (domain-null for every non-Foam material, unchanged).
+            var normalizedHardness = need.HardnessCode ?? "";
+            var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == need.Kind && s.Code == need.Code && (s.HardnessCode ?? "") == normalizedHardness, ct);
             if (stock is null)
             {
-                stock = new MaterialStock { Kind = need.Kind, Code = need.Code, HardnessCode = need.HardnessCode };
+                stock = new MaterialStock { Kind = need.Kind, Code = need.Code, HardnessCode = normalizedHardness };
                 db.MaterialStocks.Add(stock);
             }
+            stock.HardnessCode = normalizedHardness; // self-heals a still-legacy-null row on touch
             stock.Amount += sign * need.Quantity;
             stock.UpdatedAt = DateTime.UtcNow;
 

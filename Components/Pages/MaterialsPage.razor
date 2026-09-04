@@ -220,24 +220,29 @@
             var terms = await MaterialPlanning.AllTermsAsync();
             _orders = await MaterialOrders.ListAsync();
 
-            var rows = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), StockRowState>();
+            // Task 4b: correlate on the same "" sentinel MaterialPlanningService/MaterialNeedsService
+            // now write for HardnessCode (FurniturePlannerContext's comment on the MaterialStock/
+            // Profile/SupplierTerm indexes) - a raw stock row seeded before that normalization
+            // existed (or the startup backfill runs) can still carry a literal null, so every join
+            // here treats null and "" as the same identity rather than trusting the raw column value.
+            var rows = new Dictionary<(MaterialKind Kind, string Code, string HardnessCode), StockRowState>();
             foreach (var s in stock)
             {
-                var key = (s.Kind, s.Code, s.HardnessCode);
+                var key = (s.Kind, s.Code, s.HardnessCode ?? "");
                 rows[key] = new StockRowState
                 {
-                    Kind = s.Kind, Code = s.Code, HardnessCode = s.HardnessCode, Amount = s.Amount, HasStockRow = true,
-                    Profile = profiles.FirstOrDefault(p => p.Kind == s.Kind && p.Code == s.Code && p.HardnessCode == s.HardnessCode),
+                    Kind = s.Kind, Code = s.Code, HardnessCode = key.Item3, Amount = s.Amount, HasStockRow = true,
+                    Profile = profiles.FirstOrDefault(p => p.Kind == s.Kind && p.Code == s.Code && (p.HardnessCode ?? "") == key.Item3),
                 };
             }
-            foreach (var identity in profiles.Select(p => (p.Kind, p.Code, p.HardnessCode))
-                         .Concat(terms.Select(t => (t.Kind, t.Code, t.HardnessCode))).Distinct())
+            foreach (var identity in profiles.Select(p => (p.Kind, p.Code, HardnessCode: p.HardnessCode ?? ""))
+                         .Concat(terms.Select(t => (t.Kind, t.Code, HardnessCode: t.HardnessCode ?? ""))).Distinct())
             {
                 if (rows.ContainsKey(identity)) { continue; }
                 rows[identity] = new StockRowState
                 {
                     Kind = identity.Kind, Code = identity.Code, HardnessCode = identity.HardnessCode, HasStockRow = false,
-                    Profile = profiles.FirstOrDefault(p => p.Kind == identity.Kind && p.Code == identity.Code && p.HardnessCode == identity.HardnessCode),
+                    Profile = profiles.FirstOrDefault(p => p.Kind == identity.Kind && p.Code == identity.Code && (p.HardnessCode ?? "") == identity.HardnessCode),
                 };
             }
             _stock = rows.Values.OrderBy(r => r.Kind).ThenBy(r => r.Code, StringComparer.Ordinal).ToList();

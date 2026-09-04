@@ -362,6 +362,44 @@ public class MaterialOrderServiceTests
         Assert.Equal(1, await db.MaterialMovements.CountAsync()); // the receipt's own movement, written exactly once despite the retry
     }
 
+    // Task 4b: before the row-layer "" sentinel fix, Frame (like every non-Foam kind) always carried
+    // a null HardnessCode, and SQLite/Postgres both compare NULL <> NULL under a unique index - so
+    // this same race, on a null-hardness material, could never trip the backstop at all: the racer's
+    // row and this call's own insert would BOTH land, silently splitting one balance across two rows
+    // (see FurniturePlannerContext's comment on the MaterialStock index). ReceiveAsync now normalizes
+    // line.HardnessCode to "" before it ever touches the row, so the racer's own "" row (simulating
+    // another already-normalized writer) collides for real, exercising the exact same retry path the
+    // Foam test above already covers.
+    [Fact]
+    public async Task Receive_FrameStockRowInsertedConcurrently_NullHardnessNormalizesAndCollides()
+    {
+        var (baseFactory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(baseFactory, "SUPA");
+        var setupMaterials = new MaterialOrderService(baseFactory, OfficeUser);
+        var order = await setupMaterials.CreateDraftAsync(supplierId, [new MaterialOrderLine { Kind = MaterialKind.Frame, Code = "FR-1", QuantityOrdered = 20m }]);
+        var line = Assert.Single(order.Lines);
+        await setupMaterials.SendAsync(order.Id);
+
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
+        var raceFactory = new SeedBeforeFirstSaveContextFactory(options, async () =>
+        {
+            await using var racer = new FurniturePlannerContext(options);
+            racer.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Frame, Code = "FR-1", HardnessCode = "", Amount = 4m, UpdatedAt = DateTime.UtcNow });
+            await racer.SaveChangesAsync();
+        });
+        var racingMaterials = new MaterialOrderService(raceFactory, OfficeUser);
+
+        await racingMaterials.ReceiveAsync(order.Id, line.Id, 6m);
+
+        await using var db = await baseFactory.CreateDbContextAsync();
+        var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Frame && s.Code == "FR-1");
+        Assert.Equal("", stock.HardnessCode);
+        Assert.Equal(10m, stock.Amount); // the racer's 4 plus this receipt's 6 - both land, none clobbered
+        Assert.Equal(1, await db.MaterialStocks.CountAsync()); // upserted onto the one real row, no orphaned duplicate
+        Assert.Equal(1, await db.MaterialMovements.CountAsync());
+    }
+
     [Fact]
     public async Task Receive_TwoPartials_CompletesOrder_OnlyWhenEveryLineFullyReceived()
     {

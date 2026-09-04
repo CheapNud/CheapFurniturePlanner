@@ -436,7 +436,11 @@ public class MaterialNeedsServiceTests
         var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "FM-STD" && s.HardnessCode == "H35");
         Assert.Equal(12m, stock.Amount);
         Assert.Equal(1, await db.MaterialStocks.CountAsync()); // upserted onto the one real row, no orphaned duplicate
-        Assert.Equal(1, await db.MaterialMovements.CountAsync()); // this call's own movement, written exactly once despite the retry
+        var movement = await db.MaterialMovements.SingleAsync(); // this call's own movement, written exactly once despite the retry
+        // Task 4b: the audit quantity must be the TRUE delta (12 - the racer's real 7 = 5), not
+        // newAmount - 0 (12) - the wrong assumption AdjustStockAsync's own find-or-create made before
+        // it knew the retry would discover a real prior amount.
+        Assert.Equal(5m, movement.Quantity);
     }
 
     [Fact]

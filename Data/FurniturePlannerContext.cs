@@ -342,6 +342,17 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasMany(d => d.Units).WithOne(u => u.SupplierDelivery).HasForeignKey(u => u.SupplierDeliveryId).OnDelete(DeleteBehavior.SetNull);
         });
 
+        // Task 4b: same disease as the DiscountRule backstop below, on these three unique indexes -
+        // HardnessCode stays null for every non-Foam material (and hardness-less Foam), and SQLite/
+        // Postgres both compare NULL <> NULL under a unique index, so two writers racing for the same
+        // material identity could both insert, silently splitting one balance/profile/term across two
+        // rows. No schema change fixes this (a filtered/COALESCE index is DDL this task doesn't touch) -
+        // instead every row-layer read and write of HardnessCode on these three tables (and their
+        // shared retry helper, MaterialStockUpsertRetry) now normalizes to the empty-string sentinel
+        // instead of null, so the SAME index genuinely collides on a real race. MaterialHardnessBackfill
+        // rewrites pre-existing null rows to "" at startup (Program.cs, right after Database.Migrate()),
+        // merging any split it finds. The Domain layer (MaterialRequirements.Resolve, MaterialNeedLine)
+        // keeps its null-for-non-Foam output unchanged - the sentinel is a row-layer concern only.
         modelBuilder.Entity<MaterialStock>(entity =>
         {
             entity.HasIndex(s => new { s.Kind, s.Code, s.HardnessCode }).IsUnique();

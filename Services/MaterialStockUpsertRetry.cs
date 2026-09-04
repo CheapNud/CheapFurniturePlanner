@@ -30,6 +30,25 @@ internal static class MaterialStockUpsertRetry
                 if (existing is null) { continue; } // not actually a stock collision - falls through to rethrow below
                 entry.State = EntityState.Detached;
                 db.Attach(existing);
+
+                // Task 4b: an absolute-set caller (AdjustStockAsync) staged its own MaterialMovement
+                // assuming its losing find saw no row at all (oldAmount = 0), so that movement's
+                // Quantity currently equals failedInsert.Amount (the intended new balance) in full.
+                // Now that the retry knows the real prior amount, correct the movement to the true
+                // delta instead of overstating it by whatever the racer already had on the shelf. An
+                // additive caller (Receive/backflush) never needs this - its movement Quantity is
+                // already a fixed delta, correct regardless of whether the row pre-existed.
+                if (!additive)
+                {
+                    // failedInsert.HardnessCode is the row-layer "" sentinel (Task 4b); the staged
+                    // movement keeps whatever raw value the caller passed in (null for non-Foam) - both
+                    // sides normalized here so the match still finds it.
+                    var movement = db.ChangeTracker.Entries<MaterialMovement>().FirstOrDefault(m =>
+                        m.State == EntityState.Added && m.Entity.Kind == failedInsert.Kind && m.Entity.Code == failedInsert.Code
+                        && (m.Entity.HardnessCode ?? "") == (failedInsert.HardnessCode ?? ""));
+                    if (movement is not null) { movement.Entity.Quantity -= existing.Amount; }
+                }
+
                 existing.Amount = additive ? existing.Amount + failedInsert.Amount : failedInsert.Amount;
                 existing.UpdatedAt = failedInsert.UpdatedAt;
                 collided = true;

@@ -138,6 +138,13 @@ class Program
             // hold against real data. Idempotent no-op once every row has a key.
             scope.ServiceProvider.GetRequiredService<DiscountService>().BackfillIdentityKeysAsync().GetAwaiter().GetResult();
 
+            // Task 4b backstop, same idiom: rewrites any pre-existing null HardnessCode on
+            // MaterialStock/MaterialProfile/MaterialSupplierTerm to the "" row-layer sentinel before
+            // those tables' unique indexes have to hold against real data (see MaterialHardnessBackfill
+            // and FurniturePlannerContext's comment on the indexes). Idempotent no-op once every row
+            // carries "".
+            MaterialHardnessBackfill.RunAsync(migrateContext).GetAwaiter().GetResult();
+
             // Seed the authoring store from the embedded demo catalogue if it hasn't been seeded
             // already - the store is the sole authoring source from here on. This runs regardless
             // of published-catalogue state (not just on first run) so a DB created by a pre-authoring-store

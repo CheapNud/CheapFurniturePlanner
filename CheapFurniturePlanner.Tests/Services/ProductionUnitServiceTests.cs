@@ -379,12 +379,15 @@ public class ProductionUnitServiceTests
         Assert.Equal(ProductionUnitState.Arrived, unit.State);
         Assert.NotNull(unit.ArrivedAt);
 
+        // Task 4b: ApplyBackflushAsync now writes the "" row-layer sentinel, never null, on the
+        // MaterialStock row itself (FurniturePlannerContext's comment on its unique index) - the
+        // movements below keep the domain's null HardnessCode unchanged, since they carry no such index.
         var stocks = await db.MaterialStocks.ToDictionaryAsync(s => (s.Kind, s.Code, s.HardnessCode), s => s.Amount);
-        Assert.Equal(-1m, stocks[(MaterialKind.Frame, "FBX", null)]);
-        Assert.Equal(-2m, stocks[(MaterialKind.Foam, "FM-STD", null)]);
-        Assert.Equal(-3.0m, stocks[(MaterialKind.Cotton, "COT-STD", null)]);
-        Assert.Equal(-4.0m, stocks[(MaterialKind.Fabric, "AQUA-BLUE", null)]);
-        Assert.Equal(-4m, stocks[(MaterialKind.Misc, "GLUE", null)]);
+        Assert.Equal(-1m, stocks[(MaterialKind.Frame, "FBX", "")]);
+        Assert.Equal(-2m, stocks[(MaterialKind.Foam, "FM-STD", "")]);
+        Assert.Equal(-3.0m, stocks[(MaterialKind.Cotton, "COT-STD", "")]);
+        Assert.Equal(-4.0m, stocks[(MaterialKind.Fabric, "AQUA-BLUE", "")]);
+        Assert.Equal(-4m, stocks[(MaterialKind.Misc, "GLUE", "")]);
 
         // One Backflush movement per need line, same SaveChanges, negative quantity matching the
         // stock consumption, referencing the unit's own code (not the order or an MPO).
@@ -477,13 +480,14 @@ public class ProductionUnitServiceTests
         var unit = await db.ProductionUnits.SingleAsync(u => u.Id == unitId);
         Assert.Equal(ProductionUnitState.Arrived, unit.State);
 
+        // Task 4b: the other four need lines' rows now carry the "" row-layer sentinel, not null.
         var stocks = await db.MaterialStocks.ToDictionaryAsync(s => (s.Kind, s.Code, s.HardnessCode), s => s.Amount);
         Assert.Equal(5, stocks.Count); // upserted onto the raced-in foam row, no orphaned duplicate
         Assert.Equal(8m, stocks[(MaterialKind.Foam, "FM-STD", "H35")]); // 10 (raced in) + -2 (this finish's backflush)
-        Assert.Equal(-1m, stocks[(MaterialKind.Frame, "FBX", null)]);
-        Assert.Equal(-3.0m, stocks[(MaterialKind.Cotton, "COT-STD", null)]);
-        Assert.Equal(-4.0m, stocks[(MaterialKind.Fabric, "AQUA-BLUE", null)]);
-        Assert.Equal(-4m, stocks[(MaterialKind.Misc, "GLUE", null)]);
+        Assert.Equal(-1m, stocks[(MaterialKind.Frame, "FBX", "")]);
+        Assert.Equal(-3.0m, stocks[(MaterialKind.Cotton, "COT-STD", "")]);
+        Assert.Equal(-4.0m, stocks[(MaterialKind.Fabric, "AQUA-BLUE", "")]);
+        Assert.Equal(-4m, stocks[(MaterialKind.Misc, "GLUE", "")]);
 
         // Five Backflush movements total - one per need line, none doubled or dropped by the retry.
         Assert.Equal(5, await db.MaterialMovements.CountAsync());

@@ -83,6 +83,10 @@ public sealed class UserAdminService(IDbContextFactory<FurniturePlannerContext> 
         ValidateRoles(roles);
 
         await using var db = await factory.CreateDbContextAsync(ct);
+        // Task 4b: DeactivateAsync idiom - the last-admin read and the role write share one
+        // transaction, so a second SetRolesAsync/DeactivateAsync racing on the same admin's cover
+        // can never both read stale cover and both proceed to zero active admins.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         await RequireUserAsync(db, userId, ct);
 
         if (!roles.Contains(Roles.Admin))
@@ -96,6 +100,7 @@ public sealed class UserAdminService(IDbContextFactory<FurniturePlannerContext> 
         var roleIds = await db.Roles.Where(r => roles.Contains(r.Name)).Select(r => r.Id).ToListAsync(ct);
         db.UserRoles.AddRange(roleIds.Select(roleId => new IdentityUserRole<string> { UserId = userId, RoleId = roleId }));
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     public async Task DeactivateAsync(string userId, CancellationToken ct = default)

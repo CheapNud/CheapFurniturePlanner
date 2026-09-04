@@ -137,8 +137,12 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
         var order = await RequireDraftAsync(db, materialOrderId, ct);
         if (line.UnitPrice is null)
         {
+            // Task 4b: "" sentinel to match MaterialSupplierTerm's own row-layer normalization
+            // (FurniturePlannerContext's comment on its unique index) - line.HardnessCode itself is
+            // left as the caller supplied it (a manually-added line's own stored value is untouched).
+            var normalizedHardness = line.HardnessCode ?? "";
             var preferredTerm = await db.MaterialSupplierTerms.AsNoTracking().FirstOrDefaultAsync(
-                t => t.Kind == line.Kind && t.Code == line.Code && t.HardnessCode == line.HardnessCode && t.IsPreferred, ct);
+                t => t.Kind == line.Kind && t.Code == line.Code && (t.HardnessCode ?? "") == normalizedHardness && t.IsPreferred, ct);
             line.UnitPrice = preferredTerm?.UnitPrice;
         }
         order.Lines.Add(line);
@@ -224,13 +228,17 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
 
         line.QuantityReceived += quantity;
 
+        // Task 4b: "" sentinel for the MaterialStock row only (FurniturePlannerContext's comment on
+        // its unique index) - the movement below keeps line.HardnessCode as the caller supplied it.
+        var normalizedHardness = line.HardnessCode ?? "";
         var stock = await db.MaterialStocks.FirstOrDefaultAsync(
-            s => s.Kind == line.Kind && s.Code == line.Code && s.HardnessCode == line.HardnessCode, ct);
+            s => s.Kind == line.Kind && s.Code == line.Code && (s.HardnessCode ?? "") == normalizedHardness, ct);
         if (stock is null)
         {
-            stock = new MaterialStock { Kind = line.Kind, Code = line.Code, HardnessCode = line.HardnessCode, Amount = 0m };
+            stock = new MaterialStock { Kind = line.Kind, Code = line.Code, HardnessCode = normalizedHardness, Amount = 0m };
             db.MaterialStocks.Add(stock);
         }
+        stock.HardnessCode = normalizedHardness; // self-heals a still-legacy-null row on touch
         stock.Amount += quantity;
         stock.UpdatedAt = DateTime.UtcNow;
 
