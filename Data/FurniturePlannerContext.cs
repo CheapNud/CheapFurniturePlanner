@@ -341,6 +341,29 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.Property(m => m.Type).HasConversion<string>();
             entity.Property(m => m.Kind).HasConversion<string>();
         });
+
+        // MB-1 Task 2: Npgsql maps DateTime/DateTime? to "timestamp with time zone" (timestamptz)
+        // by default. That default is correct for every INSTANT property on this model (CreatedAt,
+        // SentAt, PlacedAt, IssuedAt, OccurredAt, UpdatedAt, ExportedAt and the rest) - each one is
+        // written from DateTime.UtcNow (verified against every write site), so timestamptz fits
+        // exactly and none of them are touched here.
+        //
+        // A handful of properties are CALENDAR DATES instead: day-precision values a person picks
+        // (a promised delivery day, an expected delivery day, an invoice due day) with no
+        // meaningful time zone - callers pass DateTimeKind.Unspecified values, which Npgsql's
+        // modern (non-legacy) timestamp behavior refuses to write against timestamptz. Each is
+        // pinned to "timestamp without time zone" here, scoped to the Npgsql branch only - SQLite
+        // has no separate tz-aware type, so it is unaffected and this whole block is a no-op there.
+        // No property CLR type changes (no DateOnly migration) - zero model ripple, per plan.
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.Entity<Invoice>().Property(i => i.DueDate).HasColumnType("timestamp without time zone");
+            modelBuilder.Entity<Order>().Property(o => o.PromisedDeliveryDate).HasColumnType("timestamp without time zone");
+            modelBuilder.Entity<PublishedCatalogue>().Property(c => c.EffectiveDate).HasColumnType("timestamp without time zone");
+            modelBuilder.Entity<SupplierDelivery>().Property(d => d.ExpectedDate).HasColumnType("timestamp without time zone");
+            modelBuilder.Entity<Trip>().Property(t => t.DepartureDate).HasColumnType("timestamp without time zone");
+            modelBuilder.Entity<InternalRepair>().Property(r => r.ExecutionDate).HasColumnType("timestamp without time zone");
+        }
     }
 
     private static void SeedDefaultData(ModelBuilder modelBuilder)
