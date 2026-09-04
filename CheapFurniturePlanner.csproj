@@ -81,10 +81,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**" />
-    <Content Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**" />
-    <None Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**" />
-    <EmbeddedResource Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**" />
+    <Compile Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**;CheapFurniturePlanner.Tests.PostgresSmoke\**" />
+    <Content Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**;CheapFurniturePlanner.Tests.PostgresSmoke\**" />
+    <None Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**;CheapFurniturePlanner.Tests.PostgresSmoke\**" />
+    <EmbeddedResource Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**;CheapFurniturePlanner.Tests.PostgresSmoke\**" />
   </ItemGroup>
 
 </Project>

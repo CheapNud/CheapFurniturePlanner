@@ -38,3 +38,13 @@ jobs:
 
       - name: Test
         run: dotnet test CheapFurniturePlanner.sln --no-build --configuration Release --verbosity normal
+
+      - name: Postgres provider smoke
+        env:
+          PLANNER_PG_TEST: ${{ secrets.PLANNER_PG_TEST }}
+        run: |
+          if [ -n "$PLANNER_PG_TEST" ]; then
+            dotnet test CheapFurniturePlanner.Tests.PostgresSmoke/CheapFurniturePlanner.Tests.PostgresSmoke.csproj --no-build --configuration Release --verbosity normal
+          else
+            echo "PLANNER_PG_TEST secret not set - skipping the Postgres provider smoke."
+          fi
