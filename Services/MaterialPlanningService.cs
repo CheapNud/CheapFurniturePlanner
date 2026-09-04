@@ -133,7 +133,7 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
         var term = await db.MaterialSupplierTerms.FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException($"Term {termId} not found.");
         var siblings = await db.MaterialSupplierTerms
-            .Where(t => t.Kind == term.Kind && t.Code == term.Code && t.HardnessCode == term.HardnessCode && t.Id != term.Id && t.IsPreferred)
+            .Where(t => t.Kind == term.Kind && t.Code == term.Code && (t.HardnessCode ?? "") == (term.HardnessCode ?? "") && t.Id != term.Id && t.IsPreferred)
             .ToListAsync(ct);
         foreach (var sibling in siblings) { sibling.IsPreferred = false; }
         term.IsPreferred = true;
@@ -151,7 +151,7 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
         var term = await db.MaterialSupplierTerms.FirstOrDefaultAsync(t => t.Id == id, ct)
             ?? throw new InvalidOperationException($"Term {id} not found.");
         if (term.IsPreferred && await db.MaterialSupplierTerms.AnyAsync(
-                t => t.Kind == term.Kind && t.Code == term.Code && t.HardnessCode == term.HardnessCode && t.Id != term.Id, ct))
+                t => t.Kind == term.Kind && t.Code == term.Code && (t.HardnessCode ?? "") == (term.HardnessCode ?? "") && t.Id != term.Id, ct))
         {
             throw new InvalidOperationException("Make another term preferred first.");
         }

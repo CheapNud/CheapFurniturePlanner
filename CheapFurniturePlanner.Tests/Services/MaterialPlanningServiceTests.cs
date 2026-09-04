@@ -283,6 +283,50 @@ public class MaterialPlanningServiceTests
         Assert.Single(terms);
     }
 
+    // Task 4b follow-up: SetPreferredAsync's sibling query and DeleteTermAsync's sibling guard must
+    // tolerate a still-legacy-null hardness row (raw-seeded here, as one written between deploy and
+    // the startup backfill would be) the same way every other identity-matching site does.
+    [Fact]
+    public async Task SetPreferred_ClearsLegacyNullHardnessSibling()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (supplierAId, supplierBId) = await SeedSuppliersAsync(factory);
+        int legacyId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var legacy = new MaterialSupplierTerm { Kind = MaterialKind.Frame, Code = "FR-1", HardnessCode = null, SupplierId = supplierAId, IsPreferred = true };
+            db.MaterialSupplierTerms.Add(legacy);
+            await db.SaveChangesAsync();
+            legacyId = legacy.Id;
+        }
+        var service = new MaterialPlanningService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var second = await service.UpsertTermAsync(new MaterialSupplierTerm { Kind = MaterialKind.Frame, Code = "FR-1", SupplierId = supplierBId, DeliveryTimeDays = 5 });
+
+        await service.SetPreferredAsync(second.Id);
+
+        var terms = await service.TermsAsync(MaterialKind.Frame, "FR-1", null);
+        Assert.False(terms.Single(t => t.Id == legacyId).IsPreferred);
+        Assert.True(terms.Single(t => t.Id == second.Id).IsPreferred);
+    }
+
+    [Fact]
+    public async Task DeleteTerm_Preferred_WithLegacyNullHardnessSibling_IsGuarded()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (supplierAId, supplierBId) = await SeedSuppliersAsync(factory);
+        var service = new MaterialPlanningService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var preferred = await service.UpsertTermAsync(new MaterialSupplierTerm { Kind = MaterialKind.Frame, Code = "FR-1", SupplierId = supplierAId, DeliveryTimeDays = 3 });
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm { Kind = MaterialKind.Frame, Code = "FR-1", HardnessCode = null, SupplierId = supplierBId, IsPreferred = false });
+            await db.SaveChangesAsync();
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteTermAsync(preferred.Id));
+    }
+
     [Fact]
     public async Task DeleteTerm_LastRemaining_IsAllowed()
     {
