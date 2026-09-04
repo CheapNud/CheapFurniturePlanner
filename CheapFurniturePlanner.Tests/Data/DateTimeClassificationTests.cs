@@ -7,13 +7,18 @@ namespace CheapFurniturePlanner.Tests.Data;
 
 // MB-1 Task 2: an EF-mapped DateTime/DateTime? column is either an INSTANT (written from
 // DateTime.UtcNow - CreatedAt, SentAt, PlacedAt, ...) or a CALENDAR DATE (a day-precision value a
-// person picks, kind-unspecified - a promised delivery day, a due date). Npgsql maps DateTime to
-// timestamptz by default, which only instants want; calendar dates are pinned to
+// person picks, kind-unspecified - a promised delivery day, an expected delivery day). Npgsql maps
+// DateTime to timestamptz by default, which only instants want; calendar dates are pinned to
 // "timestamp without time zone" under the Npgsql-only branch in FurniturePlannerContext (SQLite is
 // unaffected). This test walks the live EF model (mirrors UiConventionsTests' file-walk approach,
 // but over the model instead of the file system) so a NEW mapped DateTime property that nobody
 // classified fails loudly here instead of silently defaulting to timestamptz and breaking under
 // Postgres - see task-2-report.md for the full audit with write-site evidence per property.
+//
+// RULE: classify by the DateTimeKind the write sites actually produce, never by semantic
+// day-ness. A property named like a "day" (DueDate, EffectiveDate) is still an INSTANT if every
+// write site carries Kind=Utc - see the review-fixes section of task-2-report.md for the
+// Invoice.DueDate / PublishedCatalogue.EffectiveDate correction that this rule caught.
 public class DateTimeClassificationTests
 {
     // property: written from DateTime.UtcNow at every site, timestamptz fits as-is.
@@ -55,15 +60,21 @@ public class DateTimeClassificationTests
         // "last login" value is an instant by definition, so timestamptz is still the right
         // default and no pin is needed here.
         ("FurnitureUser", "LastLoginDate"),
+        // Review fix: reads like a calendar date but every write site carries Kind=Utc -
+        // PublishVersionDialog.razor:20 does SpecifyKind(...,Utc) deliberately; the
+        // CataloguePublishService.cs fallback is DateTime.UtcNow. Utc-kinded, so it's an instant.
+        ("PublishedCatalogue", "EffectiveDate"),
+        // Review fix: same shape - InvoicingService.cs derives it as issuedAt.AddDays(30), and
+        // issuedAt is DateTime.UtcNow. Production never passes the optional dueDate override, so
+        // this is Utc-kinded at every real write site.
+        ("Invoice", "DueDate"),
     };
 
     // property: day-precision, kind-unspecified - pinned to "timestamp without time zone" under
     // the Npgsql branch in FurniturePlannerContext.ConfigureFurnitureEntities.
     private static readonly HashSet<(string Entity, string Property)> CalendarDates = new()
     {
-        ("Invoice", "DueDate"),
         ("Order", "PromisedDeliveryDate"),
-        ("PublishedCatalogue", "EffectiveDate"),
         ("SupplierDelivery", "ExpectedDate"),
         ("Trip", "DepartureDate"),
         ("InternalRepair", "ExecutionDate"),

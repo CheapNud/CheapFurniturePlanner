@@ -101,8 +101,10 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasIndex(e => e.IsActive);
             entity.HasIndex(e => e.Name);
 
-            // Default values for SQLite
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("DATETIME('now')");
+            // Default value for CreatedAt: SQLite and Npgsql speak different SQL for "now" ("DATETIME('now')"
+            // is SQLite-only syntax, invalid on Postgres). Branch on the same Database.IsNpgsql() pattern
+            // used elsewhere in this method - SQLite side is untouched so has-pending-model-changes stays clean.
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql(Database.IsNpgsql() ? "now()" : "DATETIME('now')");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
 
             // Decimal precision for SQLite compatibility
@@ -123,8 +125,8 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasIndex(e => e.CreatedAt);
             entity.HasIndex(e => e.CreatedBy);
 
-            // Default values for SQLite
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("DATETIME('now')");
+            // Default value for CreatedAt - see the FurnitureItem block above for why this branches.
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql(Database.IsNpgsql() ? "now()" : "DATETIME('now')");
             entity.Property(e => e.ShowGrid).HasDefaultValue(true);
             entity.Property(e => e.PreventOverlap).HasDefaultValue(true);
             entity.Property(e => e.EnableSnapping).HasDefaultValue(true);
@@ -147,8 +149,8 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasIndex(e => new { e.RoomPlanId, e.UIId }).IsUnique();
             entity.HasIndex(e => e.GroupId);
 
-            // Default values for SQLite
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("DATETIME('now')");
+            // Default value for CreatedAt - see the FurnitureItem block above for why this branches.
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql(Database.IsNpgsql() ? "now()" : "DATETIME('now')");
             entity.Property(e => e.Rotation).HasDefaultValue(0);
 
             // Decimal precision for SQLite compatibility
@@ -175,7 +177,8 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Version).IsUnique();
             entity.HasIndex(e => e.IsCurrent);
-            entity.Property(e => e.PublishedAt).HasDefaultValueSql("DATETIME('now')");
+            // Default value for PublishedAt - see the FurnitureItem block above for why this branches.
+            entity.Property(e => e.PublishedAt).HasDefaultValueSql(Database.IsNpgsql() ? "now()" : "DATETIME('now')");
         });
 
         modelBuilder.Entity<ModelStateRecord>().HasIndex(s => s.ModelCode).IsUnique();
@@ -349,17 +352,26 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         // exactly and none of them are touched here.
         //
         // A handful of properties are CALENDAR DATES instead: day-precision values a person picks
-        // (a promised delivery day, an expected delivery day, an invoice due day) with no
-        // meaningful time zone - callers pass DateTimeKind.Unspecified values, which Npgsql's
-        // modern (non-legacy) timestamp behavior refuses to write against timestamptz. Each is
-        // pinned to "timestamp without time zone" here, scoped to the Npgsql branch only - SQLite
-        // has no separate tz-aware type, so it is unaffected and this whole block is a no-op there.
+        // (a promised delivery day, an expected delivery day) with no meaningful time zone -
+        // callers pass DateTimeKind.Unspecified values, which Npgsql's modern (non-legacy)
+        // timestamp behavior refuses to write against timestamptz. Each is pinned to
+        // "timestamp without time zone" here, scoped to the Npgsql branch only - SQLite has no
+        // separate tz-aware type, so it is unaffected and this whole block is a no-op there.
         // No property CLR type changes (no DateOnly migration) - zero model ripple, per plan.
+        //
+        // RULE: classify by the DateTimeKind the write sites actually produce, never by semantic
+        // day-ness. A property that reads like a "day" in the domain (an invoice due date, a
+        // catalogue effective date) is still an INSTANT if every write site carries Kind=Utc - a
+        // Utc-kinded day-precision value is an instant, and pinning it here throws under Npgsql
+        // instead of fixing anything (Npgsql rejects a Utc DateTime against
+        // "timestamp without time zone" the same way it rejects Unspecified against timestamptz).
+        // Invoice.DueDate and PublishedCatalogue.EffectiveDate look like calendar dates but are
+        // Utc-kinded at every write site (PublishVersionDialog.razor SpecifyKind(...,Utc);
+        // CataloguePublishService falls back to UtcNow; InvoicingService derives DueDate from
+        // issuedAt.AddDays(30), and issuedAt is UtcNow) - they stay off this list.
         if (Database.IsNpgsql())
         {
-            modelBuilder.Entity<Invoice>().Property(i => i.DueDate).HasColumnType("timestamp without time zone");
             modelBuilder.Entity<Order>().Property(o => o.PromisedDeliveryDate).HasColumnType("timestamp without time zone");
-            modelBuilder.Entity<PublishedCatalogue>().Property(c => c.EffectiveDate).HasColumnType("timestamp without time zone");
             modelBuilder.Entity<SupplierDelivery>().Property(d => d.ExpectedDate).HasColumnType("timestamp without time zone");
             modelBuilder.Entity<Trip>().Property(t => t.DepartureDate).HasColumnType("timestamp without time zone");
             modelBuilder.Entity<InternalRepair>().Property(r => r.ExecutionDate).HasColumnType("timestamp without time zone");
