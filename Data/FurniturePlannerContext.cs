@@ -372,26 +372,35 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.Property(m => m.Kind).HasConversion<string>();
         });
 
-        // MB1 backstop, same pattern as above: DiscountService.AddRuleAsync already guards against
-        // duplicate rules in code, mirrored here column-for-column. This is a PARTIAL backstop only -
-        // SQLite and Postgres both treat a row with any NULL indexed column as distinct from every
-        // other row (composite unique constraints compare NULL <> NULL), and every valid rule shape
-        // (DiscountService.Validate's needsElement/needsModel/needsModelType/needsMaterialType
-        // exclusivity) leaves at least one of ElementCode/PriceGroupCode/ModelCode/ModelType/
-        // MaterialTypeCode null. So this index can never fire against AddRuleAsync's own validated
-        // output - it only catches a raw insert of two rows identical across all 8 columns (all
-        // non-null) that bypasses the service and its Validate() call entirely.
-        modelBuilder.Entity<DiscountRule>().HasIndex(r => new
+        // MB1 backstop, corrected: a raw composite index over the 8 nullable scope columns can never
+        // fire against DiscountService.AddRuleAsync's own validated output, because every valid rule
+        // shape (Validate's needsElement/needsModel/needsModelType/needsMaterialType exclusivity)
+        // leaves several of those columns null, and SQLite/Postgres both compare NULL <> NULL in a
+        // unique index - so two identical legal rules never collide. Instead the service computes
+        // DiscountRule.IdentityKey, a single string collapsing every null scope column to a fixed
+        // sentinel token, and this index is unique on (SellerId, IdentityKey) - now it genuinely
+        // catches an identical rule inserted outside AddRuleAsync's own guard.
+        //
+        // Filtered to non-empty keys: pre-MB1 rows (and rows between migration and the startup
+        // backfill in DiscountService.BackfillIdentityKeysAsync, called from Program.cs right after
+        // Database.Migrate()) carry the IdentityKey default (""), and several such rows under one
+        // seller would otherwise collide with each other and break the migration itself. Once the
+        // backfill runs, no row is left with an empty key, so the filter never hides a real duplicate
+        // in practice - it only protects the narrow migration-time window. Same provider-branched
+        // filter syntax as the ConsumerDeliveryAddresses/Firms indexes above (see their comments).
+        modelBuilder.Entity<DiscountRule>(entity =>
         {
-            r.SellerId,
-            r.CollectionCode,
-            r.Scope,
-            r.ElementCode,
-            r.PriceGroupCode,
-            r.ModelCode,
-            r.ModelType,
-            r.MaterialTypeCode,
-        }).IsUnique();
+            if (Database.IsNpgsql())
+            {
+                entity.HasIndex(r => new { r.SellerId, r.IdentityKey }).IsUnique()
+                    .HasFilter("\"IdentityKey\" <> ''").HasDatabaseName("IX_DiscountRules_SellerId_IdentityKey");
+            }
+            else
+            {
+                entity.HasIndex(r => new { r.SellerId, r.IdentityKey }).IsUnique()
+                    .HasFilter("IdentityKey <> ''").HasDatabaseName("IX_DiscountRules_SellerId_IdentityKey");
+            }
+        });
 
         // MB-1 Task 2: Npgsql maps DateTime/DateTime? to "timestamp with time zone" (timestamptz)
         // by default. That default is correct for every INSTANT property on this model (CreatedAt,

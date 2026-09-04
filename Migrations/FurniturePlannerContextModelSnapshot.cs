@@ -277,6 +277,10 @@ namespace CheapFurniturePlanner.Migrations
                     b.Property<decimal?>("FixedPrice")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("IdentityKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("MaterialTypeCode")
                         .HasColumnType("TEXT");
 
@@ -300,8 +304,10 @@ namespace CheapFurniturePlanner.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SellerId", "CollectionCode", "Scope", "ElementCode", "PriceGroupCode", "ModelCode", "ModelType", "MaterialTypeCode")
-                        .IsUnique();
+                    b.HasIndex("SellerId", "IdentityKey")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DiscountRules_SellerId_IdentityKey")
+                        .HasFilter("IdentityKey <> ''");
 
                     b.ToTable("DiscountRules");
                 });

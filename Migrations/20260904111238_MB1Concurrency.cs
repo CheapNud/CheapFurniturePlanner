@@ -17,6 +17,13 @@ namespace CheapFurniturePlanner.Migrations
                 nullable: false,
                 defaultValue: 0);
 
+            migrationBuilder.AddColumn<string>(
+                name: "IdentityKey",
+                table: "DiscountRules",
+                type: "TEXT",
+                nullable: false,
+                defaultValue: "");
+
             migrationBuilder.AddColumn<int>(
                 name: "Version",
                 table: "AuthoringModels",
@@ -46,10 +53,11 @@ namespace CheapFurniturePlanner.Migrations
                 filter: "IsDefault = 1");
 
             migrationBuilder.CreateIndex(
-                name: "IX_DiscountRules_SellerId_CollectionCode_Scope_ElementCode_PriceGroupCode_ModelCode_ModelType_MaterialTypeCode",
+                name: "IX_DiscountRules_SellerId_IdentityKey",
                 table: "DiscountRules",
-                columns: new[] { "SellerId", "CollectionCode", "Scope", "ElementCode", "PriceGroupCode", "ModelCode", "ModelType", "MaterialTypeCode" },
-                unique: true);
+                columns: new[] { "SellerId", "IdentityKey" },
+                unique: true,
+                filter: "IdentityKey <> ''");
         }
 
         /// <inheritdoc />
@@ -60,12 +68,16 @@ namespace CheapFurniturePlanner.Migrations
                 table: "Firms");
 
             migrationBuilder.DropIndex(
-                name: "IX_DiscountRules_SellerId_CollectionCode_Scope_ElementCode_PriceGroupCode_ModelCode_ModelType_MaterialTypeCode",
+                name: "IX_DiscountRules_SellerId_IdentityKey",
                 table: "DiscountRules");
 
             migrationBuilder.DropColumn(
                 name: "Version",
                 table: "ProductionUnits");
+
+            migrationBuilder.DropColumn(
+                name: "IdentityKey",
+                table: "DiscountRules");
 
             migrationBuilder.DropColumn(
                 name: "Version",

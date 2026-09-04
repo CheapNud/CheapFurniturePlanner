@@ -133,6 +133,11 @@ class Program
             RoleSeeder.SeedAsync(migrateContext).GetAwaiter().GetResult();
             scope.ServiceProvider.GetRequiredService<VariantNamingAbsorber>().AbsorbAsync().GetAwaiter().GetResult();
 
+            // MB1 backstop: computes DiscountRule.IdentityKey for any pre-MB1 row still carrying the
+            // default empty key, before the filtered unique index on (SellerId, IdentityKey) has to
+            // hold against real data. Idempotent no-op once every row has a key.
+            scope.ServiceProvider.GetRequiredService<DiscountService>().BackfillIdentityKeysAsync().GetAwaiter().GetResult();
+
             // Seed the authoring store from the embedded demo catalogue if it hasn't been seeded
             // already - the store is the sole authoring source from here on. This runs regardless
             // of published-catalogue state (not just on first run) so a DB created by a pre-authoring-store
