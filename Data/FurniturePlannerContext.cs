@@ -444,6 +444,29 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             modelBuilder.Entity<Trip>().Property(t => t.DepartureDate).HasColumnType("timestamp without time zone");
             modelBuilder.Entity<InternalRepair>().Property(r => r.ExecutionDate).HasColumnType("timestamp without time zone");
         }
+
+        // Review fix: the "REAL" pins above (and PlannerFurnitureItem.CachedUnitPrice's own
+        // [Column(TypeName="REAL")] attribute) exist for SQLite - REAL is SQLite's only
+        // floating-point storage class. Left unbranched, they flow straight into Postgres as
+        // float4, squeezing decimal money columns into binary float and narrowing the
+        // dimension/coordinate doubles below Npgsql's own default width. Same Npgsql-only branch
+        // pattern as the timestamp pin above: SQLite keeps REAL exactly as today, this whole
+        // block is a no-op there.
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.Entity<FurnitureItem>().Property(e => e.Price).HasColumnType("numeric");
+            modelBuilder.Entity<PlannerFurnitureItem>().Property(e => e.CachedUnitPrice).HasColumnType("numeric");
+
+            modelBuilder.Entity<FurnitureItem>().Property(e => e.Width).HasColumnType("double precision");
+            modelBuilder.Entity<FurnitureItem>().Property(e => e.Length).HasColumnType("double precision");
+            modelBuilder.Entity<FurnitureItem>().Property(e => e.Height).HasColumnType("double precision");
+            modelBuilder.Entity<FurnitureItem>().Property(e => e.Weight).HasColumnType("double precision");
+            modelBuilder.Entity<RoomPlan>().Property(e => e.Width).HasColumnType("double precision");
+            modelBuilder.Entity<RoomPlan>().Property(e => e.Height).HasColumnType("double precision");
+            modelBuilder.Entity<PlannerFurnitureItem>().Property(e => e.X).HasColumnType("double precision");
+            modelBuilder.Entity<PlannerFurnitureItem>().Property(e => e.Y).HasColumnType("double precision");
+            modelBuilder.Entity<PlannerFurnitureItem>().Property(e => e.Rotation).HasColumnType("double precision");
+        }
     }
 
     private static void SeedDefaultData(ModelBuilder modelBuilder)

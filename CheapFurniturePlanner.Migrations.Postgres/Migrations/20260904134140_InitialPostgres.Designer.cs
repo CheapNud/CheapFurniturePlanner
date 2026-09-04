@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
 {
     [DbContext(typeof(FurniturePlannerContext))]
-    [Migration("20260904123906_InitialPostgres")]
+    [Migration("20260904134140_InitialPostgres")]
     partial class InitialPostgres
     {
         /// <inheritdoc />
@@ -423,8 +423,8 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<float>("Height")
-                        .HasColumnType("REAL");
+                    b.Property<double>("Height")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("ImageUrl")
                         .HasMaxLength(500)
@@ -435,8 +435,8 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
-                    b.Property<float>("Length")
-                        .HasColumnType("REAL");
+                    b.Property<double>("Length")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("Material")
                         .HasMaxLength(100)
@@ -451,8 +451,8 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<float?>("Price")
-                        .HasColumnType("REAL");
+                    b.Property<decimal?>("Price")
+                        .HasColumnType("numeric");
 
                     b.Property<int>("Type")
                         .HasColumnType("integer");
@@ -460,11 +460,11 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<float?>("Weight")
-                        .HasColumnType("REAL");
+                    b.Property<double?>("Weight")
+                        .HasColumnType("double precision");
 
-                    b.Property<float>("Width")
-                        .HasColumnType("REAL");
+                    b.Property<double>("Width")
+                        .HasColumnType("double precision");
 
                     b.HasKey("Id");
 
@@ -488,16 +488,16 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                             Color = "Gray",
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Comfortable 3-seat sofa for living room",
-                            Height = 85f,
+                            Height = 85.0,
                             IsActive = true,
-                            Length = 90f,
+                            Length = 90.0,
                             Material = "Fabric",
                             Model = "Comfort Plus",
                             Name = "Cheap 3-Seat Sofa",
-                            Price = 599.99f,
+                            Price = 599.99m,
                             Type = 1,
-                            Weight = 45f,
-                            Width = 200f
+                            Weight = 45.0,
+                            Width = 200.0
                         },
                         new
                         {
@@ -507,16 +507,16 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                             Color = "Black",
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Ergonomic office chair with adjustable height",
-                            Height = 120f,
+                            Height = 120.0,
                             IsActive = true,
-                            Length = 60f,
+                            Length = 60.0,
                             Material = "Mesh/Plastic",
                             Model = "Ergo Basic",
                             Name = "Cheap Office Chair",
-                            Price = 199.99f,
+                            Price = 199.99m,
                             Type = 2,
-                            Weight = 15f,
-                            Width = 60f
+                            Weight = 15.0,
+                            Width = 60.0
                         },
                         new
                         {
@@ -526,16 +526,16 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                             Color = "Oak",
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Rectangular dining table for 6 people",
-                            Height = 75f,
+                            Height = 75.0,
                             IsActive = true,
-                            Length = 90f,
+                            Length = 90.0,
                             Material = "Wood",
                             Model = "Family",
                             Name = "Cheap Dining Table",
-                            Price = 399.99f,
+                            Price = 399.99m,
                             Type = 13,
-                            Weight = 35f,
-                            Width = 160f
+                            Weight = 35.0,
+                            Width = 160.0
                         },
                         new
                         {
@@ -545,16 +545,16 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                             Color = "White",
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Queen size bed frame with headboard",
-                            Height = 100f,
+                            Height = 100.0,
                             IsActive = true,
-                            Length = 200f,
+                            Length = 200.0,
                             Material = "Wood/Metal",
                             Model = "Dream Queen",
                             Name = "Cheap Queen Bed",
-                            Price = 299.99f,
+                            Price = 299.99m,
                             Type = 4,
-                            Weight = 40f,
-                            Width = 160f
+                            Weight = 40.0,
+                            Width = 160.0
                         },
                         new
                         {
@@ -564,16 +564,16 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                             Color = "Walnut",
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Description = "Modern coffee table with storage",
-                            Height = 45f,
+                            Height = 45.0,
                             IsActive = true,
-                            Length = 60f,
+                            Length = 60.0,
                             Material = "Wood",
                             Model = "Modern Store",
                             Name = "Cheap Coffee Table",
-                            Price = 149.99f,
+                            Price = 149.99m,
                             Type = 14,
-                            Weight = 20f,
-                            Width = 120f
+                            Weight = 20.0,
+                            Width = 120.0
                         });
                 });
 
@@ -1236,8 +1236,8 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<float?>("CachedUnitPrice")
-                        .HasColumnType("REAL");
+                    b.Property<decimal?>("CachedUnitPrice")
+                        .HasColumnType("numeric");
 
                     b.Property<string>("CachedVariantCode")
                         .HasMaxLength(128)
@@ -1277,10 +1277,10 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                     b.Property<int>("RoomPlanId")
                         .HasColumnType("integer");
 
-                    b.Property<float>("Rotation")
+                    b.Property<double>("Rotation")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("REAL")
-                        .HasDefaultValue(0f);
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(0.0);
 
                     b.Property<string>("SelectionsJson")
                         .HasColumnType("text");
@@ -1291,11 +1291,11 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<float>("X")
-                        .HasColumnType("REAL");
+                    b.Property<double>("X")
+                        .HasColumnType("double precision");
 
-                    b.Property<float>("Y")
-                        .HasColumnType("REAL");
+                    b.Property<double>("Y")
+                        .HasColumnType("double precision");
 
                     b.HasKey("Id");
 
@@ -1477,8 +1477,8 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(10);
 
-                    b.Property<float>("Height")
-                        .HasColumnType("REAL");
+                    b.Property<double>("Height")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1505,8 +1505,8 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<float>("Width")
-                        .HasColumnType("REAL");
+                    b.Property<double>("Width")
+                        .HasColumnType("double precision");
 
                     b.HasKey("Id");
 
@@ -1527,12 +1527,12 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                             Description = "A sample living room layout",
                             EnableSnapping = true,
                             GridSize = 10,
-                            Height = 400f,
+                            Height = 400.0,
                             Name = "Sample Living Room",
                             PreventOverlap = true,
                             ShowGrid = true,
                             Unit = "cm",
-                            Width = 500f
+                            Width = 500.0
                         });
                 });
 

@@ -139,14 +139,14 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                     Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     Type = table.Column<int>(type: "integer", nullable: false),
-                    Width = table.Column<float>(type: "REAL", nullable: false),
-                    Length = table.Column<float>(type: "REAL", nullable: false),
-                    Height = table.Column<float>(type: "REAL", nullable: false),
-                    Weight = table.Column<float>(type: "REAL", nullable: true),
+                    Width = table.Column<double>(type: "double precision", nullable: false),
+                    Length = table.Column<double>(type: "double precision", nullable: false),
+                    Height = table.Column<double>(type: "double precision", nullable: false),
+                    Weight = table.Column<double>(type: "double precision", nullable: true),
                     Color = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     Material = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     ImageUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    Price = table.Column<float>(type: "REAL", nullable: true),
+                    Price = table.Column<decimal>(type: "numeric", nullable: true),
                     Brand = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     Model = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
@@ -280,8 +280,8 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    Width = table.Column<float>(type: "REAL", nullable: false),
-                    Height = table.Column<float>(type: "REAL", nullable: false),
+                    Width = table.Column<double>(type: "double precision", nullable: false),
+                    Height = table.Column<double>(type: "double precision", nullable: false),
                     Unit = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "cm"),
                     GridSize = table.Column<int>(type: "integer", nullable: false, defaultValue: 10),
                     ShowGrid = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
@@ -485,9 +485,9 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                     RoomPlanId = table.Column<int>(type: "integer", nullable: false),
                     FurnitureItemId = table.Column<int>(type: "integer", nullable: true),
                     UIId = table.Column<int>(type: "integer", nullable: false),
-                    X = table.Column<float>(type: "REAL", nullable: false),
-                    Y = table.Column<float>(type: "REAL", nullable: false),
-                    Rotation = table.Column<float>(type: "REAL", nullable: false, defaultValue: 0f),
+                    X = table.Column<double>(type: "double precision", nullable: false),
+                    Y = table.Column<double>(type: "double precision", nullable: false),
+                    Rotation = table.Column<double>(type: "double precision", nullable: false, defaultValue: 0.0),
                     GroupId = table.Column<int>(type: "integer", nullable: true),
                     CustomName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     Notes = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
@@ -498,7 +498,7 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                     SelectionsJson = table.Column<string>(type: "text", nullable: true),
                     FabricColorCode = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     CachedVariantCode = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
-                    CachedUnitPrice = table.Column<float>(type: "REAL", nullable: true)
+                    CachedUnitPrice = table.Column<decimal>(type: "numeric", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -1196,17 +1196,17 @@ namespace CheapFurniturePlanner.Migrations.Postgres.Migrations
                 columns: new[] { "Id", "Brand", "Code", "Color", "CreatedAt", "Description", "Height", "ImageUrl", "IsActive", "Length", "Material", "Model", "Name", "Price", "Type", "UpdatedAt", "Weight", "Width" },
                 values: new object[,]
                 {
-                    { 1, "CheapFurniture", "CHEAP-SOFA-001", "Gray", new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Comfortable 3-seat sofa for living room", 85f, null, true, 90f, "Fabric", "Comfort Plus", "Cheap 3-Seat Sofa", 599.99f, 1, null, 45f, 200f },
-                    { 2, "CheapOffice", "CHEAP-CHAIR-001", "Black", new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Ergonomic office chair with adjustable height", 120f, null, true, 60f, "Mesh/Plastic", "Ergo Basic", "Cheap Office Chair", 199.99f, 2, null, 15f, 60f },
-                    { 3, "CheapWood", "CHEAP-TABLE-001", "Oak", new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Rectangular dining table for 6 people", 75f, null, true, 90f, "Wood", "Family", "Cheap Dining Table", 399.99f, 13, null, 35f, 160f },
-                    { 4, "CheapSleep", "CHEAP-BED-001", "White", new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Queen size bed frame with headboard", 100f, null, true, 200f, "Wood/Metal", "Dream Queen", "Cheap Queen Bed", 299.99f, 4, null, 40f, 160f },
-                    { 5, "CheapStyle", "CHEAP-COFFEE-001", "Walnut", new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Modern coffee table with storage", 45f, null, true, 60f, "Wood", "Modern Store", "Cheap Coffee Table", 149.99f, 14, null, 20f, 120f }
+                    { 1, "CheapFurniture", "CHEAP-SOFA-001", "Gray", new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Comfortable 3-seat sofa for living room", 85.0, null, true, 90.0, "Fabric", "Comfort Plus", "Cheap 3-Seat Sofa", 599.99m, 1, null, 45.0, 200.0 },
+                    { 2, "CheapOffice", "CHEAP-CHAIR-001", "Black", new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Ergonomic office chair with adjustable height", 120.0, null, true, 60.0, "Mesh/Plastic", "Ergo Basic", "Cheap Office Chair", 199.99m, 2, null, 15.0, 60.0 },
+                    { 3, "CheapWood", "CHEAP-TABLE-001", "Oak", new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Rectangular dining table for 6 people", 75.0, null, true, 90.0, "Wood", "Family", "Cheap Dining Table", 399.99m, 13, null, 35.0, 160.0 },
+                    { 4, "CheapSleep", "CHEAP-BED-001", "White", new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Queen size bed frame with headboard", 100.0, null, true, 200.0, "Wood/Metal", "Dream Queen", "Cheap Queen Bed", 299.99m, 4, null, 40.0, 160.0 },
+                    { 5, "CheapStyle", "CHEAP-COFFEE-001", "Walnut", new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "Modern coffee table with storage", 45.0, null, true, 60.0, "Wood", "Modern Store", "Cheap Coffee Table", 149.99m, 14, null, 20.0, 120.0 }
                 });
 
             migrationBuilder.InsertData(
                 table: "RoomPlans",
                 columns: new[] { "Id", "CreatedAt", "CreatedBy", "Description", "EnableSnapping", "GridSize", "Height", "Name", "PreventOverlap", "ShowGrid", "Unit", "UpdatedAt", "Width" },
-                values: new object[] { 1, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", "A sample living room layout", true, 10, 400f, "Sample Living Room", true, true, "cm", null, 500f });
+                values: new object[] { 1, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", "A sample living room layout", true, 10, 400.0, "Sample Living Room", true, true, "cm", null, 500.0 });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Addresses_RegionId",
