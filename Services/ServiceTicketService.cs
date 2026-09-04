@@ -23,13 +23,20 @@ public sealed class ServiceTicketService(IDbContextFactory<FurniturePlannerConte
         if (!await db.Consumers.AnyAsync(c => c.Id == consumerId, ct)) { throw new InvalidOperationException($"Consumer {consumerId} not found."); }
         if (orderId is int linkedOrderId && !await db.Orders.AnyAsync(o => o.Id == linkedOrderId, ct)) { throw new InvalidOperationException($"Order {linkedOrderId} not found."); }
 
+        // Max-suffix, not count-based: mirrors PurchasingService.GenerateOrdersAsync - a count would
+        // regress/collide the moment the highest-numbered ticket for the year isn't also the Nth one.
         var prefix = $"SRV-{DateTime.UtcNow.Year}-";
-        var countThisYear = await db.ServiceTickets.CountAsync(t => t.TicketNumber.StartsWith(prefix), ct);
+        var numbersThisYear = await db.ServiceTickets.Where(t => t.TicketNumber.StartsWith(prefix)).Select(t => t.TicketNumber).ToListAsync(ct);
+        var maxSuffix = 0;
+        foreach (var number in numbersThisYear)
+        {
+            if (int.TryParse(number[prefix.Length..], out var suffix) && suffix > maxSuffix) { maxSuffix = suffix; }
+        }
         var userId = await RequireUserIdAsync();
 
         var ticket = new ServiceTicket
         {
-            TicketNumber = $"{prefix}{countThisYear + 1:D4}",
+            TicketNumber = $"{prefix}{maxSuffix + 1:D4}",
             ConsumerId = consumerId,
             OrderId = orderId,
             CreatedByUserId = userId,

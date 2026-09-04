@@ -451,7 +451,13 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
     // double-state unit (both cancelled and still on a trip, or the reverse).
     private static async Task SaveOrThrowFriendlyConflictAsync(FurniturePlannerContext db, CancellationToken ct)
     {
-        try { await db.SaveChangesAsync(ct); }
+        try
+        {
+            // FinishAsync/UndoArriveAsync ride ApplyBackflushAsync's MaterialStock upserts through
+            // this same save - additive, same start-at-0 shape as MaterialOrderService.ReceiveAsync.
+            // Callers that never touch stock (Arrive/Assign/etc.) just get a plain save back.
+            await MaterialStockUpsertRetry.SaveAsync(db, additive: true, ct);
+        }
         catch (DbUpdateConcurrencyException) { throw new InvalidOperationException("Someone else updated this unit - reload and retry."); }
     }
 

@@ -248,6 +248,43 @@ public class UserAdminServiceTests
         Assert.NotEqual(stampBefore, stampAfter);
     }
 
+    // Throws on the Nth SaveChangesAsync call on this context (1-based) - mirrors PurchasingServiceTests/
+    // MaterialOrderServiceTests' SaveCountingContext, but injects a failure instead of just counting.
+    private sealed class ThrowOnNthSaveContext(DbContextOptions<FurniturePlannerContext> options, int throwOnCall) : FurniturePlannerContext(options)
+    {
+        private int _saveCount;
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            _saveCount++;
+            if (_saveCount == throwOnCall) { throw new DbUpdateException("injected failure"); }
+            return base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class ThrowOnNthSaveContextFactory(DbContextOptions<FurniturePlannerContext> options, int throwOnCall) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new ThrowOnNthSaveContext(options, throwOnCall);
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    // CreateAsync writes the user (SaveChanges #1) then its roles (SaveChanges #2) - a failure on the
+    // second write must roll the whole thing back through the shared transaction, not leave a
+    // roleless user row behind for SetRolesAsync to quietly "fix" later.
+    [Fact]
+    public async Task Create_RoleWriteFails_RollsBackTheUserRow()
+    {
+        var (baseFactory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
+        var faultyFactory = new ThrowOnNthSaveContextFactory(options, throwOnCall: 2);
+        var service = new UserAdminService(faultyFactory, new PasswordHasher<FurnitureUser>());
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => service.CreateAsync("jdoe", "John", "Doe", "secret1", [Roles.Office]));
+
+        await using var db = await baseFactory.CreateDbContextAsync();
+        Assert.False(await db.Users.AnyAsync(u => u.UserName == "jdoe"));
+    }
+
     [Fact]
     public async Task ResetPassword_Verifies_AndRejectsShortPassword()
     {

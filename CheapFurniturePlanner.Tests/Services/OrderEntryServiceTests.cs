@@ -103,6 +103,59 @@ public class OrderEntryServiceTests
         Assert.Null(first.PinnedContentHash);
     }
 
+    // Regression: numbering must derive from the highest existing suffix, not a COUNT of rows with
+    // the year prefix - a count would collide with (or regress behind) a still-live order whenever
+    // the count and the max suffix diverge, e.g. after a gap in the sequence.
+    [Fact]
+    public async Task CreateOrder_AfterHigherSuffixSeeded_SkipsToNextFreeNumber()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var year = DateTime.UtcNow.Year;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.Orders.Add(new Order
+            {
+                OrderNumber = $"ORD-{year}-0005",
+                SellerId = harness.Seller.Id,
+                ConsumerId = harness.Consumer.Id,
+                MarketCode = "BE",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+
+        Assert.Equal($"ORD-{year}-0006", order.OrderNumber);
+    }
+
+    // The prefix scopes the max-suffix scan to the current year - a prior year's high suffix must
+    // never leak into this year's numbering.
+    [Fact]
+    public async Task CreateOrder_CrossYear_DoesNotInheritPriorYearSuffix()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var harness = await NewOrderHarnessAsync(factory);
+        var year = DateTime.UtcNow.Year;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.Orders.Add(new Order
+            {
+                OrderNumber = $"ORD-{year - 1}-0099",
+                SellerId = harness.Seller.Id,
+                ConsumerId = harness.Consumer.Id,
+                MarketCode = "BE",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var order = await harness.Orders.CreateOrderAsync(harness.Seller.Id, harness.Consumer.Id, "BE");
+
+        Assert.Equal($"ORD-{year}-0001", order.OrderNumber);
+    }
+
     [Fact]
     public async Task AddStandaloneLine_PinsOrderAndSnapshotsPrice()
     {

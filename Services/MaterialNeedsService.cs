@@ -257,7 +257,9 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
             UserId = await currentUser.UserIdAsync(),
         });
 
-        await db.SaveChangesAsync(ct);
+        // additive: false - this is a set-to-newAmount write, not a delta, so a losing find-or-create
+        // race retries as "set the now-real row to newAmount", same as if it had found it the first time.
+        await MaterialStockUpsertRetry.SaveAsync(db, additive: false, ct);
     }
 
     public async Task<string> ExportCsvAsync(MaterialForecast forecast, CancellationToken ct = default)

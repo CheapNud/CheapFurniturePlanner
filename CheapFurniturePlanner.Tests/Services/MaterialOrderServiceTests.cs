@@ -312,6 +312,56 @@ public class MaterialOrderServiceTests
         }
     }
 
+    // Intercepts ReceiveAsync's own SaveChangesAsync and, before it runs, inserts the competing
+    // MaterialStock row through a second context on the same connection - so ReceiveAsync's own
+    // find-or-create genuinely raced and lost (its find already ran and returned null), exercising
+    // the real unique-index retry path rather than a pre-seeded row its own find would have seen.
+    private sealed class SeedBeforeFirstSaveContext(DbContextOptions<FurniturePlannerContext> options, Func<Task> seedBeforeFirstSave) : FurniturePlannerContext(options)
+    {
+        private bool _seeded;
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            if (!_seeded) { _seeded = true; await seedBeforeFirstSave(); }
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class SeedBeforeFirstSaveContextFactory(DbContextOptions<FurniturePlannerContext> options, Func<Task> seedBeforeFirstSave) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new SeedBeforeFirstSaveContext(options, seedBeforeFirstSave);
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    [Fact]
+    public async Task Receive_StockRowInsertedConcurrently_RetriesAsUpdate_MovementWrittenOnce()
+    {
+        var (baseFactory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var supplierId = await SeedSupplierAsync(baseFactory, "SUPA");
+        var setupMaterials = new MaterialOrderService(baseFactory, OfficeUser);
+        var order = await setupMaterials.CreateDraftAsync(supplierId, [FoamLine(20m)]);
+        var line = Assert.Single(order.Lines);
+        await setupMaterials.SendAsync(order.Id);
+
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
+        var raceFactory = new SeedBeforeFirstSaveContextFactory(options, async () =>
+        {
+            await using var racer = new FurniturePlannerContext(options);
+            racer.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "F-100", HardnessCode = "H35", Amount = 4m, UpdatedAt = DateTime.UtcNow });
+            await racer.SaveChangesAsync();
+        });
+        var racingMaterials = new MaterialOrderService(raceFactory, OfficeUser);
+
+        await racingMaterials.ReceiveAsync(order.Id, line.Id, 6m);
+
+        await using var db = await baseFactory.CreateDbContextAsync();
+        // Both amounts land - the racer's 4 plus this receipt's 6 - none clobbered by the retry.
+        var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "F-100" && s.HardnessCode == "H35");
+        Assert.Equal(10m, stock.Amount);
+        Assert.Equal(1, await db.MaterialStocks.CountAsync()); // upserted onto the one real row, no orphaned duplicate
+        Assert.Equal(1, await db.MaterialMovements.CountAsync()); // the receipt's own movement, written exactly once despite the retry
+    }
+
     [Fact]
     public async Task Receive_TwoPartials_CompletesOrder_OnlyWhenEveryLineFullyReceived()
     {

@@ -62,6 +62,59 @@ public class ServiceTicketServiceTests
         Assert.Equal("office-1", log.UserId);
     }
 
+    // Regression: numbering must derive from the highest existing suffix, not a COUNT of rows with
+    // the year prefix - a count would collide with (or regress behind) a still-live ticket whenever
+    // the count and the max suffix diverge, e.g. after a gap in the sequence.
+    [Fact]
+    public async Task Create_AfterHigherSuffixSeeded_SkipsToNextFreeNumber()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = NewService(factory, OfficeUser);
+        var consumerId = await SeedConsumerAsync(factory);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.ServiceTickets.Add(new ServiceTicket
+            {
+                TicketNumber = $"SRV-{DateTime.UtcNow.Year}-0005",
+                ConsumerId = consumerId,
+                CreatedByUserId = "office-1",
+                ProblemDescription = "pre-seeded gap filler",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var ticket = await service.CreateTicketAsync(consumerId, null, "x", null, ServiceFlow.Undecided, []);
+
+        Assert.Equal($"SRV-{DateTime.UtcNow.Year}-0006", ticket.TicketNumber);
+    }
+
+    // The prefix scopes the max-suffix scan to the current year - a prior year's high suffix must
+    // never leak into this year's numbering.
+    [Fact]
+    public async Task Create_CrossYear_DoesNotInheritPriorYearSuffix()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = NewService(factory, OfficeUser);
+        var consumerId = await SeedConsumerAsync(factory);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.ServiceTickets.Add(new ServiceTicket
+            {
+                TicketNumber = $"SRV-{DateTime.UtcNow.Year - 1}-0099",
+                ConsumerId = consumerId,
+                CreatedByUserId = "office-1",
+                ProblemDescription = "last year's ticket",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var ticket = await service.CreateTicketAsync(consumerId, null, "x", null, ServiceFlow.Undecided, []);
+
+        Assert.Equal($"SRV-{DateTime.UtcNow.Year}-0001", ticket.TicketNumber);
+    }
+
     [Fact]
     public async Task Create_WithFlow_CreatesTypedRow()
     {

@@ -25,16 +25,22 @@ public sealed class OrderEntryService(
     {
         if (string.IsNullOrWhiteSpace(marketCode)) { throw new InvalidOperationException("Market is required."); }
         await using var db = await factory.CreateDbContextAsync(ct);
-        var year = DateTime.UtcNow.Year;
-        var prefix = $"ORD-{year}-";
-        var countThisYear = await db.Orders.CountAsync(o => o.OrderNumber.StartsWith(prefix), ct);
+        // Max-suffix, not count-based: mirrors PurchasingService.GenerateOrdersAsync - a count would
+        // regress/collide the moment the highest-numbered order for the year isn't also the Nth one.
+        var prefix = $"ORD-{DateTime.UtcNow.Year}-";
+        var numbersThisYear = await db.Orders.Where(o => o.OrderNumber.StartsWith(prefix)).Select(o => o.OrderNumber).ToListAsync(ct);
+        var maxSuffix = 0;
+        foreach (var number in numbersThisYear)
+        {
+            if (int.TryParse(number[prefix.Length..], out var suffix) && suffix > maxSuffix) { maxSuffix = suffix; }
+        }
         var defaultDelivery = await db.ConsumerDeliveryAddresses
             .Where(d => d.ConsumerId == consumerId && d.IsDefault)
             .Select(d => (int?)d.AddressId)
             .FirstOrDefaultAsync(ct);
         var order = new Order
         {
-            OrderNumber = $"{prefix}{countThisYear + 1:D4}",
+            OrderNumber = $"{prefix}{maxSuffix + 1:D4}",
             SellerId = sellerId,
             ConsumerId = consumerId,
             MarketCode = marketCode.Trim(),

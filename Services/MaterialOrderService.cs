@@ -247,7 +247,9 @@ public sealed class MaterialOrderService(IDbContextFactory<FurniturePlannerConte
         });
 
         TryComplete(order);
-        await db.SaveChangesAsync(ct);
+        // additive: the new-row branch above starts Amount at 0, so a losing find-or-create race
+        // against another writer's insert retries as a plain += of the same quantity.
+        await MaterialStockUpsertRetry.SaveAsync(db, additive: true, ct);
     }
 
     // Sole writer of the Sent -> Completed transition: every line must be fully received.
