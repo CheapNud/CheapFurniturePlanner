@@ -22,6 +22,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CheapFurniturePlanner;
@@ -58,10 +59,21 @@ class Program
             })
             .ConfigureEndpoints(app => app.MapControllers());
 
-        // Configure Entity Framework
+        // Configure Entity Framework - Database:Provider picks sqlite (default, desktop) or
+        // postgres (opt-in, future hosted mode). No appsettings.json means Database:Provider is
+        // absent, which resolves to the same UseSqlite call this project always made.
         var connectionString = GetConnectionString();
+        // SetBasePath pins file resolution to the assembly's own folder - a desktop app can be
+        // launched (double-click, shortcut, Velopack) with an unpredictable current directory,
+        // unlike a web app started from its project folder.
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: true)
+            .AddEnvironmentVariables()
+            .Build();
 
-        builder.Services.AddDbContextFactory<FurniturePlannerContext>(options => options.UseSqlite(connectionString));
+        builder.Services.AddDbContextFactory<FurniturePlannerContext>(options =>
+            DbProviderConfigurator.Configure(options, configuration, connectionString));
 
         // Identity: relaxed password policy (desktop app, not internet-facing) and deliberate
         // opt-out of failed-attempt lockout - deactivation (Task 2) sets LockoutEnd directly instead.

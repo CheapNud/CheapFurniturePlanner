@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 namespace CheapFurniturePlanner.Data;
 
@@ -85,7 +86,9 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         SeedDefaultData(modelBuilder);
     }
 
-    private static void ConfigureFurnitureEntities(ModelBuilder modelBuilder)
+    // Instance method (not static) so the ConsumerDeliveryAddress index below can read
+    // this.Database.IsNpgsql() to pick the right filtered-index syntax for the provider.
+    private void ConfigureFurnitureEntities(ModelBuilder modelBuilder)
     {
         // Configure FurnitureItem
         modelBuilder.Entity<FurnitureItem>(entity =>
@@ -262,12 +265,25 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         {
             // HD1 backstop: PartyService.SetDefaultDeliveryAddressAsync already enforces "one default
             // per consumer" in code (clear siblings, then set), but a filtered unique index makes the
-            // invariant hold even against a raw insert that bypasses the service. SQLite's filtered-index
-            // syntax takes a plain boolean SQL predicate over the stored column value (IsDefault is
-            // mapped as an INTEGER 0/1). Replaces the old plain ConsumerId index - EF Core keys index
-            // builders by property set, so a second HasIndex(d => d.ConsumerId) call reconfigures the
-            // same index rather than adding a distinct one.
-            entity.HasIndex(d => d.ConsumerId).IsUnique().HasFilter("IsDefault = 1").HasDatabaseName("IX_ConsumerDeliveryAddresses_ConsumerId_OneDefault");
+            // invariant hold even against a raw insert that bypasses the service. Replaces the old
+            // plain ConsumerId index - EF Core keys index builders by property set, so a second
+            // HasIndex(d => d.ConsumerId) call reconfigures the same index rather than adding a
+            // distinct one.
+            //
+            // The filter predicate is raw provider SQL, so it branches on Database.ProviderName
+            // (populated straight from the DbContextOptions the caller supplied - no open connection
+            // needed, so this resolves correctly under the design-time factory, the real app, and
+            // the in-memory-SQLite test harness every existing test uses). SQLite takes a plain
+            // boolean predicate over the stored INTEGER 0/1 column; Npgsql needs the quoted,
+            // case-sensitive column identifier as the boolean predicate itself.
+            if (Database.IsNpgsql())
+            {
+                entity.HasIndex(d => d.ConsumerId).IsUnique().HasFilter("\"IsDefault\"").HasDatabaseName("IX_ConsumerDeliveryAddresses_ConsumerId_OneDefault");
+            }
+            else
+            {
+                entity.HasIndex(d => d.ConsumerId).IsUnique().HasFilter("IsDefault = 1").HasDatabaseName("IX_ConsumerDeliveryAddresses_ConsumerId_OneDefault");
+            }
             entity.HasOne<Consumer>().WithMany().HasForeignKey(d => d.ConsumerId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(d => d.Address).WithMany().HasForeignKey(d => d.AddressId).OnDelete(DeleteBehavior.Restrict);
         });
