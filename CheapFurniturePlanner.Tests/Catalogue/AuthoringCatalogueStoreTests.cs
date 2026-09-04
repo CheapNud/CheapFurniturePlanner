@@ -236,6 +236,44 @@ public class AuthoringCatalogueStoreTests
         Assert.Single((await store.LoadAsync()).Articles);
     }
 
+    // MB1 Task 3: AuthoringModelDocument.Version is an optimistic concurrency token. A context that
+    // loaded the row before another context's save commits is stale by the time IT saves - EF
+    // compares its tracked ORIGINAL Version against the row's CURRENT value and throws
+    // DbUpdateConcurrencyException when they no longer match. This needs no real thread race: the
+    // staleness comes from load order, not from literal simultaneous execution.
+    [Fact]
+    public async Task SaveModelAsync_StaleWrite_ThrowsConcurrencyException()
+    {
+        var (factory, connection) = NewFactory();
+        using (connection)
+        {
+            var seed = SeedCatalogue.Load();
+            var store = new AuthoringCatalogueStore(factory);
+            await store.SeedFromAsync(seed);
+            var modelCode = seed.Models[0].Code;
+
+            // The stale context reads the row before anyone else touches it.
+            await using var staleDb = await factory.CreateDbContextAsync();
+            var staleRow = await staleDb.AuthoringModels.FirstAsync(m => m.ModelCode == modelCode);
+
+            // A second editor saves through the real store - Version moves from 0 to 1.
+            await store.SaveModelAsync(new FurnitureModel { Code = modelCode, Name = "Edited by someone else" });
+
+            // The stale context's own save now conflicts: its tracked original Version (0) no
+            // longer matches the row's current value (1).
+            staleRow.BundleJson = "{}";
+            await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => staleDb.SaveChangesAsync());
+        }
+    }
+
+    // SaveModelAsync always re-reads fresh inside its own call before mutating (see the class
+    // comment on SaveOrThrowFriendlyConflictAsync), so it can never itself be the STALE side of a
+    // race against a caller-external write within a single call - only a genuinely concurrent write
+    // landing strictly between its own read and its own save would trigger its catch block, which
+    // isn't forceable deterministically without a test-only hook into production code. The test
+    // above proves the mechanism SaveOrThrowFriendlyConflictAsync relies on (the token really does
+    // throw DbUpdateConcurrencyException on a stale save); SaveOrThrowFriendlyConflictAsync's own
+    // catch-and-rewrap is a two-line pass-through, verified by inspection.
     private sealed class TestDbContextFactory(DbContextOptions<FurniturePlannerContext> options) : IDbContextFactory<FurniturePlannerContext>
     {
         public FurniturePlannerContext CreateDbContext() => new(options);

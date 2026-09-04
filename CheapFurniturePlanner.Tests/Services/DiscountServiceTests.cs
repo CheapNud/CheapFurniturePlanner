@@ -1,4 +1,5 @@
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Models;
 using CheapFurniturePlanner.Services;
 using Microsoft.Data.Sqlite;
@@ -176,5 +177,47 @@ public class DiscountServiceTests
         await service.DeleteRuleAsync(rule.Id);
 
         Assert.Empty(await service.RulesForSellerAsync(1));
+    }
+
+    // MB1 Task 3 backstop: mirrors AddRuleAsync's duplicate guard column-for-column, but only as a
+    // PARTIAL backstop - see the index comment in FurniturePlannerContext. AddRuleAsync's own
+    // Validate() never produces a row with every one of these 8 columns non-null (each scope forces
+    // several to stay null), so this raw insert - deliberately bypassing AddRuleAsync/Validate to
+    // fill every column - is the only shape that actually trips the index.
+    [Fact]
+    public async Task RawInsert_IdenticalRuleAcrossAllIndexedColumns_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var rule = new DiscountRule
+        {
+            SellerId = 1,
+            CollectionCode = "COL",
+            Scope = DiscountScope.ElementPriceGroup,
+            ElementCode = "EA",
+            PriceGroupCode = "PGA",
+            ModelCode = "M1",
+            ModelType = ModelType.Classic,
+            MaterialTypeCode = "MT1",
+        };
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.DiscountRules.Add(rule);
+            await db.SaveChangesAsync();
+        }
+
+        await using var dupDb = await factory.CreateDbContextAsync();
+        dupDb.DiscountRules.Add(new DiscountRule
+        {
+            SellerId = rule.SellerId,
+            CollectionCode = rule.CollectionCode,
+            Scope = rule.Scope,
+            ElementCode = rule.ElementCode,
+            PriceGroupCode = rule.PriceGroupCode,
+            ModelCode = rule.ModelCode,
+            ModelType = rule.ModelType,
+            MaterialTypeCode = rule.MaterialTypeCode,
+        });
+        await Assert.ThrowsAsync<DbUpdateException>(() => dupDb.SaveChangesAsync());
     }
 }

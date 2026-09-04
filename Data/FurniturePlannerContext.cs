@@ -184,7 +184,17 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         modelBuilder.Entity<ModelStateRecord>().HasIndex(s => s.ModelCode).IsUnique();
         modelBuilder.Entity<ModelStateRecord>().Property(s => s.State).HasConversion<string>();
 
-        modelBuilder.Entity<AuthoringModelDocument>().HasIndex(m => m.ModelCode).IsUnique();
+        modelBuilder.Entity<AuthoringModelDocument>(entity =>
+        {
+            entity.HasIndex(m => m.ModelCode).IsUnique();
+            // MB1: SQLite has no rowversion, so Version is a plain int concurrency token bumped
+            // explicitly by AuthoringCatalogueStore's save path (the simplest option per the plan -
+            // no SaveChanges interceptor). A stale save (loaded-then-changed-underneath) throws
+            // DbUpdateConcurrencyException, which the store turns into a friendly "reload" error.
+            entity.Property(m => m.Version).IsConcurrencyToken();
+        });
+        modelBuilder.Entity<AuthoringMastersDocument>().Property(m => m.Version).IsConcurrencyToken();
+        modelBuilder.Entity<AuthoringArticlesDocument>().Property(m => m.Version).IsConcurrencyToken();
 
         modelBuilder.Entity<ServiceTicket>(entity =>
         {
@@ -221,6 +231,9 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasOne(u => u.Order).WithMany().HasForeignKey(u => u.OrderId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<OrderLine>().WithMany().HasForeignKey(u => u.OrderLineId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(u => u.Trip).WithMany(t => t.Units).HasForeignKey(u => u.TripId).OnDelete(DeleteBehavior.SetNull);
+            // MB1: concurrency token over State/TripId/LoadPosition - see AuthoringModelDocument's
+            // Version above for why it's a plain bumped int rather than a rowversion.
+            entity.Property(u => u.Version).IsConcurrencyToken();
         });
         modelBuilder.Entity<Trip>(entity =>
         {
@@ -257,6 +270,20 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         {
             entity.HasIndex(f => f.Code).IsUnique();
             entity.HasOne(f => f.Address).WithMany().HasForeignKey(f => f.AddressId).OnDelete(DeleteBehavior.Restrict);
+            // MB1 backstop, same pattern as the ConsumerDeliveryAddresses HD1 index below:
+            // FirmService.SetDefaultAsync already enforces "exactly one default firm" in code, but a
+            // filtered unique index holds the invariant against a raw insert that bypasses the
+            // service too. Unlike the consumer address index this isn't scoped to a parent id - there
+            // is exactly one default firm system-wide, so the filtered column stands alone. Same
+            // provider branch as the ConsumerDeliveryAddresses index (see its comment for why).
+            if (Database.IsNpgsql())
+            {
+                entity.HasIndex(f => f.IsDefault).IsUnique().HasFilter("\"IsDefault\"").HasDatabaseName("IX_Firms_OneDefault");
+            }
+            else
+            {
+                entity.HasIndex(f => f.IsDefault).IsUnique().HasFilter("IsDefault = 1").HasDatabaseName("IX_Firms_OneDefault");
+            }
         });
         modelBuilder.Entity<Collection>(entity =>
         {
@@ -344,6 +371,27 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.Property(m => m.Type).HasConversion<string>();
             entity.Property(m => m.Kind).HasConversion<string>();
         });
+
+        // MB1 backstop, same pattern as above: DiscountService.AddRuleAsync already guards against
+        // duplicate rules in code, mirrored here column-for-column. This is a PARTIAL backstop only -
+        // SQLite and Postgres both treat a row with any NULL indexed column as distinct from every
+        // other row (composite unique constraints compare NULL <> NULL), and every valid rule shape
+        // (DiscountService.Validate's needsElement/needsModel/needsModelType/needsMaterialType
+        // exclusivity) leaves at least one of ElementCode/PriceGroupCode/ModelCode/ModelType/
+        // MaterialTypeCode null. So this index can never fire against AddRuleAsync's own validated
+        // output - it only catches a raw insert of two rows identical across all 8 columns (all
+        // non-null) that bypasses the service and its Validate() call entirely.
+        modelBuilder.Entity<DiscountRule>().HasIndex(r => new
+        {
+            r.SellerId,
+            r.CollectionCode,
+            r.Scope,
+            r.ElementCode,
+            r.PriceGroupCode,
+            r.ModelCode,
+            r.ModelType,
+            r.MaterialTypeCode,
+        }).IsUnique();
 
         // MB-1 Task 2: Npgsql maps DateTime/DateTime? to "timestamp with time zone" (timestamptz)
         // by default. That default is correct for every INSTANT property on this model (CreatedAt,

@@ -66,12 +66,19 @@ public sealed class FirmService(IDbContextFactory<FurniturePlannerContext> facto
         await using var db = await factory.CreateDbContextAsync(ct);
         var firm = await db.Firms.FirstOrDefaultAsync(f => f.Id == firmId, ct)
             ?? throw new InvalidOperationException($"Firm {firmId} not found.");
-        foreach (var other in await db.Firms.Where(f => f.Id != firmId && f.IsDefault).ToListAsync(ct))
-        {
-            other.IsDefault = false;
-        }
+        var others = await db.Firms.Where(f => f.Id != firmId && f.IsDefault).ToListAsync(ct);
+        foreach (var other in others) { other.IsDefault = false; }
+        // MB1 backstop: the new filtered unique index (IsDefault) WHERE IsDefault checks per
+        // statement, not deferred to commit - same HD1 lesson as PartyService.SetDefaultDeliveryAddressAsync.
+        // A single combined SaveChanges could try to flip firm to true before the old default flips
+        // to false and trip the index mid-transaction, so the sibling clear is saved first,
+        // guaranteeing the old default is gone before firm ever claims it. Wrapped in an explicit
+        // transaction so a crash between the two saves can't leave zero default firms.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.SaveChangesAsync(ct);
         firm.IsDefault = true;
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     public async Task DeleteFirmAsync(int firmId, CancellationToken ct = default)
