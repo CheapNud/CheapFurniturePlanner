@@ -57,6 +57,12 @@ jobs:
             exit 1
           fi
 
+          # Generated EF migration files (both providers keep them under a Migrations/ folder)
+          # drown the review in machine output and blow the size cap - drop them from the diff.
+          # The migration content itself is guarded by ef tooling and has-pending-model-changes.
+          awk '/^diff --git/{skip = ($0 ~ "/Migrations/")} !skip' pr-diff.txt > pr-diff-filtered.txt
+          mv pr-diff-filtered.txt pr-diff.txt
+
           echo "✅ Successfully fetched PR details and diff"
 
       - name: Validate diff size
