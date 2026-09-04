@@ -2,6 +2,7 @@ using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Catalogue;
 using CheapFurniturePlanner.Configurator;
 using CheapFurniturePlanner.Data;
+using CheapFurniturePlanner.Domain.Bom;
 using CheapFurniturePlanner.Domain.Catalog;
 using CheapFurniturePlanner.Domain.Pricing;
 using CheapFurniturePlanner.Domain.Production;
@@ -378,12 +379,15 @@ public class ProductionUnitServiceTests
         Assert.Equal(ProductionUnitState.Arrived, unit.State);
         Assert.NotNull(unit.ArrivedAt);
 
+        // Task 4b: ApplyBackflushAsync now writes the "" row-layer sentinel, never null, on the
+        // MaterialStock row itself (FurniturePlannerContext's comment on its unique index) - the
+        // movements below keep the domain's null HardnessCode unchanged, since they carry no such index.
         var stocks = await db.MaterialStocks.ToDictionaryAsync(s => (s.Kind, s.Code, s.HardnessCode), s => s.Amount);
-        Assert.Equal(-1m, stocks[(MaterialKind.Frame, "FBX", null)]);
-        Assert.Equal(-2m, stocks[(MaterialKind.Foam, "FM-STD", null)]);
-        Assert.Equal(-3.0m, stocks[(MaterialKind.Cotton, "COT-STD", null)]);
-        Assert.Equal(-4.0m, stocks[(MaterialKind.Fabric, "AQUA-BLUE", null)]);
-        Assert.Equal(-4m, stocks[(MaterialKind.Misc, "GLUE", null)]);
+        Assert.Equal(-1m, stocks[(MaterialKind.Frame, "FBX", "")]);
+        Assert.Equal(-2m, stocks[(MaterialKind.Foam, "FM-STD", "")]);
+        Assert.Equal(-3.0m, stocks[(MaterialKind.Cotton, "COT-STD", "")]);
+        Assert.Equal(-4.0m, stocks[(MaterialKind.Fabric, "AQUA-BLUE", "")]);
+        Assert.Equal(-4m, stocks[(MaterialKind.Misc, "GLUE", "")]);
 
         // One Backflush movement per need line, same SaveChanges, negative quantity matching the
         // stock consumption, referencing the unit's own code (not the order or an MPO).
@@ -400,6 +404,93 @@ public class ProductionUnitServiceTests
         Assert.Equal(-3.0m, movements[(MaterialKind.Cotton, "COT-STD", null)].Quantity);
         Assert.Equal(-4.0m, movements[(MaterialKind.Fabric, "AQUA-BLUE", null)].Quantity);
         Assert.Equal(-4m, movements[(MaterialKind.Misc, "GLUE", null)].Quantity);
+    }
+
+    // Intercepts FinishAsync's own shared SaveChangesAsync (unit Arrive + ApplyBackflushAsync's
+    // stock/movement rows) and, before it runs, inserts the competing stock row through a second
+    // context on the same connection - so ApplyBackflushAsync's own find-or-create for that one
+    // material genuinely raced and lost (its find already ran and returned null), exercising the
+    // real unique-index retry path while the other four need lines insert cleanly. Mirrors
+    // MaterialOrderServiceTests'/MaterialNeedsServiceTests' SeedBeforeFirstSaveContext.
+    private sealed class SeedBeforeFirstSaveContext(DbContextOptions<FurniturePlannerContext> options, Func<Task> seedBeforeFirstSave) : FurniturePlannerContext(options)
+    {
+        private bool _seeded;
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            if (!_seeded) { _seeded = true; await seedBeforeFirstSave(); }
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class SeedBeforeFirstSaveContextFactory(DbContextOptions<FurniturePlannerContext> options, Func<Task> seedBeforeFirstSave) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new SeedBeforeFirstSaveContext(options, seedBeforeFirstSave);
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    // Same embedded catalogue as SeedPublishedCatalogue, but with FJ2's foam BOM line stamped with a
+    // HardnessCode - MaterialRequirements.Resolve only ever produces a non-null HardnessCode for
+    // Foam (Frame/Cotton/Fabric/Misc are hardcoded null there), and SQLite's unique index on
+    // (Kind, Code, HardnessCode) treats every NULL as distinct, so it can never actually fire for a
+    // null-hardness identity. A genuine collision test needs the one material kind the index can
+    // really catch.
+    private static void SeedPublishedCatalogueWithFoamHardness(IDbContextFactory<FurniturePlannerContext> factory, string version)
+    {
+        var asm = typeof(CataloguePublishService).Assembly;
+        using var stream = asm.GetManifestResourceStream("CheapFurniturePlanner.Seed.demo-catalogue.json")
+            ?? throw new InvalidOperationException("Embedded resource 'CheapFurniturePlanner.Seed.demo-catalogue.json' not found.");
+        using var reader = new StreamReader(stream);
+        var snapshot = CanonicalJson.Deserialize<CatalogueSnapshot>(reader.ReadToEnd())
+            ?? throw new InvalidOperationException("Failed to deserialize embedded demo-catalogue.json.");
+        var element = snapshot.Models.Single(m => m.Code == "FJORD").Elements.Single(e => e.Code == "FJ2");
+        foreach (var section in element.Bom.Sections)
+        {
+            for (var i = 0; i < section.Lines.Count; i++)
+            {
+                if (section.Lines[i] is FoamBomLine foam) { section.Lines[i] = foam with { HardnessCode = "H35" }; }
+            }
+        }
+        snapshot.Version = version;
+        snapshot.ContentHash = snapshot.ComputeContentHash();
+        using var db = factory.CreateDbContext();
+        db.PublishedCatalogues.Add(new PublishedCatalogue { Version = version, ContentHash = snapshot.ContentHash, BundleJson = CanonicalJson.Serialize(snapshot), IsCurrent = true });
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task Finish_StockRowInsertedConcurrently_RetriesAsUpdate_MovementsWrittenOnce()
+    {
+        var (baseFactory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        SeedPublishedCatalogueWithFoamHardness(baseFactory, "1");
+        var (_, unitId, _) = await SeedFj2UnitAsync(baseFactory, inHouse: true);
+
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
+        var raceFactory = new SeedBeforeFirstSaveContextFactory(options, async () =>
+        {
+            await using var racer = new FurniturePlannerContext(options);
+            racer.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "FM-STD", HardnessCode = "H35", Amount = 10m, UpdatedAt = DateTime.UtcNow });
+            await racer.SaveChangesAsync();
+        });
+        var racingService = new ProductionUnitService(raceFactory, OfficeUser, new PinnedCatalogueProvider(raceFactory));
+
+        await racingService.FinishAsync(unitId);
+
+        await using var db = await baseFactory.CreateDbContextAsync();
+        var unit = await db.ProductionUnits.SingleAsync(u => u.Id == unitId);
+        Assert.Equal(ProductionUnitState.Arrived, unit.State);
+
+        // Task 4b: the other four need lines' rows now carry the "" row-layer sentinel, not null.
+        var stocks = await db.MaterialStocks.ToDictionaryAsync(s => (s.Kind, s.Code, s.HardnessCode), s => s.Amount);
+        Assert.Equal(5, stocks.Count); // upserted onto the raced-in foam row, no orphaned duplicate
+        Assert.Equal(8m, stocks[(MaterialKind.Foam, "FM-STD", "H35")]); // 10 (raced in) + -2 (this finish's backflush)
+        Assert.Equal(-1m, stocks[(MaterialKind.Frame, "FBX", "")]);
+        Assert.Equal(-3.0m, stocks[(MaterialKind.Cotton, "COT-STD", "")]);
+        Assert.Equal(-4.0m, stocks[(MaterialKind.Fabric, "AQUA-BLUE", "")]);
+        Assert.Equal(-4m, stocks[(MaterialKind.Misc, "GLUE", "")]);
+
+        // Five Backflush movements total - one per need line, none doubled or dropped by the retry.
+        Assert.Equal(5, await db.MaterialMovements.CountAsync());
     }
 
     [Fact]

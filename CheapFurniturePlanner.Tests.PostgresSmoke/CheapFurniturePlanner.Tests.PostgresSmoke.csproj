@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MB-1 Task 6: end-to-end parity smoke against a real Postgres server. Not part of the main
+    suite's runtime - it self-skips whenever the PLANNER_PG_TEST env var is unset, so it is safe
+    to build and run everywhere (dev machines, CI without the secret) without ever opening a
+    connection.
+
+    Local run: set PLANNER_PG_TEST to a full Npgsql connection string for a server you can create
+    and drop throwaway databases on (any host/user/password work - none are baked in here), then:
+
+      dotnet test CheapFurniturePlanner.Tests.PostgresSmoke
+
+    Unset (or empty) -> the fact returns early and reports as a pass with no assertions run.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="10.0.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <!-- Version matches the app project's own Npgsql reference - keep them in lock-step. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CheapFurniturePlanner.csproj" />
+    <ProjectReference Include="..\CheapFurniturePlanner.Migrations.Postgres\CheapFurniturePlanner.Migrations.Postgres.csproj" />
+  </ItemGroup>
+
+</Project>

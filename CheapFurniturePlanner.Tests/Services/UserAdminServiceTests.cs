@@ -248,6 +248,95 @@ public class UserAdminServiceTests
         Assert.NotEqual(stampBefore, stampAfter);
     }
 
+    // Throws on the Nth SaveChangesAsync call on this context (1-based) - mirrors PurchasingServiceTests/
+    // MaterialOrderServiceTests' SaveCountingContext, but injects a failure instead of just counting.
+    private sealed class ThrowOnNthSaveContext(DbContextOptions<FurniturePlannerContext> options, int throwOnCall) : FurniturePlannerContext(options)
+    {
+        private int _saveCount;
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            _saveCount++;
+            if (_saveCount == throwOnCall) { throw new DbUpdateException("injected failure"); }
+            return base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class ThrowOnNthSaveContextFactory(DbContextOptions<FurniturePlannerContext> options, int throwOnCall) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new ThrowOnNthSaveContext(options, throwOnCall);
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    // CreateAsync writes the user (SaveChanges #1) then its roles (SaveChanges #2) - a failure on the
+    // second write must roll the whole thing back through the shared transaction, not leave a
+    // roleless user row behind for SetRolesAsync to quietly "fix" later.
+    [Fact]
+    public async Task Create_RoleWriteFails_RollsBackTheUserRow()
+    {
+        var (baseFactory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
+        var faultyFactory = new ThrowOnNthSaveContextFactory(options, throwOnCall: 2);
+        var service = new UserAdminService(faultyFactory, new PasswordHasher<FurnitureUser>());
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => service.CreateAsync("jdoe", "John", "Doe", "secret1", [Roles.Office]));
+
+        await using var db = await baseFactory.CreateDbContextAsync();
+        Assert.False(await db.Users.AnyAsync(u => u.UserName == "jdoe"));
+    }
+
+    // Intercepts SetRolesAsync(admin1)'s own SaveChangesAsync and, before it runs, races a second
+    // SetRolesAsync(admin2) call through on the same connection - admin1's guard already read admin2
+    // as cover (admin1's own removal hasn't committed yet), so the racer's guard also reads admin1 as
+    // cover and would happily strip admin2 too if nothing stopped it, leaving zero active admins.
+    // Mirrors MaterialOrderServiceTests/MaterialNeedsServiceTests' SeedBeforeFirstSaveContext.
+    private sealed class SeedBeforeFirstSaveContext(DbContextOptions<FurniturePlannerContext> options, Func<Task> seedBeforeFirstSave) : FurniturePlannerContext(options)
+    {
+        private bool _seeded;
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            if (!_seeded) { _seeded = true; await seedBeforeFirstSave(); }
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class SeedBeforeFirstSaveContextFactory(DbContextOptions<FurniturePlannerContext> options, Func<Task> seedBeforeFirstSave) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new SeedBeforeFirstSaveContext(options, seedBeforeFirstSave);
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    // Task 4b: SetRolesAsync's last-admin guard and its role write were never in the same transaction
+    // (unlike DeactivateAsync, already fixed in Task 4) - two racing calls could each read the other
+    // as cover and both proceed, leaving zero active admins. The BeginTransactionAsync wrap (the
+    // DeactivateAsync idiom) makes the racer's own transaction attempt on the same connection fail
+    // outright instead of silently succeeding - either outcome per call is acceptable here, the
+    // invariant that must hold is that at least one admin survives the race.
+    [Fact]
+    public async Task SetRoles_RacesLastAdminGuard_NeverLeavesZeroActiveAdmins()
+    {
+        var (baseFactory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var setup = new UserAdminService(baseFactory, new PasswordHasher<FurnitureUser>());
+        await setup.CreateAsync("admin1", "A", "One", "secret1", [Roles.Admin]);
+        await setup.CreateAsync("admin2", "A", "Two", "secret1", [Roles.Admin]);
+        var admin1Id = (await setup.ListAsync()).Single(u => u.UserName == "admin1").Id;
+        var admin2Id = (await setup.ListAsync()).Single(u => u.UserName == "admin2").Id;
+
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
+        var raceFactory = new SeedBeforeFirstSaveContextFactory(options, async () =>
+        {
+            var racer = new UserAdminService(new TestDbContextFactory(options), new PasswordHasher<FurnitureUser>());
+            try { await racer.SetRolesAsync(admin2Id, [Roles.Office]); } catch { /* a rejected race is fine - see assertion */ }
+        });
+        var racingService = new UserAdminService(raceFactory, new PasswordHasher<FurnitureUser>());
+
+        try { await racingService.SetRolesAsync(admin1Id, [Roles.Office]); } catch { /* a rejected race is fine - see assertion */ }
+
+        var activeAdmins = (await setup.ListAsync()).Count(u => u.Roles.Contains(Roles.Admin) && !u.IsDeactivated);
+        Assert.True(activeAdmins >= 1, "the last-admin guard must never let a race strip every admin");
+    }
+
     [Fact]
     public async Task ResetPassword_Verifies_AndRejectsShortPassword()
     {

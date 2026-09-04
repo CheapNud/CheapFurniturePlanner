@@ -209,4 +209,24 @@ public class FirmServiceTests
 
         Assert.Empty(await service.FirmsAsync());
     }
+
+    // MB1 Task 3 backstop: FirmService.AddFirmAsync only ever makes the FIRST firm default, so this
+    // raw insert deliberately bypasses the service to prove the filtered unique index (IsDefault)
+    // holds the "exactly one default firm" invariant against something that skips it entirely - the
+    // same HD1 backstop shape as ConsumerDeliveryAddresses.
+    [Fact]
+    public async Task RawInsert_SecondDefaultFirm_Throws()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.Firms.Add(new Firm { Code = "ALP", Name = "Alpine Living", IsDefault = true });
+            await db.SaveChangesAsync();
+        }
+
+        await using var dupDb = await factory.CreateDbContextAsync();
+        dupDb.Firms.Add(new Firm { Code = "URB", Name = "Urban Nest", IsDefault = true });
+        await Assert.ThrowsAsync<DbUpdateException>(() => dupDb.SaveChangesAsync());
+    }
 }

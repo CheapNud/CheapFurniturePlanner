@@ -22,6 +22,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CheapFurniturePlanner;
@@ -58,10 +59,21 @@ class Program
             })
             .ConfigureEndpoints(app => app.MapControllers());
 
-        // Configure Entity Framework
+        // Configure Entity Framework - Database:Provider picks sqlite (default, desktop) or
+        // postgres (opt-in, future hosted mode). No appsettings.json means Database:Provider is
+        // absent, which resolves to the same UseSqlite call this project always made.
         var connectionString = GetConnectionString();
+        // SetBasePath pins file resolution to the assembly's own folder - a desktop app can be
+        // launched (double-click, shortcut, Velopack) with an unpredictable current directory,
+        // unlike a web app started from its project folder.
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: true)
+            .AddEnvironmentVariables()
+            .Build();
 
-        builder.Services.AddDbContextFactory<FurniturePlannerContext>(options => options.UseSqlite(connectionString));
+        builder.Services.AddDbContextFactory<FurniturePlannerContext>(options =>
+            DbProviderConfigurator.Configure(options, configuration, connectionString));
 
         // Identity: relaxed password policy (desktop app, not internet-facing) and deliberate
         // opt-out of failed-attempt lockout - deactivation (Task 2) sets LockoutEnd directly instead.
@@ -120,6 +132,18 @@ class Program
             migrateContext.Database.Migrate();
             RoleSeeder.SeedAsync(migrateContext).GetAwaiter().GetResult();
             scope.ServiceProvider.GetRequiredService<VariantNamingAbsorber>().AbsorbAsync().GetAwaiter().GetResult();
+
+            // MB1 backstop: computes DiscountRule.IdentityKey for any pre-MB1 row still carrying the
+            // default empty key, before the filtered unique index on (SellerId, IdentityKey) has to
+            // hold against real data. Idempotent no-op once every row has a key.
+            scope.ServiceProvider.GetRequiredService<DiscountService>().BackfillIdentityKeysAsync().GetAwaiter().GetResult();
+
+            // Task 4b backstop, same idiom: rewrites any pre-existing null HardnessCode on
+            // MaterialStock/MaterialProfile/MaterialSupplierTerm to the "" row-layer sentinel before
+            // those tables' unique indexes have to hold against real data (see MaterialHardnessBackfill
+            // and FurniturePlannerContext's comment on the indexes). Idempotent no-op once every row
+            // carries "".
+            MaterialHardnessBackfill.RunAsync(migrateContext).GetAwaiter().GetResult();
 
             // Seed the authoring store from the embedded demo catalogue if it hasn't been seeded
             // already - the store is the sole authoring source from here on. This runs regardless

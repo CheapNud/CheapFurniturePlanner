@@ -28,4 +28,8 @@ public class ProductionUnit
     public SupplierOrder? SupplierOrder { get; set; }
     public int? SupplierDeliveryId { get; set; }
     public SupplierDelivery? SupplierDelivery { get; set; }
+    // MB1: optimistic concurrency token over State/TripId/LoadPosition - see
+    // AuthoringModelDocument.Version for why it's a plain int, bumped explicitly by
+    // ProductionUnitService wherever one of those fields changes.
+    public int Version { get; set; }
 }

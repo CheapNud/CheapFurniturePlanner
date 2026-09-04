@@ -82,11 +82,14 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
         // would hit (ApplyBackflushAsync fails hard there instead of skipping). Surfaced here as its
         // own list rather than thrown, since a forecast sweep must keep going for every OTHER unit.
         var unpinnedUnitCodes = new SortedSet<string>(StringComparer.Ordinal);
-        var needs = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), decimal>();
-        var displayNames = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), string>();
+        // Task 4b: HardnessCode is the row-layer "" sentinel here, never null (FurniturePlannerContext's
+        // comment on the MaterialStock/Profile/SupplierTerm indexes) - every key built below normalizes
+        // a domain-null HardnessCode to "" so the join against those tables' rows actually matches.
+        var needs = new Dictionary<(MaterialKind Kind, string Code, string HardnessCode), decimal>();
+        var displayNames = new Dictionary<(MaterialKind Kind, string Code, string HardnessCode), string>();
         // Orders whose units demand each material identity - feeds the order-by date (earliest
         // PromisedDeliveryDate among these, minus the preferred term's lead time).
-        var demandingOrderIds = new Dictionary<(MaterialKind Kind, string Code, string? HardnessCode), HashSet<int>>();
+        var demandingOrderIds = new Dictionary<(MaterialKind Kind, string Code, string HardnessCode), HashSet<int>>();
         foreach (var group in inHouse.GroupBy(c => c.PinnedVersion))
         {
             if (group.Key is null)
@@ -101,7 +104,13 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
                 var lines = MaterialRequirements.Resolve(snapshot, unit.ModelCode, unit.ElementCode, selections, unit.FabricColorCode);
                 foreach (var line in lines)
                 {
-                    var key = (line.Kind, line.Code, line.HardnessCode);
+                    // Task 4b: correlate on the same "" sentinel the stock/profile/term rows below
+                    // now carry (FurniturePlannerContext's comment on those indexes) - Resolve() keeps
+                    // producing a domain-null HardnessCode for every non-Foam line, but the join below
+                    // must treat that the same as the row-layer "" or InStock/MinimumStock/preferred-
+                    // term lookups would silently miss a real row. Denormalized back to null at the
+                    // MaterialForecastRow boundary below - outward callers still see null, unchanged.
+                    var key = (line.Kind, line.Code, line.HardnessCode ?? "");
                     needs[key] = needs.GetValueOrDefault(key) + line.Quantity;
                     if (!displayNames.ContainsKey(key)) { displayNames[key] = ResolveDisplayName(snapshot, line.Kind, line.Code); }
                     if (!demandingOrderIds.TryGetValue(key, out var orders)) { orders = []; demandingOrderIds[key] = orders; }
@@ -111,11 +120,11 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
         }
 
         var stocks = await db.MaterialStocks.AsNoTracking()
-            .ToDictionaryAsync(s => (s.Kind, s.Code, s.HardnessCode), s => s.Amount, ct);
+            .ToDictionaryAsync(s => (s.Kind, s.Code, s.HardnessCode ?? ""), s => s.Amount, ct);
         var onOrder = await db.MaterialOrderLines.AsNoTracking()
             .Join(db.MaterialOrders.AsNoTracking().Where(o => o.State == MaterialOrderState.Draft || o.State == MaterialOrderState.Sent),
                 l => l.MaterialOrderId, o => o.Id, (l, o) => l)
-            .GroupBy(l => new { l.Kind, l.Code, l.HardnessCode })
+            .GroupBy(l => new { l.Kind, l.Code, HardnessCode = l.HardnessCode ?? "" })
             .Select(g => new { g.Key, Remainder = g.Sum(l => l.QuantityOrdered - l.QuantityReceived) })
             .ToDictionaryAsync(g => (g.Key.Kind, g.Key.Code, g.Key.HardnessCode), g => g.Remainder, ct);
 
@@ -123,13 +132,13 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
         // SP-2 defaults (0, no override), so a material never authored in the Profile dialog forecasts
         // exactly as it did before this task.
         var profiles = await db.MaterialProfiles.AsNoTracking()
-            .ToDictionaryAsync(p => (p.Kind, p.Code, p.HardnessCode), p => p, ct);
+            .ToDictionaryAsync(p => (p.Kind, p.Code, p.HardnessCode ?? ""), p => p, ct);
         // Exactly one preferred term per material identity (MaterialPlanningService's invariant) -
         // supply-side knobs (lead time, MOQ, package, price, supplier) all read from it; a material
         // with no terms at all has no preferred row and every one of these stays at its default.
         var preferredTerms = await db.MaterialSupplierTerms.AsNoTracking().Include(t => t.Supplier)
             .Where(t => t.IsPreferred)
-            .ToDictionaryAsync(t => (t.Kind, t.Code, t.HardnessCode), t => t, ct);
+            .ToDictionaryAsync(t => (t.Kind, t.Code, t.HardnessCode ?? ""), t => t, ct);
         // Only consumption-typed movements ever feed the average (Receipt/Adjustment are excluded by
         // construction, not filtered out below) - loaded once per material identity so the trailing
         // window sum only has to slice a short in-memory list per row.
@@ -137,7 +146,7 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
             .Where(m => m.Type == MaterialMovementType.Backflush || m.Type == MaterialMovementType.BackflushUndo)
             .ToListAsync(ct);
         var consumptionByMaterial = consumptionMovements
-            .GroupBy(m => (m.Kind, m.Code, m.HardnessCode))
+            .GroupBy(m => (m.Kind, m.Code, m.HardnessCode ?? ""))
             .ToDictionary(g => g.Key, g => g.ToList());
         var windowStart = _now().AddDays(-56);
         var today = _now().Date;
@@ -148,7 +157,7 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
         // suggested>0 filter below (applied only to the zero-demand ones) keeps a term/profile alone
         // from listing a material nobody needs and that's already stocked past its minimum (SP-2
         // parity: an identity with neither stays out entirely, same as before).
-        var candidateKeys = new HashSet<(MaterialKind Kind, string Code, string? HardnessCode)>(
+        var candidateKeys = new HashSet<(MaterialKind Kind, string Code, string HardnessCode)>(
             needs.Where(kv => kv.Value > 0m).Select(kv => kv.Key));
         candidateKeys.UnionWith(profiles.Keys);
         candidateKeys.UnionWith(preferredTerms.Keys);
@@ -204,7 +213,10 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
             var unitPrice = preferredTerm?.UnitPrice;
             var estimatedCost = unitPrice is decimal price ? suggested * price : (decimal?)null;
 
-            return new MaterialForecastRow(kind, code, hardnessCode, displayNames.GetValueOrDefault(key, code),
+            // Denormalize back to null for the outward DTO - MaterialForecastRow.HardnessCode keeps
+            // its pre-existing null-for-blank contract (Task 4b: the sentinel is a row-layer concern).
+            var outwardHardness = hardnessCode.Length == 0 ? null : hardnessCode;
+            return new MaterialForecastRow(kind, code, outwardHardness, displayNames.GetValueOrDefault(key, code),
                 grossNeed, inStock, inStock - grossNeed, onOrderQty, suggested,
                 minimumStock, averageUsagePerWeek, averageUsageIsOverride, belowMinimum,
                 orderByDate, orderByOverdue, preferredTerm?.SupplierId, preferredTerm?.Supplier?.Name,
@@ -232,15 +244,22 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
     {
         await RequireAdminOrOfficeAsync();
         await using var db = await factory.CreateDbContextAsync(ct);
-        var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == kind && s.Code == code && s.HardnessCode == hardnessCode, ct);
+        // Task 4b: "" sentinel for the MaterialStock row only (FurniturePlannerContext's comment on
+        // its unique index) - the movement below keeps the caller's original value, since it carries
+        // no such index and isn't part of this fix's scope. The find also tolerates a still-null row
+        // (pre-backfill, or seeded straight through the DbContext) by coalescing its own HardnessCode
+        // too, so this never spuriously inserts a duplicate onto a legacy row it should be updating.
+        var normalizedHardness = hardnessCode ?? "";
+        var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == kind && s.Code == code && (s.HardnessCode ?? "") == normalizedHardness, ct);
         var oldAmount = stock?.Amount ?? 0m;
         if (stock is null)
         {
-            stock = new MaterialStock { Kind = kind, Code = code, HardnessCode = hardnessCode, Amount = newAmount, UpdatedAt = DateTime.UtcNow };
+            stock = new MaterialStock { Kind = kind, Code = code, HardnessCode = normalizedHardness, Amount = newAmount, UpdatedAt = DateTime.UtcNow };
             db.MaterialStocks.Add(stock);
         }
         else
         {
+            stock.HardnessCode = normalizedHardness; // self-heals a still-legacy-null row on touch
             stock.Amount = newAmount;
             stock.UpdatedAt = DateTime.UtcNow;
         }
@@ -257,7 +276,9 @@ public sealed class MaterialNeedsService(IDbContextFactory<FurniturePlannerConte
             UserId = await currentUser.UserIdAsync(),
         });
 
-        await db.SaveChangesAsync(ct);
+        // additive: false - this is a set-to-newAmount write, not a delta, so a losing find-or-create
+        // race retries as "set the now-real row to newAmount", same as if it had found it the first time.
+        await MaterialStockUpsertRetry.SaveAsync(db, additive: false, ct);
     }
 
     public async Task<string> ExportCsvAsync(MaterialForecast forecast, CancellationToken ct = default)

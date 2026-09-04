@@ -393,6 +393,56 @@ public class MaterialNeedsServiceTests
         }
     }
 
+    // Intercepts AdjustStockAsync's own SaveChangesAsync and, before it runs, inserts the competing
+    // MaterialStock row through a second context on the same connection - so AdjustStockAsync's own
+    // find-or-create genuinely raced and lost (its find already ran and returned null), exercising
+    // the real unique-index retry path rather than a pre-seeded row its own find would have seen.
+    // Mirrors MaterialOrderServiceTests' SeedBeforeFirstSaveContext.
+    private sealed class SeedBeforeFirstSaveContext(DbContextOptions<FurniturePlannerContext> options, Func<Task> seedBeforeFirstSave) : FurniturePlannerContext(options)
+    {
+        private bool _seeded;
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            if (!_seeded) { _seeded = true; await seedBeforeFirstSave(); }
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class SeedBeforeFirstSaveContextFactory(DbContextOptions<FurniturePlannerContext> options, Func<Task> seedBeforeFirstSave) : IDbContextFactory<FurniturePlannerContext>
+    {
+        public FurniturePlannerContext CreateDbContext() => new SeedBeforeFirstSaveContext(options, seedBeforeFirstSave);
+        public Task<FurniturePlannerContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    [Fact]
+    public async Task AdjustStockAsync_StockRowInsertedConcurrently_RetriesAsAbsoluteSet_MovementWrittenOnce()
+    {
+        var (baseFactory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+
+        var options = new DbContextOptionsBuilder<FurniturePlannerContext>().UseSqlite(conn).Options;
+        var raceFactory = new SeedBeforeFirstSaveContextFactory(options, async () =>
+        {
+            await using var racer = new FurniturePlannerContext(options);
+            racer.MaterialStocks.Add(new MaterialStock { Kind = MaterialKind.Foam, Code = "FM-STD", HardnessCode = "H35", Amount = 7m, UpdatedAt = DateTime.UtcNow });
+            await racer.SaveChangesAsync();
+        });
+        var racingService = new MaterialNeedsService(raceFactory, OfficeUser, new PinnedCatalogueProvider(raceFactory), NewOutputRoot());
+
+        await racingService.AdjustStockAsync(MaterialKind.Foam, "FM-STD", "H35", 12m);
+
+        await using var db = await baseFactory.CreateDbContextAsync();
+        // Absolute set wins regardless of the race - the racer's 7 is overwritten, not added to.
+        var stock = await db.MaterialStocks.SingleAsync(s => s.Kind == MaterialKind.Foam && s.Code == "FM-STD" && s.HardnessCode == "H35");
+        Assert.Equal(12m, stock.Amount);
+        Assert.Equal(1, await db.MaterialStocks.CountAsync()); // upserted onto the one real row, no orphaned duplicate
+        var movement = await db.MaterialMovements.SingleAsync(); // this call's own movement, written exactly once despite the retry
+        // Task 4b: the audit quantity must be the TRUE delta (12 - the racer's real 7 = 5), not
+        // newAmount - 0 (12) - the wrong assumption AdjustStockAsync's own find-or-create made before
+        // it knew the retry would discover a real prior amount.
+        Assert.Equal(5m, movement.Quantity);
+    }
+
     [Fact]
     public async Task AdjustStockAsync_RejectsMechanicAndWarehouse()
     {

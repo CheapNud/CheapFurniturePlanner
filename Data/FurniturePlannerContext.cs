@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 namespace CheapFurniturePlanner.Data;
 
@@ -85,7 +86,9 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         SeedDefaultData(modelBuilder);
     }
 
-    private static void ConfigureFurnitureEntities(ModelBuilder modelBuilder)
+    // Instance method (not static) so the ConsumerDeliveryAddress index below can read
+    // this.Database.IsNpgsql() to pick the right filtered-index syntax for the provider.
+    private void ConfigureFurnitureEntities(ModelBuilder modelBuilder)
     {
         // Configure FurnitureItem
         modelBuilder.Entity<FurnitureItem>(entity =>
@@ -98,8 +101,10 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasIndex(e => e.IsActive);
             entity.HasIndex(e => e.Name);
 
-            // Default values for SQLite
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("DATETIME('now')");
+            // Default value for CreatedAt: SQLite and Npgsql speak different SQL for "now" ("DATETIME('now')"
+            // is SQLite-only syntax, invalid on Postgres). Branch on the same Database.IsNpgsql() pattern
+            // used elsewhere in this method - SQLite side is untouched so has-pending-model-changes stays clean.
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql(Database.IsNpgsql() ? "now()" : "DATETIME('now')");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
 
             // Decimal precision for SQLite compatibility
@@ -120,8 +125,8 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasIndex(e => e.CreatedAt);
             entity.HasIndex(e => e.CreatedBy);
 
-            // Default values for SQLite
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("DATETIME('now')");
+            // Default value for CreatedAt - see the FurnitureItem block above for why this branches.
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql(Database.IsNpgsql() ? "now()" : "DATETIME('now')");
             entity.Property(e => e.ShowGrid).HasDefaultValue(true);
             entity.Property(e => e.PreventOverlap).HasDefaultValue(true);
             entity.Property(e => e.EnableSnapping).HasDefaultValue(true);
@@ -144,8 +149,8 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasIndex(e => new { e.RoomPlanId, e.UIId }).IsUnique();
             entity.HasIndex(e => e.GroupId);
 
-            // Default values for SQLite
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("DATETIME('now')");
+            // Default value for CreatedAt - see the FurnitureItem block above for why this branches.
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql(Database.IsNpgsql() ? "now()" : "DATETIME('now')");
             entity.Property(e => e.Rotation).HasDefaultValue(0);
 
             // Decimal precision for SQLite compatibility
@@ -172,13 +177,24 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Version).IsUnique();
             entity.HasIndex(e => e.IsCurrent);
-            entity.Property(e => e.PublishedAt).HasDefaultValueSql("DATETIME('now')");
+            // Default value for PublishedAt - see the FurnitureItem block above for why this branches.
+            entity.Property(e => e.PublishedAt).HasDefaultValueSql(Database.IsNpgsql() ? "now()" : "DATETIME('now')");
         });
 
         modelBuilder.Entity<ModelStateRecord>().HasIndex(s => s.ModelCode).IsUnique();
         modelBuilder.Entity<ModelStateRecord>().Property(s => s.State).HasConversion<string>();
 
-        modelBuilder.Entity<AuthoringModelDocument>().HasIndex(m => m.ModelCode).IsUnique();
+        modelBuilder.Entity<AuthoringModelDocument>(entity =>
+        {
+            entity.HasIndex(m => m.ModelCode).IsUnique();
+            // MB1: SQLite has no rowversion, so Version is a plain int concurrency token bumped
+            // explicitly by AuthoringCatalogueStore's save path (the simplest option per the plan -
+            // no SaveChanges interceptor). A stale save (loaded-then-changed-underneath) throws
+            // DbUpdateConcurrencyException, which the store turns into a friendly "reload" error.
+            entity.Property(m => m.Version).IsConcurrencyToken();
+        });
+        modelBuilder.Entity<AuthoringMastersDocument>().Property(m => m.Version).IsConcurrencyToken();
+        modelBuilder.Entity<AuthoringArticlesDocument>().Property(m => m.Version).IsConcurrencyToken();
 
         modelBuilder.Entity<ServiceTicket>(entity =>
         {
@@ -215,6 +231,9 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasOne(u => u.Order).WithMany().HasForeignKey(u => u.OrderId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<OrderLine>().WithMany().HasForeignKey(u => u.OrderLineId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(u => u.Trip).WithMany(t => t.Units).HasForeignKey(u => u.TripId).OnDelete(DeleteBehavior.SetNull);
+            // MB1: concurrency token over State/TripId/LoadPosition - see AuthoringModelDocument's
+            // Version above for why it's a plain bumped int rather than a rowversion.
+            entity.Property(u => u.Version).IsConcurrencyToken();
         });
         modelBuilder.Entity<Trip>(entity =>
         {
@@ -251,6 +270,20 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         {
             entity.HasIndex(f => f.Code).IsUnique();
             entity.HasOne(f => f.Address).WithMany().HasForeignKey(f => f.AddressId).OnDelete(DeleteBehavior.Restrict);
+            // MB1 backstop, same pattern as the ConsumerDeliveryAddresses HD1 index below:
+            // FirmService.SetDefaultAsync already enforces "exactly one default firm" in code, but a
+            // filtered unique index holds the invariant against a raw insert that bypasses the
+            // service too. Unlike the consumer address index this isn't scoped to a parent id - there
+            // is exactly one default firm system-wide, so the filtered column stands alone. Same
+            // provider branch as the ConsumerDeliveryAddresses index (see its comment for why).
+            if (Database.IsNpgsql())
+            {
+                entity.HasIndex(f => f.IsDefault).IsUnique().HasFilter("\"IsDefault\"").HasDatabaseName("IX_Firms_OneDefault");
+            }
+            else
+            {
+                entity.HasIndex(f => f.IsDefault).IsUnique().HasFilter("IsDefault = 1").HasDatabaseName("IX_Firms_OneDefault");
+            }
         });
         modelBuilder.Entity<Collection>(entity =>
         {
@@ -262,12 +295,25 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
         {
             // HD1 backstop: PartyService.SetDefaultDeliveryAddressAsync already enforces "one default
             // per consumer" in code (clear siblings, then set), but a filtered unique index makes the
-            // invariant hold even against a raw insert that bypasses the service. SQLite's filtered-index
-            // syntax takes a plain boolean SQL predicate over the stored column value (IsDefault is
-            // mapped as an INTEGER 0/1). Replaces the old plain ConsumerId index - EF Core keys index
-            // builders by property set, so a second HasIndex(d => d.ConsumerId) call reconfigures the
-            // same index rather than adding a distinct one.
-            entity.HasIndex(d => d.ConsumerId).IsUnique().HasFilter("IsDefault = 1").HasDatabaseName("IX_ConsumerDeliveryAddresses_ConsumerId_OneDefault");
+            // invariant hold even against a raw insert that bypasses the service. Replaces the old
+            // plain ConsumerId index - EF Core keys index builders by property set, so a second
+            // HasIndex(d => d.ConsumerId) call reconfigures the same index rather than adding a
+            // distinct one.
+            //
+            // The filter predicate is raw provider SQL, so it branches on Database.ProviderName
+            // (populated straight from the DbContextOptions the caller supplied - no open connection
+            // needed, so this resolves correctly under the design-time factory, the real app, and
+            // the in-memory-SQLite test harness every existing test uses). SQLite takes a plain
+            // boolean predicate over the stored INTEGER 0/1 column; Npgsql needs the quoted,
+            // case-sensitive column identifier as the boolean predicate itself.
+            if (Database.IsNpgsql())
+            {
+                entity.HasIndex(d => d.ConsumerId).IsUnique().HasFilter("\"IsDefault\"").HasDatabaseName("IX_ConsumerDeliveryAddresses_ConsumerId_OneDefault");
+            }
+            else
+            {
+                entity.HasIndex(d => d.ConsumerId).IsUnique().HasFilter("IsDefault = 1").HasDatabaseName("IX_ConsumerDeliveryAddresses_ConsumerId_OneDefault");
+            }
             entity.HasOne<Consumer>().WithMany().HasForeignKey(d => d.ConsumerId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(d => d.Address).WithMany().HasForeignKey(d => d.AddressId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -296,6 +342,17 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.HasMany(d => d.Units).WithOne(u => u.SupplierDelivery).HasForeignKey(u => u.SupplierDeliveryId).OnDelete(DeleteBehavior.SetNull);
         });
 
+        // Task 4b: same disease as the DiscountRule backstop below, on these three unique indexes -
+        // HardnessCode stays null for every non-Foam material (and hardness-less Foam), and SQLite/
+        // Postgres both compare NULL <> NULL under a unique index, so two writers racing for the same
+        // material identity could both insert, silently splitting one balance/profile/term across two
+        // rows. No schema change fixes this (a filtered/COALESCE index is DDL this task doesn't touch) -
+        // instead every row-layer read and write of HardnessCode on these three tables (and their
+        // shared retry helper, MaterialStockUpsertRetry) now normalizes to the empty-string sentinel
+        // instead of null, so the SAME index genuinely collides on a real race. MaterialHardnessBackfill
+        // rewrites pre-existing null rows to "" at startup (Program.cs, right after Database.Migrate()),
+        // merging any split it finds. The Domain layer (MaterialRequirements.Resolve, MaterialNeedLine)
+        // keeps its null-for-non-Foam output unchanged - the sentinel is a row-layer concern only.
         modelBuilder.Entity<MaterialStock>(entity =>
         {
             entity.HasIndex(s => new { s.Kind, s.Code, s.HardnessCode }).IsUnique();
@@ -325,6 +382,91 @@ public class FurniturePlannerContext : CheapContext<FurnitureUser>
             entity.Property(m => m.Type).HasConversion<string>();
             entity.Property(m => m.Kind).HasConversion<string>();
         });
+
+        // MB1 backstop, corrected: a raw composite index over the 8 nullable scope columns can never
+        // fire against DiscountService.AddRuleAsync's own validated output, because every valid rule
+        // shape (Validate's needsElement/needsModel/needsModelType/needsMaterialType exclusivity)
+        // leaves several of those columns null, and SQLite/Postgres both compare NULL <> NULL in a
+        // unique index - so two identical legal rules never collide. Instead the service computes
+        // DiscountRule.IdentityKey, a single string collapsing every null scope column to a fixed
+        // sentinel token, and this index is unique on (SellerId, IdentityKey) - now it genuinely
+        // catches an identical rule inserted outside AddRuleAsync's own guard.
+        //
+        // Filtered to non-empty keys: pre-MB1 rows (and rows between migration and the startup
+        // backfill in DiscountService.BackfillIdentityKeysAsync, called from Program.cs right after
+        // Database.Migrate()) carry the IdentityKey default (""), and several such rows under one
+        // seller would otherwise collide with each other and break the migration itself. Once the
+        // backfill runs, no row is left with an empty key, so the filter never hides a real duplicate
+        // in practice - it only protects the narrow migration-time window. Same provider-branched
+        // filter syntax as the ConsumerDeliveryAddresses/Firms indexes above (see their comments).
+        modelBuilder.Entity<DiscountRule>(entity =>
+        {
+            if (Database.IsNpgsql())
+            {
+                entity.HasIndex(r => new { r.SellerId, r.IdentityKey }).IsUnique()
+                    .HasFilter("\"IdentityKey\" <> ''").HasDatabaseName("IX_DiscountRules_SellerId_IdentityKey");
+            }
+            else
+            {
+                entity.HasIndex(r => new { r.SellerId, r.IdentityKey }).IsUnique()
+                    .HasFilter("IdentityKey <> ''").HasDatabaseName("IX_DiscountRules_SellerId_IdentityKey");
+            }
+        });
+
+        // MB-1 Task 2: Npgsql maps DateTime/DateTime? to "timestamp with time zone" (timestamptz)
+        // by default. That default is correct for every INSTANT property on this model (CreatedAt,
+        // SentAt, PlacedAt, IssuedAt, OccurredAt, UpdatedAt, ExportedAt and the rest) - each one is
+        // written from DateTime.UtcNow (verified against every write site), so timestamptz fits
+        // exactly and none of them are touched here.
+        //
+        // A handful of properties are CALENDAR DATES instead: day-precision values a person picks
+        // (a promised delivery day, an expected delivery day) with no meaningful time zone -
+        // callers pass DateTimeKind.Unspecified values, which Npgsql's modern (non-legacy)
+        // timestamp behavior refuses to write against timestamptz. Each is pinned to
+        // "timestamp without time zone" here, scoped to the Npgsql branch only - SQLite has no
+        // separate tz-aware type, so it is unaffected and this whole block is a no-op there.
+        // No property CLR type changes (no DateOnly migration) - zero model ripple, per plan.
+        //
+        // RULE: classify by the DateTimeKind the write sites actually produce, never by semantic
+        // day-ness. A property that reads like a "day" in the domain (an invoice due date, a
+        // catalogue effective date) is still an INSTANT if every write site carries Kind=Utc - a
+        // Utc-kinded day-precision value is an instant, and pinning it here throws under Npgsql
+        // instead of fixing anything (Npgsql rejects a Utc DateTime against
+        // "timestamp without time zone" the same way it rejects Unspecified against timestamptz).
+        // Invoice.DueDate and PublishedCatalogue.EffectiveDate look like calendar dates but are
+        // Utc-kinded at every write site (PublishVersionDialog.razor SpecifyKind(...,Utc);
+        // CataloguePublishService falls back to UtcNow; InvoicingService derives DueDate from
+        // issuedAt.AddDays(30), and issuedAt is UtcNow) - they stay off this list.
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.Entity<Order>().Property(o => o.PromisedDeliveryDate).HasColumnType("timestamp without time zone");
+            modelBuilder.Entity<SupplierDelivery>().Property(d => d.ExpectedDate).HasColumnType("timestamp without time zone");
+            modelBuilder.Entity<Trip>().Property(t => t.DepartureDate).HasColumnType("timestamp without time zone");
+            modelBuilder.Entity<InternalRepair>().Property(r => r.ExecutionDate).HasColumnType("timestamp without time zone");
+        }
+
+        // Review fix: the "REAL" pins above (and PlannerFurnitureItem.CachedUnitPrice's own
+        // [Column(TypeName="REAL")] attribute) exist for SQLite - REAL is SQLite's only
+        // floating-point storage class. Left unbranched, they flow straight into Postgres as
+        // float4, squeezing decimal money columns into binary float and narrowing the
+        // dimension/coordinate doubles below Npgsql's own default width. Same Npgsql-only branch
+        // pattern as the timestamp pin above: SQLite keeps REAL exactly as today, this whole
+        // block is a no-op there.
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.Entity<FurnitureItem>().Property(e => e.Price).HasColumnType("numeric");
+            modelBuilder.Entity<PlannerFurnitureItem>().Property(e => e.CachedUnitPrice).HasColumnType("numeric");
+
+            modelBuilder.Entity<FurnitureItem>().Property(e => e.Width).HasColumnType("double precision");
+            modelBuilder.Entity<FurnitureItem>().Property(e => e.Length).HasColumnType("double precision");
+            modelBuilder.Entity<FurnitureItem>().Property(e => e.Height).HasColumnType("double precision");
+            modelBuilder.Entity<FurnitureItem>().Property(e => e.Weight).HasColumnType("double precision");
+            modelBuilder.Entity<RoomPlan>().Property(e => e.Width).HasColumnType("double precision");
+            modelBuilder.Entity<RoomPlan>().Property(e => e.Height).HasColumnType("double precision");
+            modelBuilder.Entity<PlannerFurnitureItem>().Property(e => e.X).HasColumnType("double precision");
+            modelBuilder.Entity<PlannerFurnitureItem>().Property(e => e.Y).HasColumnType("double precision");
+            modelBuilder.Entity<PlannerFurnitureItem>().Property(e => e.Rotation).HasColumnType("double precision");
+        }
     }
 
     private static void SeedDefaultData(ModelBuilder modelBuilder)

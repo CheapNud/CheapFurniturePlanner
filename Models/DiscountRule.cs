@@ -22,4 +22,11 @@ public class DiscountRule
     public string? MaterialTypeCode { get; set; }
     public decimal? RatePercent { get; set; }
     public decimal? FixedPrice { get; set; }
+
+    // Canonical duplicate-detection key computed by DiscountService (the only writer). The nullable
+    // scope columns above collapse to a fixed sentinel token here so the unique backstop index on
+    // (SellerId, IdentityKey) actually collides on two identical rules - a raw composite index over
+    // the nullable columns themselves never fires, because every valid rule shape leaves several of
+    // them null and SQL treats NULL <> NULL.
+    public string IdentityKey { get; set; } = "";
 }

@@ -72,8 +72,9 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
             unit.LoadPosition = null;
             unit.SupplierDeliveryId = null;
             if (unit.SupplierOrderId is int poId && linkedOrderStates.GetValueOrDefault(poId) == SupplierOrderState.Draft) { unit.SupplierOrderId = null; }
+            unit.Version++;
         }
-        await db.SaveChangesAsync(ct);
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
 
         if (affectedTripIds.Count > 0)
         {
@@ -156,7 +157,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         if (unit.State == ProductionUnitState.Arrived) { return ScanOutcome.AlreadyArrived; }
         Arrive(unit);
         await CompleteSupplierOrderIfLinkedAsync(db, unit, ct);
-        await db.SaveChangesAsync(ct);
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
         return ScanOutcome.Arrived;
     }
 
@@ -168,7 +169,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         if (unit.State != ProductionUnitState.Expected) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not expected."); }
         Arrive(unit);
         await CompleteSupplierOrderIfLinkedAsync(db, unit, ct);
-        await db.SaveChangesAsync(ct);
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
     }
 
     // Loads the unit's purchase order (with Units) inside the same context/transaction as the
@@ -198,7 +199,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         if (!await IsInHouseUnitAsync(db, unit, ct)) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not marked in-house."); }
         Arrive(unit);
         await ApplyBackflushAsync(db, unit, -1m, ct);
-        await db.SaveChangesAsync(ct);
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
     }
 
     public async Task UndoArriveAsync(int unitId, string? reviewNote = null, CancellationToken ct = default)
@@ -211,6 +212,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         unit.State = ProductionUnitState.Expected;
         unit.ArrivedAt = null;
         unit.ReviewNote = string.IsNullOrWhiteSpace(reviewNote) ? unit.ReviewNote : reviewNote.Trim();
+        unit.Version++;
         // The one sanctioned Completed exit: undo reverses the completing arrival, so a PO that
         // auto-completed on this unit's arrival must reopen to Sent (loaded in the same
         // context/save as the unit's own reversal - see CompleteSupplierOrderIfLinkedAsync above).
@@ -223,7 +225,7 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         // arrival, so only an in-house unit gets them back here. An externally-received unit never
         // backflushed (ArriveAsync never does), so this branch must stay untouched for it.
         if (await IsInHouseUnitAsync(db, unit, ct)) { await ApplyBackflushAsync(db, unit, 1m, ct); }
-        await db.SaveChangesAsync(ct);
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
     }
 
     public async Task<Trip> CreateTripAsync(CancellationToken ct = default)
@@ -301,7 +303,8 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         }
         if (unit.TripId is not null) { throw new InvalidOperationException($"Unit {unit.UnitCode} is already on a trip."); }
         unit.TripId = tripId;
-        await db.SaveChangesAsync(ct);
+        unit.Version++;
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
     }
 
     public async Task ReleaseFromTripAsync(int unitId, CancellationToken ct = default)
@@ -314,7 +317,8 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
             await RequirePlanningTripAsync(db, assignedTripId, ct);
             unit.TripId = null;
             unit.LoadPosition = null;
-            await db.SaveChangesAsync(ct);
+            unit.Version++;
+            await SaveOrThrowFriendlyConflictAsync(db, ct);
         }
     }
 
@@ -326,7 +330,8 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         if (unit.TripId is not int assignedTripId) { throw new InvalidOperationException($"Unit {unit.UnitCode} is not on a trip."); }
         await RequirePlanningTripAsync(db, assignedTripId, ct);
         unit.LoadPosition = loadPosition;
-        await db.SaveChangesAsync(ct);
+        unit.Version++;
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
     }
 
     public async Task DepartAsync(int tripId, CancellationToken ct = default)
@@ -354,8 +359,9 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         var unit = await RequireUnitAsync(db, unitId, ct);
         var trip = await RequireDepartedTripAsync(db, unit, ct);
         unit.State = ProductionUnitState.Delivered;
+        unit.Version++;
         TryCompleteTrip(trip);
-        await db.SaveChangesAsync(ct);
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
     }
 
     public async Task ConfirmFailedAsync(int unitId, string reason, CancellationToken ct = default)
@@ -371,9 +377,10 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         // (e.g. ArriveAsync flagging a mismatch), and a failed delivery must not erase it.
         var trimmedReason = reason.Trim();
         unit.ReviewNote = string.IsNullOrWhiteSpace(unit.ReviewNote) ? trimmedReason : $"{unit.ReviewNote} / failure: {trimmedReason}";
+        unit.Version++;
         trip.Units.Remove(unit);
         TryCompleteTrip(trip);
-        await db.SaveChangesAsync(ct);
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
     }
 
     private static async Task<Trip> RequireDepartedTripAsync(FurniturePlannerContext db, ProductionUnit unit, CancellationToken ct)
@@ -435,6 +442,23 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
     {
         unit.State = ProductionUnitState.Arrived;
         unit.ArrivedAt = DateTime.UtcNow;
+        unit.Version++;
+    }
+
+    // Concurrency conflict on a unit's state/trip write (e.g. cancelling an order while its unit is
+    // concurrently being loaded onto a departing trip) surfaces here as a friendly, actionable error
+    // instead of a raw EF exception - the loser reloads and retries instead of silently producing a
+    // double-state unit (both cancelled and still on a trip, or the reverse).
+    private static async Task SaveOrThrowFriendlyConflictAsync(FurniturePlannerContext db, CancellationToken ct)
+    {
+        try
+        {
+            // FinishAsync/UndoArriveAsync ride ApplyBackflushAsync's MaterialStock upserts through
+            // this same save - additive, same start-at-0 shape as MaterialOrderService.ReceiveAsync.
+            // Callers that never touch stock (Arrive/Assign/etc.) just get a plain save back.
+            await MaterialStockUpsertRetry.SaveAsync(db, additive: true, ct);
+        }
+        catch (DbUpdateConcurrencyException) { throw new InvalidOperationException("Someone else updated this unit - reload and retry."); }
     }
 
     // The one query shape for "in-house" (FinishAsync's guard, UndoArriveAsync's reversal branch,
@@ -466,12 +490,17 @@ public sealed class ProductionUnitService(IDbContextFactory<FurniturePlannerCont
         var userId = await currentUser.UserIdAsync();
         foreach (var need in needLines)
         {
-            var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == need.Kind && s.Code == need.Code && s.HardnessCode == need.HardnessCode, ct);
+            // Task 4b: "" sentinel for the MaterialStock row only (FurniturePlannerContext's comment
+            // on its unique index) - the movement below keeps need.HardnessCode as Resolve() gave it
+            // (domain-null for every non-Foam material, unchanged).
+            var normalizedHardness = need.HardnessCode ?? "";
+            var stock = await db.MaterialStocks.FirstOrDefaultAsync(s => s.Kind == need.Kind && s.Code == need.Code && (s.HardnessCode ?? "") == normalizedHardness, ct);
             if (stock is null)
             {
-                stock = new MaterialStock { Kind = need.Kind, Code = need.Code, HardnessCode = need.HardnessCode };
+                stock = new MaterialStock { Kind = need.Kind, Code = need.Code, HardnessCode = normalizedHardness };
                 db.MaterialStocks.Add(stock);
             }
+            stock.HardnessCode = normalizedHardness; // self-heals a still-legacy-null row on touch
             stock.Amount += sign * need.Quantity;
             stock.UpdatedAt = DateTime.UtcNow;
 

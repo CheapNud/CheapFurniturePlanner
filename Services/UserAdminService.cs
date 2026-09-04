@@ -64,12 +64,18 @@ public sealed class UserAdminService(IDbContextFactory<FurniturePlannerContext> 
             ConcurrencyStamp = Guid.NewGuid().ToString("D"),
         };
         user.PasswordHash = hasher.HashPassword(user, password);
+
+        // Two SaveChanges (the user needs its generated Id before the role rows can reference it) -
+        // the ModelAuthoringService.DeleteAsync idiom wraps them in one transaction so a failure
+        // adding the roles never leaves a roleless user row behind.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         db.Users.Add(user);
         await db.SaveChangesAsync(ct);
 
         var roleIds = await db.Roles.Where(r => roles.Contains(r.Name)).Select(r => r.Id).ToListAsync(ct);
         db.UserRoles.AddRange(roleIds.Select(roleId => new IdentityUserRole<string> { UserId = user.Id, RoleId = roleId }));
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     public async Task SetRolesAsync(string userId, IReadOnlyList<string> roles, CancellationToken ct = default)
@@ -77,6 +83,10 @@ public sealed class UserAdminService(IDbContextFactory<FurniturePlannerContext> 
         ValidateRoles(roles);
 
         await using var db = await factory.CreateDbContextAsync(ct);
+        // Task 4b: DeactivateAsync idiom - the last-admin read and the role write share one
+        // transaction, so a second SetRolesAsync/DeactivateAsync racing on the same admin's cover
+        // can never both read stale cover and both proceed to zero active admins.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         await RequireUserAsync(db, userId, ct);
 
         if (!roles.Contains(Roles.Admin))
@@ -90,11 +100,15 @@ public sealed class UserAdminService(IDbContextFactory<FurniturePlannerContext> 
         var roleIds = await db.Roles.Where(r => roles.Contains(r.Name)).Select(r => r.Id).ToListAsync(ct);
         db.UserRoles.AddRange(roleIds.Select(roleId => new IdentityUserRole<string> { UserId = userId, RoleId = roleId }));
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     public async Task DeactivateAsync(string userId, CancellationToken ct = default)
     {
         await using var db = await factory.CreateDbContextAsync(ct);
+        // ModelAuthoringService.DeleteAsync idiom: the last-admin read and the deactivating write
+        // share one transaction, so the guard's answer and what actually lands never drift apart.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
         var user = await RequireUserAsync(db, userId, ct);
 
         await EnsureAdminCoverageAsync(db, userId, ct);
@@ -103,6 +117,7 @@ public sealed class UserAdminService(IDbContextFactory<FurniturePlannerContext> 
         user.LockoutEnd = DateTimeOffset.MaxValue;
         user.SecurityStamp = Guid.NewGuid().ToString("D");
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     public async Task ReactivateAsync(string userId, CancellationToken ct = default)

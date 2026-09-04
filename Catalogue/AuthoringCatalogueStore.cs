@@ -100,8 +100,8 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
             var nextOrder = (await db.AuthoringModels.AnyAsync(ct)) ? await db.AuthoringModels.MaxAsync(m => m.SortOrder, ct) + 1 : 0;
             db.AuthoringModels.Add(new AuthoringModelDocument { ModelCode = model.Code, SortOrder = nextOrder, BundleJson = json });
         }
-        else { row.BundleJson = json; }
-        await db.SaveChangesAsync(ct);
+        else { row.BundleJson = json; row.Version++; }
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
     }
 
     public async Task DeleteModelAsync(string modelCode, CancellationToken ct = default)
@@ -142,8 +142,8 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
         }
         var row = await db.AuthoringMasters.FirstOrDefaultAsync(ct);
         if (row is null) { db.AuthoringMasters.Add(new AuthoringMastersDocument { BundleJson = json }); }
-        else { row.BundleJson = json; }
-        await db.SaveChangesAsync(ct);
+        else { row.BundleJson = json; row.Version++; }
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
     }
 
     // The single articles document: all Articles (catalogue-backed + standalone) as one JSON list,
@@ -164,8 +164,19 @@ public sealed class AuthoringCatalogueStore(IDbContextFactory<FurniturePlannerCo
         var json = CanonicalJson.Serialize(articles);
         var row = await db.AuthoringArticles.FirstOrDefaultAsync(ct);
         if (row is null) { db.AuthoringArticles.Add(new AuthoringArticlesDocument { BundleJson = json }); }
-        else { row.BundleJson = json; }
-        await db.SaveChangesAsync(ct);
+        else { row.BundleJson = json; row.Version++; }
+        await SaveOrThrowFriendlyConflictAsync(db, ct);
+    }
+
+    // Concurrency conflict on a working-document save (two editors saving the same catalogue
+    // document at once - a genuine race, not merely a stale caller: this store always re-reads
+    // fresh before mutating, so only a save that lands strictly between another save's read and
+    // write can conflict) surfaces here as a friendly, actionable error instead of a raw EF
+    // exception - callers reload and retry rather than getting a crash.
+    private static async Task SaveOrThrowFriendlyConflictAsync(FurniturePlannerContext db, CancellationToken ct)
+    {
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { throw new InvalidOperationException("Someone else saved this catalogue - reload and retry."); }
     }
 
     public async Task<IReadOnlyList<string>> ModelCodesAsync(CancellationToken ct = default)

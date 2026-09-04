@@ -65,6 +65,29 @@ public class MaterialPlanningServiceTests
         Assert.Equal(2.5m, updated.AverageUsageOverride);
     }
 
+    // Task 4b: before this fix, a caller-supplied null hardness code (the norm for every non-Foam
+    // material) normalized to null internally too, so the find could never match a row already
+    // written as the "" sentinel (FurniturePlannerContext's comment on this index) - by a startup
+    // backfill, or simply by another caller. The find silently missed and a second, duplicate row
+    // landed instead of updating the first - no exception, just a split profile.
+    [Fact]
+    public async Task UpsertProfile_NullHardnessInput_FindsSentinelRow_NoDuplicate()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialProfiles.Add(new MaterialProfile { Kind = MaterialKind.Frame, Code = "FR-1", HardnessCode = "", MinimumStock = 5m });
+            await db.SaveChangesAsync();
+        }
+        var service = new MaterialPlanningService(factory, new FakeCurrentUser("office-1", Roles.Office));
+
+        await service.UpsertProfileAsync(new MaterialProfile { Kind = MaterialKind.Frame, Code = "FR-1", MinimumStock = 8m });
+
+        var profile = Assert.Single(await service.ProfilesAsync());
+        Assert.Equal(8m, profile.MinimumStock);
+    }
+
     [Fact]
     public async Task UpsertProfile_RejectsInvalidValues()
     {
@@ -105,6 +128,30 @@ public class MaterialPlanningServiceTests
     }
 
     // --- Supplier terms: the preferred-term invariant matrix ---
+
+    // Same disease as the profile test above, on MaterialSupplierTerm's (Kind, Code, HardnessCode,
+    // SupplierId) index.
+    [Fact]
+    public async Task UpsertTerm_NullHardnessInput_FindsSentinelRow_NoDuplicate()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (supplierAId, _) = await SeedSuppliersAsync(factory);
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm
+            {
+                Kind = MaterialKind.Frame, Code = "FR-1", HardnessCode = "", SupplierId = supplierAId, DeliveryTimeDays = 3, IsPreferred = true,
+            });
+            await db.SaveChangesAsync();
+        }
+        var service = new MaterialPlanningService(factory, new FakeCurrentUser("office-1", Roles.Office));
+
+        await service.UpsertTermAsync(new MaterialSupplierTerm { Kind = MaterialKind.Frame, Code = "FR-1", SupplierId = supplierAId, DeliveryTimeDays = 7 });
+
+        var term = Assert.Single(await service.AllTermsAsync());
+        Assert.Equal(7, term.DeliveryTimeDays);
+    }
 
     [Fact]
     public async Task UpsertTerm_FirstForMaterial_IsAutoPreferred()
@@ -234,6 +281,50 @@ public class MaterialPlanningServiceTests
 
         var terms = await service.TermsAsync(MaterialKind.Foam, "F-20", null);
         Assert.Single(terms);
+    }
+
+    // Task 4b follow-up: SetPreferredAsync's sibling query and DeleteTermAsync's sibling guard must
+    // tolerate a still-legacy-null hardness row (raw-seeded here, as one written between deploy and
+    // the startup backfill would be) the same way every other identity-matching site does.
+    [Fact]
+    public async Task SetPreferred_ClearsLegacyNullHardnessSibling()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (supplierAId, supplierBId) = await SeedSuppliersAsync(factory);
+        int legacyId;
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            var legacy = new MaterialSupplierTerm { Kind = MaterialKind.Frame, Code = "FR-1", HardnessCode = null, SupplierId = supplierAId, IsPreferred = true };
+            db.MaterialSupplierTerms.Add(legacy);
+            await db.SaveChangesAsync();
+            legacyId = legacy.Id;
+        }
+        var service = new MaterialPlanningService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var second = await service.UpsertTermAsync(new MaterialSupplierTerm { Kind = MaterialKind.Frame, Code = "FR-1", SupplierId = supplierBId, DeliveryTimeDays = 5 });
+
+        await service.SetPreferredAsync(second.Id);
+
+        var terms = await service.TermsAsync(MaterialKind.Frame, "FR-1", null);
+        Assert.False(terms.Single(t => t.Id == legacyId).IsPreferred);
+        Assert.True(terms.Single(t => t.Id == second.Id).IsPreferred);
+    }
+
+    [Fact]
+    public async Task DeleteTerm_Preferred_WithLegacyNullHardnessSibling_IsGuarded()
+    {
+        var (factory, conn) = NewFactory();
+        using var _ = conn;
+        var (supplierAId, supplierBId) = await SeedSuppliersAsync(factory);
+        var service = new MaterialPlanningService(factory, new FakeCurrentUser("office-1", Roles.Office));
+        var preferred = await service.UpsertTermAsync(new MaterialSupplierTerm { Kind = MaterialKind.Frame, Code = "FR-1", SupplierId = supplierAId, DeliveryTimeDays = 3 });
+        await using (var db = await factory.CreateDbContextAsync())
+        {
+            db.MaterialSupplierTerms.Add(new MaterialSupplierTerm { Kind = MaterialKind.Frame, Code = "FR-1", HardnessCode = null, SupplierId = supplierBId, IsPreferred = false });
+            await db.SaveChangesAsync();
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteTermAsync(preferred.Id));
     }
 
     [Fact]

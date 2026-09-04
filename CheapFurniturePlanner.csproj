@@ -33,12 +33,19 @@
     <PackageReference Include="CheapHelpers.Services" Version="3.8.0" />
 
 
-    <!-- Entity Framework for SQLite -->
+    <!-- Entity Framework for SQLite (default provider) and PostgreSQL (MB-1 hosted-mode opt-in) -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+
+    <!-- Config providers for Database:Provider selection - the base Configuration package is
+         already pulled in transitively, but no concrete source (JSON file, env vars) was wired
+         up before this. -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.11" />
 
     <!-- MudBlazor for UI components -->
     <PackageReference Include="MudBlazor" Version="9.8.0" />
@@ -58,6 +65,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Not auto-copied to the output directory like on the Web SDK - this project uses
+         Microsoft.NET.Sdk.Razor, which already picks the file up as a default Content item, it
+         just needs CopyToOutputDirectory added. -->
+    <Content Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="Properties\" />
     <Folder Include="Assets\Images\" />
   </ItemGroup>
@@ -67,10 +81,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**" />
-    <Content Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**" />
-    <None Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**" />
-    <EmbeddedResource Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**" />
+    <Compile Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**;CheapFurniturePlanner.Tests.PostgresSmoke\**" />
+    <Content Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**;CheapFurniturePlanner.Tests.PostgresSmoke\**" />
+    <None Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**;CheapFurniturePlanner.Tests.PostgresSmoke\**" />
+    <EmbeddedResource Remove="CheapFurniturePlanner.Domain\**;CheapFurniturePlanner.Domain.Tests\**;CheapFurniturePlanner.Tests\**;CheapFurniturePlanner.Migrations.Postgres\**;CheapFurniturePlanner.Tests.PostgresSmoke\**" />
   </ItemGroup>
 
 </Project>

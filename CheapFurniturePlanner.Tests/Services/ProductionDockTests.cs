@@ -498,6 +498,49 @@ public class ProductionDockTests
         Assert.Equal(TripState.Completed, reloadedSoloTrip.State);
     }
 
+    // MB1 Task 3: ProductionUnit.Version is an optimistic concurrency token over State/TripId/
+    // LoadPosition. The depart-vs-cancel interleave the ledger names: a unit is out for delivery on
+    // a departed trip, and someone starts confirming its delivery failed (ConfirmFailedAsync) at the
+    // same moment someone else cancels its order (CancelForOrderAsync) - without a token, whichever
+    // write lands second silently clobbers the first, leaving the unit in an impossible mixed state
+    // (e.g. Cancelled but still flagged as failed-and-off-the-trip from a write that should never
+    // have applied). This test needs no real thread race: a context that loaded the unit before the
+    // winner's save commits is stale by the time it saves, exactly like the authoring-store test.
+    [Fact]
+    public async Task DepartVsCancel_StaleWrite_ThrowsConflict_NotSilentDoubleState()
+    {
+        var (factory, conn) = await NewFactoryAsync();
+        using var _ = conn;
+        var service = new ProductionUnitService(factory, DockUser, new PinnedCatalogueProvider(factory));
+        var units = await SeedSpawnedUnitsAsync(factory, service, 1);
+        var orderId = units[0].OrderId;
+        await service.ArriveAsync(units[0].Id);
+        var trip = await service.CreateTripAsync();
+        await service.AssignToTripAsync(trip.Id, units[0].Id);
+        await service.DepartAsync(trip.Id);
+
+        // The "confirm failed" actor loads the unit first (Arrived, on the departed trip).
+        await using var staleDb = await factory.CreateDbContextAsync();
+        var staleUnit = await staleDb.ProductionUnits.FirstAsync(u => u.Id == units[0].Id);
+
+        // The "cancel the order" actor wins: cancels the unit for real through the service.
+        await service.CancelForOrderAsync(orderId);
+
+        // The stale actor's own write - the same fields ConfirmFailedAsync would touch - now
+        // conflicts: its tracked original Version no longer matches the row's current value.
+        staleUnit.TripId = null;
+        staleUnit.ReviewNote = "refused at door";
+        staleUnit.Version++;
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => staleDb.SaveChangesAsync());
+
+        // Not silent double-state: the winner's cancellation stands, untouched by the loser's
+        // rejected write.
+        await using var checkDb = await factory.CreateDbContextAsync();
+        var reloaded = await checkDb.ProductionUnits.SingleAsync(u => u.Id == units[0].Id);
+        Assert.Equal(ProductionUnitState.Cancelled, reloaded.State);
+        Assert.Null(reloaded.TripId);
+    }
+
     [Fact]
     public async Task UpdateTrip_SetsRegion_PlanningOnly()
     {

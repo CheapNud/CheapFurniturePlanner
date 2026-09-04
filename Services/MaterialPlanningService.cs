@@ -34,13 +34,16 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
         var hardnessCode = NormalizeHardness(profileValues.HardnessCode);
 
         await using var db = await factory.CreateDbContextAsync(ct);
+        // Tolerates a still-legacy-null row (pre-backfill) by coalescing its own HardnessCode too, so
+        // this never spuriously duplicates a row it should be updating (Task 4b).
         var profile = await db.MaterialProfiles.FirstOrDefaultAsync(
-            p => p.Kind == profileValues.Kind && p.Code == code && p.HardnessCode == hardnessCode, ct);
+            p => p.Kind == profileValues.Kind && p.Code == code && (p.HardnessCode ?? "") == hardnessCode, ct);
         if (profile is null)
         {
             profile = new MaterialProfile { Kind = profileValues.Kind, Code = code, HardnessCode = hardnessCode };
             db.MaterialProfiles.Add(profile);
         }
+        profile.HardnessCode = hardnessCode; // self-heals a still-legacy-null row on touch
         profile.MinimumStock = profileValues.MinimumStock;
         profile.AverageUsageOverride = profileValues.AverageUsageOverride;
         await db.SaveChangesAsync(ct);
@@ -62,7 +65,7 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
         await using var db = await factory.CreateDbContextAsync(ct);
         return await db.MaterialSupplierTerms.AsNoTracking()
             .Include(t => t.Supplier)
-            .Where(t => t.Kind == kind && t.Code == code && t.HardnessCode == normalizedHardness)
+            .Where(t => t.Kind == kind && t.Code == code && (t.HardnessCode ?? "") == normalizedHardness)
             .OrderByDescending(t => t.IsPreferred).ThenBy(t => t.SupplierId).ToListAsync(ct);
     }
 
@@ -93,12 +96,14 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
         {
             throw new InvalidOperationException($"Supplier {termValues.SupplierId} not found.");
         }
+        // Tolerates a still-legacy-null row (pre-backfill) by coalescing its own HardnessCode too, so
+        // this never spuriously duplicates a row it should be updating (Task 4b).
         var term = await db.MaterialSupplierTerms.FirstOrDefaultAsync(
-            t => t.Kind == termValues.Kind && t.Code == code && t.HardnessCode == hardnessCode && t.SupplierId == termValues.SupplierId, ct);
+            t => t.Kind == termValues.Kind && t.Code == code && (t.HardnessCode ?? "") == hardnessCode && t.SupplierId == termValues.SupplierId, ct);
         if (term is null)
         {
             var isFirstForMaterial = !await db.MaterialSupplierTerms.AnyAsync(
-                t => t.Kind == termValues.Kind && t.Code == code && t.HardnessCode == hardnessCode, ct);
+                t => t.Kind == termValues.Kind && t.Code == code && (t.HardnessCode ?? "") == hardnessCode, ct);
             term = new MaterialSupplierTerm
             {
                 Kind = termValues.Kind,
@@ -109,6 +114,7 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
             };
             db.MaterialSupplierTerms.Add(term);
         }
+        term.HardnessCode = hardnessCode; // self-heals a still-legacy-null row on touch
         term.DeliveryTimeDays = termValues.DeliveryTimeDays;
         term.MinimumOrderQuantity = termValues.MinimumOrderQuantity;
         term.UnitsPerPackage = termValues.UnitsPerPackage;
@@ -127,7 +133,7 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
         var term = await db.MaterialSupplierTerms.FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw new InvalidOperationException($"Term {termId} not found.");
         var siblings = await db.MaterialSupplierTerms
-            .Where(t => t.Kind == term.Kind && t.Code == term.Code && t.HardnessCode == term.HardnessCode && t.Id != term.Id && t.IsPreferred)
+            .Where(t => t.Kind == term.Kind && t.Code == term.Code && (t.HardnessCode ?? "") == (term.HardnessCode ?? "") && t.Id != term.Id && t.IsPreferred)
             .ToListAsync(ct);
         foreach (var sibling in siblings) { sibling.IsPreferred = false; }
         term.IsPreferred = true;
@@ -145,7 +151,7 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
         var term = await db.MaterialSupplierTerms.FirstOrDefaultAsync(t => t.Id == id, ct)
             ?? throw new InvalidOperationException($"Term {id} not found.");
         if (term.IsPreferred && await db.MaterialSupplierTerms.AnyAsync(
-                t => t.Kind == term.Kind && t.Code == term.Code && t.HardnessCode == term.HardnessCode && t.Id != term.Id, ct))
+                t => t.Kind == term.Kind && t.Code == term.Code && (t.HardnessCode ?? "") == (term.HardnessCode ?? "") && t.Id != term.Id, ct))
         {
             throw new InvalidOperationException("Make another term preferred first.");
         }
@@ -160,7 +166,10 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
     // view, not a full ledger export) - Id as a tie-break keeps ordering stable across same-instant rows.
     public async Task<List<MaterialMovement>> MovementsAsync(MaterialKind kind, string code, string? hardnessCode, int take = 50, CancellationToken ct = default)
     {
-        var normalizedHardness = NormalizeHardness(hardnessCode);
+        // MaterialMovement carries no unique index on this identity (it's an append-only log, not a
+        // row a duplicate-collision fix has to make collide) - queries it with its own original
+        // null-preserving normalization, not the "" sentinel below.
+        var normalizedHardness = NormalizeHardnessForMovementQuery(hardnessCode);
         await using var db = await factory.CreateDbContextAsync(ct);
         return await db.MaterialMovements.AsNoTracking()
             .Where(m => m.Kind == kind && m.Code == code && m.HardnessCode == normalizedHardness)
@@ -168,7 +177,18 @@ public sealed class MaterialPlanningService(IDbContextFactory<FurniturePlannerCo
             .Take(take).ToListAsync(ct);
     }
 
-    private static string? NormalizeHardness(string? hardnessCode) =>
+    // Task 4b: SQLite and Postgres both compare NULL <> NULL in a unique index, so the (Kind, Code,
+    // HardnessCode[, SupplierId]) backstop on MaterialProfile/MaterialSupplierTerm
+    // (FurniturePlannerContext.OnModelCreating) could never fire for the null hardness code every
+    // non-Foam material carries - two identical rows just silently split instead of colliding, and
+    // this method's own find-then-update (UpsertProfileAsync/UpsertTermAsync) could never even see a
+    // sentinel-normalized row from another caller or the startup backfill (Program.cs), since it was
+    // looking for null. "" collapses every blank/null input to the one value the index and every
+    // other row-layer read now agree on - never null, going forward.
+    private static string NormalizeHardness(string? hardnessCode) =>
+        string.IsNullOrWhiteSpace(hardnessCode) ? "" : hardnessCode.Trim();
+
+    private static string? NormalizeHardnessForMovementQuery(string? hardnessCode) =>
         string.IsNullOrWhiteSpace(hardnessCode) ? null : hardnessCode.Trim();
 
     private static string RequireTrimmed(string value, string fieldLabel)
