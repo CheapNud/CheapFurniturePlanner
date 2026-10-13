@@ -18,11 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 11
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '11.0.x'
-          dotnet-quality: preview
+      # No setup-dotnet: the ubuntu-latest runner image carries the .NET 11 SDK.
 
       - name: Build, package, and publish to Forgejo
         # Runs on the only proven runner pool (ubuntu-latest act_runner
