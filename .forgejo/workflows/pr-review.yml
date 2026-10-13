@@ -185,7 +185,7 @@ jobs:
           fi
 
           # Thinking blocks come first in the content array; join only the text blocks.
-          REVIEW=$(echo "$RESPONSE" | jq -r '[.content[] | select(.type == "text") | .text] | join("")')
+          REVIEW=$(echo "$RESPONSE" | jq -r '[.content[]? | select(.type == "text") | .text] | join("")')
           if [ -z "$REVIEW" ]; then
             echo "::error::No review content received from Claude"
             echo "Claude API returned no review content" > review-error.txt
