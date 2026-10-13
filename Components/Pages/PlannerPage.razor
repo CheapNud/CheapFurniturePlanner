@@ -68,11 +68,11 @@
             </Actions>
         </PageHeader>
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-4">
-            @_roomPlan.Width � @_roomPlan.Height @_roomPlan.Unit
-            � @_selectedFurniture.Count furniture items
+            @_roomPlan.Width × @_roomPlan.Height @_roomPlan.Unit
+            • @_selectedFurniture.Count furniture items
             @if (_lastSaved.HasValue)
             {
-                <span> � Last saved: @_lastSaved.Value.ToString("yyyy-MM-dd HH:mm")</span>
+                <span> • Last saved: @_lastSaved.Value.ToString("yyyy-MM-dd HH:mm")</span>
             }
         </MudText>
 

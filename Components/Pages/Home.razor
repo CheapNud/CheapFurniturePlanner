@@ -125,7 +125,7 @@
                                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                                             <MudIcon Icon="@Icons.Material.Filled.AspectRatio" Size="Size.Small" />
                                             <MudText Typo="Typo.caption">
-                                                @roomPlan.Width � @roomPlan.Height @roomPlan.Unit
+                                                @roomPlan.Width × @roomPlan.Height @roomPlan.Unit
                                             </MudText>
                                         </MudStack>
                                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
@@ -204,7 +204,7 @@
                                             @furniture.Code
                                         </MudText>
                                         <MudText Typo="Typo.body2">
-                                            @furniture.Width � @furniture.Length cm
+                                            @furniture.Width × @furniture.Length cm
                                         </MudText>
                                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                             @if (furniture.Price.HasValue)

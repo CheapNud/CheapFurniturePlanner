@@ -227,6 +227,24 @@ public class UiConventionsTests
         Assert.True(failures.Count == 0, string.Join("; ", failures));
     }
 
+    // Three pages shipped with U+FFFD (the Unicode replacement character) baked into their source where
+    // a multiplication sign or a bullet used to be, so dimension captions rendered a literal "?" box.
+    // The character has no legitimate use in a source file: it only ever means a lossy re-encoding
+    // happened somewhere. Fail on sight so the next editor-roundtrip mishap doesn't ship.
+    [Fact]
+    public void NoComponent_ContainsTheUnicodeReplacementCharacter()
+    {
+        var componentsDir = Path.Combine(FindRepoRoot(), "Components");
+        var failures = new List<string>();
+        foreach (var path in Directory.EnumerateFiles(componentsDir, "*.razor", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(componentsDir, path);
+            var source = File.ReadAllText(path);
+            if (source.Contains('�')) { failures.Add($"{relative}: contains U+FFFD - a glyph was lost to a bad re-encoding, restore the intended character"); }
+        }
+        Assert.True(failures.Count == 0, string.Join("; ", failures));
+    }
+
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
