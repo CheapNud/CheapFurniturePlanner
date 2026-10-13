@@ -184,6 +184,15 @@ jobs:
             exit 1
           fi
 
+          # A review cut off by max_tokens would post as if it were complete - fail it
+          # instead so the notice below says what happened.
+          STOP_REASON=$(echo "$RESPONSE" | jq -r '.stop_reason // "unknown"')
+          if [ "$STOP_REASON" = "max_tokens" ]; then
+            echo "::error::Review truncated at max_tokens (${{ env.MAX_TOKENS }})"
+            echo "review truncated at max_tokens (${{ env.MAX_TOKENS }}) - raise MAX_TOKENS or shrink the diff" > review-error.txt
+            exit 1
+          fi
+
           # Thinking blocks come first in the content array; join only the text blocks.
           REVIEW=$(echo "$RESPONSE" | jq -r '[.content[]? | select(.type == "text") | .text] | join("")')
           if [ -z "$REVIEW" ]; then
@@ -303,8 +312,24 @@ jobs:
             '{"body": ("## 🤖 Claude AI Code Review\n\n⚠️ **Review could not run**: " + $reason)}' \
             > failure-payload.json
 
-          curl -s -o /dev/null -w "posted failure notice: HTTP %{http_code}\n" -X POST \
-            -H "Authorization: token $GITEA_TOKEN" \
-            -H "Content-Type: application/json" \
-            "${{ env.GITEA_URL }}/api/v1/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
-            -d @failure-payload.json
+          # The find-comment step may not have run (the failure can be upstream of it),
+          # so look the bot comment up here and edit it - every push to a failing PR
+          # would otherwise stack another notice.
+          COMMENTS_URL="${{ env.GITEA_URL }}/api/v1/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments"
+          COMMENT_ID=$(curl -sf -H "Authorization: token $GITEA_TOKEN" "$COMMENTS_URL" \
+            | jq -r '.[] | select(.user.login == "gitea-actions" or .user.login == "forgejo-actions" or (.body | contains("🤖 Claude AI Code Review"))) | .id' \
+            | head -n 1 || echo "")
+
+          if [ -n "$COMMENT_ID" ]; then
+            curl -s -o /dev/null -w "updated failure notice #${COMMENT_ID}: HTTP %{http_code}\n" -X PATCH \
+              -H "Authorization: token $GITEA_TOKEN" \
+              -H "Content-Type: application/json" \
+              "${{ env.GITEA_URL }}/api/v1/repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              -d @failure-payload.json
+          else
+            curl -s -o /dev/null -w "posted failure notice: HTTP %{http_code}\n" -X POST \
+              -H "Authorization: token $GITEA_TOKEN" \
+              -H "Content-Type: application/json" \
+              "$COMMENTS_URL" \
+              -d @failure-payload.json
+          fi
