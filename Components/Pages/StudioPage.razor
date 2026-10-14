@@ -1,5 +1,5 @@
 @page "/studio"
-@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@attribute [Authorize(Policy = Policies.BackOffice)]
 @using CheapFurniturePlanner.Catalogue
 @using CheapFurniturePlanner.Domain.Catalog
 

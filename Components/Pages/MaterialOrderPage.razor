@@ -4,7 +4,7 @@
 @using CheapFurniturePlanner.Models
 @using CheapFurniturePlanner.Services
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@attribute [Authorize(Policy = Policies.BackOffice)]
 @inject MaterialOrderService MaterialOrders
 @inject MaterialOrderPdf Pdf
 @inject NavigationManager Navigation

@@ -105,7 +105,7 @@ class Program
         // schedule as SecurityStampValidator, so a deactivation or role change cuts a live session
         // instead of leaving it authenticated until the cookie itself expires.
         builder.Services.AddHttpContextAccessor();
-        builder.Services.AddAuthorizationCore();
+        builder.Services.AddAuthorizationCore(Policies.Configure);
         builder.Services.AddScoped<AuthenticationStateProvider, HttpContextAuthenticationStateProvider>();
 
         // Registrations the CheapHelpers AccountController needs. Not going through

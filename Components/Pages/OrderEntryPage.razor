@@ -1,5 +1,5 @@
 @page "/orders/{OrderId:int}"
-@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@attribute [Authorize(Policy = Policies.BackOffice)]
 @using CheapFurniturePlanner.Components.Orders
 @using CheapFurniturePlanner.Domain.Catalog
 @using CheapFurniturePlanner.Domain.Serialization

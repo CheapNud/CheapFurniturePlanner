@@ -5,24 +5,32 @@ using CheapFurniturePlanner.Auth;
 using CheapFurniturePlanner.Components.Layout;
 using CheapFurniturePlanner.Components.Pages;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.DependencyInjection;
 using MudBlazor.Services;
 using Xunit;
 
 namespace CheapFurniturePlanner.Tests.Components;
 
 // Task 4: role gating across NavMenu and the page inventory's [Authorize] attributes.
-// NavMenu rendering uses bUnit's built-in AddAuthorization() (Bunit.TestDoubles) instead of a
-// hand-rolled AuthenticationStateProvider fake - it already wires a FakeAuthenticationStateProvider
-// + FakeAuthorizationService that evaluate Roles="..." the same way the real IAuthorizationService
-// does, and it auto-adds <CascadingAuthenticationState> to the render tree, which is what NavMenu's
-// <AuthorizeView> elements need.
+// NavMenu rendering uses bUnit's built-in AddAuthorization() (Bunit.TestDoubles) for the principal
+// (SetAuthorized/SetRoles build the role claims) and for the <CascadingAuthenticationState> it
+// auto-adds. The authorization decision itself is NOT bUnit's fake: that one only knows policy
+// names handed to it via SetPolicies, which would make a policy-gated nav test prove nothing about
+// the roles. The real DefaultAuthorizationService is registered on top, fed the app's own
+// Policies.Configure, so these tests exercise the exact role sets production evaluates.
 public class GatingTests : TestContext
 {
     private BunitAuthorizationContext ConfigureAuth()
     {
         Services.AddMudServices();
         JSInterop.Mode = JSRuntimeMode.Loose;
-        return this.AddAuthorization();
+        var auth = this.AddAuthorization();
+        // Plain AddSingleton (not TryAdd) on purpose: the last registration wins over bUnit's fakes.
+        Services.AddLogging();
+        Services.AddAuthorizationCore(Policies.Configure);
+        Services.AddSingleton<IAuthorizationPolicyProvider, DefaultAuthorizationPolicyProvider>();
+        Services.AddSingleton<IAuthorizationService, DefaultAuthorizationService>();
+        return auth;
     }
 
     [Fact]
@@ -125,20 +133,26 @@ public class GatingTests : TestContext
     }
 
     [Fact]
-    public void DockPages_RequireWarehouseStaff()
+    public void DockPages_RequireTheDockPolicy()
     {
-        Assert.Equal(Roles.WarehouseStaff, typeof(ReceivingPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
-        Assert.Equal(Roles.WarehouseStaff, typeof(FinishingPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
-        Assert.Equal(Roles.WarehouseStaff, typeof(TripsPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
-        Assert.Equal(Roles.WarehouseStaff, typeof(TripPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Equal(Policies.Dock, typeof(ReceivingPage).GetCustomAttribute<AuthorizeAttribute>()!.Policy);
+        Assert.Equal(Policies.Dock, typeof(FinishingPage).GetCustomAttribute<AuthorizeAttribute>()!.Policy);
+        Assert.Equal(Policies.Dock, typeof(TripsPage).GetCustomAttribute<AuthorizeAttribute>()!.Policy);
+        Assert.Equal(Policies.Dock, typeof(TripPage).GetCustomAttribute<AuthorizeAttribute>()!.Policy);
     }
 
     [Fact]
     public void ServicePages_CarryExpectedAuthorization()
     {
-        Assert.Equal(Roles.AdminOrOffice, typeof(ServiceIntakePage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
-        Assert.Null(typeof(ServiceListPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
-        Assert.Null(typeof(ServiceTicketPage).GetCustomAttribute<AuthorizeAttribute>()!.Roles);
+        Assert.Equal(Policies.BackOffice, typeof(ServiceIntakePage).GetCustomAttribute<AuthorizeAttribute>()!.Policy);
+        AssertAnyAuthenticated(typeof(ServiceListPage).GetCustomAttribute<AuthorizeAttribute>()!);
+        AssertAnyAuthenticated(typeof(ServiceTicketPage).GetCustomAttribute<AuthorizeAttribute>()!);
+    }
+
+    private static void AssertAnyAuthenticated(AuthorizeAttribute attribute)
+    {
+        Assert.Null(attribute.Policy);
+        Assert.Null(attribute.Roles);
     }
 
     [Fact]
@@ -187,30 +201,47 @@ public class GatingTests : TestContext
 
     [Theory]
     [MemberData(nameof(BusinessPages))]
-    public void BusinessPage_RequiresAdminOrOffice(Type pageType)
+    public void BusinessPage_RequiresTheBackOfficePolicy(Type pageType)
     {
         var attribute = pageType.GetCustomAttribute<AuthorizeAttribute>();
 
         Assert.NotNull(attribute);
-        Assert.Equal(Roles.AdminOrOffice, attribute!.Roles);
+        Assert.Equal(Policies.BackOffice, attribute!.Policy);
+        Assert.Null(attribute.Roles);
     }
 
+    // The bootstrap admin gate is the one sanctioned direct role attribute (see Policies.cs).
     [Fact]
-    public void UsersPage_RequiresAdmin()
+    public void UsersPage_RequiresTheAdminRoleDirectly()
     {
         var attribute = typeof(UsersPage).GetCustomAttribute<AuthorizeAttribute>();
 
         Assert.NotNull(attribute);
         Assert.Equal(Roles.Admin, attribute!.Roles);
+        Assert.Null(attribute.Policy);
     }
 
     [Fact]
-    public void FirmsPage_RequiresAdmin()
+    public void FirmsPage_RequiresTheFirmAdministrationPolicy()
     {
         var attribute = typeof(FirmsPage).GetCustomAttribute<AuthorizeAttribute>();
 
         Assert.NotNull(attribute);
-        Assert.Equal(Roles.Admin, attribute!.Roles);
+        Assert.Equal(Policies.FirmAdministration, attribute!.Policy);
+        Assert.Null(attribute.Roles);
+    }
+
+    // Sweep: no page other than the bootstrap gate may gate on a role string again.
+    [Fact]
+    public void NoPageButUsersPage_GatesOnARoleAttribute()
+    {
+        var offenders = typeof(UsersPage).Assembly.GetTypes()
+            .Where(t => t.Namespace == typeof(UsersPage).Namespace && t != typeof(UsersPage))
+            .Where(t => t.GetCustomAttribute<AuthorizeAttribute>()?.Roles is not null)
+            .Select(t => t.Name)
+            .ToList();
+
+        Assert.Empty(offenders);
     }
 
     public static TheoryData<Type> AnyAuthenticatedPages => new()
@@ -228,7 +259,7 @@ public class GatingTests : TestContext
         var attribute = pageType.GetCustomAttribute<AuthorizeAttribute>();
 
         Assert.NotNull(attribute);
-        Assert.Null(attribute!.Roles);
+        AssertAnyAuthenticated(attribute!);
     }
 
     public static TheoryData<Type> AnonymousPages => new()

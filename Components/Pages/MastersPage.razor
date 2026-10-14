@@ -1,5 +1,5 @@
 @page "/studio/masters"
-@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@attribute [Authorize(Policy = Policies.BackOffice)]
 @using CheapFurniturePlanner.Components.Studio.Masters
 
 <PageTitle>Masters</PageTitle>

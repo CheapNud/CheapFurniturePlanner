@@ -1,5 +1,5 @@
 @page "/parties/{SellerId:int}/discounts"
-@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@attribute [Authorize(Policy = Policies.BackOffice)]
 @using CheapFurniturePlanner.Components.Orders
 @using CheapFurniturePlanner.Models
 @inject PartyService PartyService

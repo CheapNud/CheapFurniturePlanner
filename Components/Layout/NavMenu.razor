@@ -78,9 +78,8 @@
 
     <MudDivider Class="my-2" /> *@
 
-    @* Business links: Admin or Office only, matching the [Authorize(Roles = Roles.AdminOrOffice)]
-       on each destination page. *@
-    <AuthorizeView Roles="@Roles.AdminOrOffice">
+    @* Business links: same BackOffice policy as the [Authorize] on each destination page. *@
+    <AuthorizeView Policy="@Policies.BackOffice">
         <MudNavLink Href="/studio"
                     Icon="@Icons.Material.Filled.Tag">
             Studio
@@ -135,8 +134,8 @@
         </MudNavLink>
     </AuthorizeView>
 
-    @* Dock screens: Admin, Office or Warehouse. *@
-    <AuthorizeView Roles="@Roles.WarehouseStaff">
+    @* Dock screens: Dock policy, same as the receiving/finishing/trips pages. *@
+    <AuthorizeView Policy="@Policies.Dock">
         <MudNavLink Href="/receiving"
                     Icon="@Icons.Material.Filled.Warehouse">
             Receiving
@@ -151,12 +150,15 @@
         </MudNavLink>
     </AuthorizeView>
 
-    @* Admin only. *@
+    @* Bootstrap admin gate: the one place that stays on a direct role check (see Policies.cs). *@
     <AuthorizeView Roles="@Roles.Admin">
         <MudNavLink Href="/users"
                     Icon="@Icons.Material.Filled.ManageAccounts">
             Users
         </MudNavLink>
+    </AuthorizeView>
+
+    <AuthorizeView Policy="@Policies.FirmAdministration">
         <MudNavLink Href="/firms"
                     Icon="@Icons.Material.Filled.AccountBalance">
             Firms

@@ -4,7 +4,7 @@
 @using CheapFurniturePlanner.Services
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Forms
-@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@attribute [Authorize(Policy = Policies.BackOffice)]
 @inject ServiceTicketService Tickets
 @inject ServicePhotoStore PhotoStore
 @inject PartyService Parties
