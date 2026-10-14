@@ -3,7 +3,7 @@
 @using CheapFurniturePlanner.Models
 @using CheapFurniturePlanner.Services
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize(Roles = Roles.WarehouseStaff)]
+@attribute [Authorize(Policy = Policies.Dock)]
 @inject ProductionUnitService Units
 @inject PurchasingService Purchasing
 @inject ISnackbar Snackbar

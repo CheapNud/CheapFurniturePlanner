@@ -1,5 +1,5 @@
 @page "/parties"
-@attribute [Authorize(Roles = Roles.AdminOrOffice)]
+@attribute [Authorize(Policy = Policies.BackOffice)]
 @using CheapFurniturePlanner.Components.Orders
 @using CheapFurniturePlanner.Components.Parties
 @inject PartyService PartyService
